@@ -27,8 +27,8 @@ colors:
   late: "#a24f00"
   bad: "#c0342a"
   idle: "#53627a"
-  ocean: "#cadff2"
-  land: "#f3f6fa"
+  ocean: "#c0dbe5"
+  land: "#faf4e9"
   route-ahead-dash: "#86c4f8"
 typography:
   display:
@@ -301,7 +301,7 @@ Two-column definition grid (altitude, ground speed, heading, squawk): 12px muted
 Full-width collapsed tables at 13.5px: navy header row with 12px 600 `grid-head-text`, 8px 14px cells divided by `line-soft`, zebra even rows, `hover` rows on pointer devices. Links and row headers are 600. Numeric columns right-aligned. Status words are coloured tags (12.5px 600): landed in `ok`, in the air or taxiing in `link`, alerts in `bad`, the rest muted. The scheduled-versus-actual table groups rows under white sub-headers in 13px 700 navy. Bar columns use a 6px `line-soft` track with a `link` fill.
 
 ### Map
-MapLibre GL JS over WingView's Protomaps v4 basemap (`i.wvcdn.com/v4.pmtiles`), styled by `static/map-style.json`, generated from `@protomaps/basemaps` light with the WingView palette: land `land`, water `ocean`, parks a faint green, aeroways and runways in pale blue-greys, country borders in a muted blue-grey; POI icons, shields and one-way arrows are dropped. Map labels are Noto Sans (the glyphs MapLibre can render), not Inter.
+MapLibre GL JS over WingView's Protomaps v4 basemap (`i.wvcdn.com/v4.pmtiles`), styled by `static/map-style.json`, generated from `@protomaps/basemaps` light and recoloured as a warm atlas, the complement of the page's navy and sky: land `land` (a warm stone), water `ocean` (a quiet grey-teal, a different hue from the sky route ahead), vegetation in olive-to-sage tints of the same warm family (never a bright green), highways a pale amber (#f7ecd1 on #e0caae), country borders a warm taupe (#ae9a8d), labels warm greys (#605248 for countries, 6.9:1 on land). Airports alone are tinted cool (#e3e8f3, runways #b6becc), since they are the site's subject. The brand blues stay the only saturated colour on the map: routes, pins and aircraft. POI icons, shields and one-way arrows are dropped. Map labels are Noto Sans (the glyphs MapLibre can render), not Inter.
 - **Route flown:** solid `link`, 3.2px, along the trail the aircraft actually flew. **Route ahead:** sky, 3px, short dashes, along the rest of its filed route from the aircraft onward. Great circles stand in when the trail or plan is missing, when the aircraft is far off its route, or when it has diverted. A route across the antimeridian stays in one copy of the world, with its airports and aircraft beside it.
 - **Airport pins:** a navy ring around a white dot, sized by traffic; main airports get a sky dot with a white stroke and larger 13px labels. Labels are navy with a white halo and give way to each other, busiest first.
 - **Subject airport:** navy ring, sky dot, white stroke, 15px label that never gives way, drawn above traffic.

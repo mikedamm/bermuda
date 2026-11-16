@@ -46,8 +46,8 @@
 	--bad: #c0342a;
 	--idle: #53627a;
 	/* map */
-	--ocean: #cadff2;
-	--land: #f3f6fa;
+	--ocean: #c0dbe5; /* grey-teal, clear of the sky route */
+	--land: #faf4e9; /* warm stone: the complement of the navy and sky overlays */
 	--wrap: 1240px;
 	--gutter: 20px;
 	--stage: 560px;
@@ -364,7 +364,7 @@ a.mk-plane-sm:hover { color: var(--link); }
 .map-static .mk-plane { transform: translate(-50%, -50%) rotate(var(--r)); }
 .m-space { fill: var(--paper); }
 .m-ocean, .m-lake { fill: var(--ocean); }
-.m-land { fill: var(--land); stroke: #a9bfd8; stroke-width: 0.7; }
+.m-land { fill: var(--land); stroke: #a0bdc8; stroke-width: 0.7; }
 .m-grat { fill: none; stroke: #bfd7ee; stroke-width: 0.6; }
 .m-state { fill: none; stroke: #d2dce8; stroke-width: 0.7; }
 .m-border { fill: none; stroke: #a3b6cd; stroke-width: 0.8; }
