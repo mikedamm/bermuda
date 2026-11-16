@@ -103,9 +103,13 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 		rf.add(p0.Status.Last.Airport)
 	}
 
-	// status line
+	// status line. LADD aircraft show identity and owner only: whatever the
+	// API returns, no position, map, route or flight leaves this page.
 	st := p0.Status
 	switch {
+	case v.LADD:
+		v.Status, v.StatusClass = "Tracking limited", "muted"
+		v.StatusDetail = "Flight details withheld at the owner's request"
 	case st.Flight != nil && !st.Flight.LADDRedacted:
 		l := legFromLive(*st.Flight, rf, now)
 		v.Live = &l
@@ -135,16 +139,21 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 		v.StatusDetail = fmt.Sprintf("No positions on record in the last %d days", p0.Days)
 	}
 
-	for _, h := range p0.RecentFlights {
-		v.Recent = append(v.Recent, legFromHistory(h, now))
-	}
-	for _, u := range st.Upcoming {
-		v.Upcoming = append(v.Upcoming, legFromLive(u, rf, now))
-	}
 	v.History = p0.RegistryHistory
-
-	// network map: every route of the window, the busiest drawn strongest
-	v.Map = aircraftMap(p0, v, rf)
+	if !v.LADD {
+		for _, h := range p0.RecentFlights {
+			if !h.LADDRedacted {
+				v.Recent = append(v.Recent, legFromHistory(h, now))
+			}
+		}
+		for _, u := range st.Upcoming {
+			if !u.LADDRedacted {
+				v.Upcoming = append(v.Upcoming, legFromLive(u, rf, now))
+			}
+		}
+		// network map: every route of the window, the busiest drawn strongest
+		v.Map = aircraftMap(p0, v, rf)
+	}
 
 	// facts
 	add := func(fs *[]Fact, label, val string) {
@@ -226,7 +235,7 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 	p.Section = "aircraft"
 	p.Query = v.Registration
 	p.NoIndex = v.LADD // respect the owner's request to limit tracking
-	if v.Live != nil {
+	if v.Live != nil && !v.LADD {
 		p.AppURL, p.AppLabel = s.appLink("flight", v.Live.FlightID), "Follow this aircraft live"
 	}
 	p.Crumbs = []Crumb{{"Home", "/"}}

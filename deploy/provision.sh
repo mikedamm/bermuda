@@ -23,15 +23,21 @@ REGISTRY_ID=${REGISTRY_ID:-8623}
 IMAGE=${IMAGE:-mikedamm/bermuda}
 API=https://api.bunny.net/mc
 
+# Secrets never go on a command line (argv is readable by every local user):
+# the API key reaches curl through a pipe (-K), request bodies through stdin,
+# and jq reads the token from its environment.
 call() {
 	local method=$1 path=$2
 	shift 2
-	curl -sS --fail-with-body -X "$method" -H "AccessKey: $BUNNYNET_API_KEY" \
+	curl -sS --fail-with-body -K <(printf 'header = "AccessKey: %s"\n' "$BUNNYNET_API_KEY") -X "$method" \
 		-H 'Content-Type: application/json' -H 'Accept: application/json' "$API$path" "$@"
 }
+# send METHOD PATH JSON: the body goes over stdin
+send() { printf '%s' "$3" | call "$1" "$2" --data-binary @-; }
 
-env_obj=$(jq -n --arg base "$WV_API_BASE" --arg tok "$WV_API_TOKEN" --arg site "$SITE_URL" '{
-	WV_API_BASE: $base, WV_API_TOKEN: $tok, SITE_URL: $site,
+export WV_API_TOKEN
+env_obj=$(jq -n --arg base "$WV_API_BASE" --arg site "$SITE_URL" '{
+	WV_API_BASE: $base, WV_API_TOKEN: $ENV.WV_API_TOKEN, SITE_URL: $site,
 	APP_URL: "https://app.wingview.com", DATA_DIR: "/data", GOMAXPROCS: "2", LOG_LEVEL: "info"
 }')
 
@@ -39,8 +45,9 @@ id=$(call GET /apps | jq -r --arg n "$APP_NAME" '.items[] | select(.name == $n) 
 
 if [[ -z $id ]]; then
 	: "${IMAGE_TAG:?IMAGE_TAG is required to create the app}"
-	body=$(jq -n --arg name "$APP_NAME" --arg region "$REGION" --arg reg "$REGISTRY_ID" \
-		--arg ns "${IMAGE%%/*}" --arg img "${IMAGE#*/}" --arg tag "$IMAGE_TAG" --argjson env "$env_obj" '{
+	# the environment (with the token) is jq's stdin, not an argument
+	body=$(printf '%s' "$env_obj" | jq --arg name "$APP_NAME" --arg region "$REGION" --arg reg "$REGISTRY_ID" \
+		--arg ns "${IMAGE%%/*}" --arg img "${IMAGE#*/}" --arg tag "$IMAGE_TAG" '. as $env | {
 		name: $name,
 		runtimeType: "shared",
 		terminationGracePeriodSeconds: 30,
@@ -61,13 +68,13 @@ if [[ -z $id ]]; then
 			}
 		}]
 	}')
-	id=$(call POST /apps --data "$body" | jq -r .id)
+	id=$(send POST /apps "$body" | jq -r .id)
 	echo "created app $id" >&2
 	call POST "/apps/$id/deploy" >/dev/null
 	echo "deploy requested" >&2
 else
 	cid=$(call GET "/apps/$id" | jq -r '.containerTemplates[] | select(.name == "web") | .id')
-	call PUT "/apps/$id/containers/$cid/env" --data "$env_obj" >/dev/null
+	send PUT "/apps/$id/containers/$cid/env" "$env_obj" >/dev/null
 	echo "updated environment of app $id" >&2
 fi
 

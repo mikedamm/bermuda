@@ -68,6 +68,18 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		switch strings.ToUpper(r.PathValue("key")) {
 		case "N527AS", "A6A300":
 			write(w, aircraft)
+		case "N1LADD":
+			// a listed aircraft whose answer still carries flights and a
+			// position: the page must not show them regardless
+			ladd := map[string]any{}
+			for k, v := range aircraft {
+				ladd[k] = v
+			}
+			ladd["key"] = "N1LADD"
+			ladd["aircraft"] = map[string]any{"registration": "N1LADD", "name": "Cessna 560XL"}
+			ladd["ladd"] = map[string]any{"listed": true, "redacted": true}
+			ladd["status"] = map[string]any{"phase": "on_ground", "last": map[string]any{"lat": 47.5, "lon": -122.3, "at": ts(-time.Hour), "on_ground": true, "airport": sea}}
+			write(w, ladd)
 		default:
 			w.WriteHeader(404)
 			write(w, map[string]any{"error": "no such aircraft"})
@@ -159,6 +171,24 @@ func TestPages(t *testing.T) {
 			if xr := rec.Header().Get("X-Robots-Tag"); xr != "" {
 				t.Errorf("%s: unexpected X-Robots-Tag %q (would noindex the proxied site)", c.path, xr)
 			}
+		}
+	}
+}
+
+func TestLADDAircraftShowsNoFlights(t *testing.T) {
+	rec := get(t, testServer(t), "/aircraft/N1LADD")
+	body := rec.Body.String()
+	if rec.Code != 200 {
+		t.Fatalf("status %d", rec.Code)
+	}
+	for _, banned := range []string{"map-svg", "Recent flights", "mk-plane", "Last seen at", "/flight/ASA14"} {
+		if strings.Contains(body, banned) {
+			t.Errorf("LADD page contains %q", banned)
+		}
+	}
+	for _, want := range []string{`<meta name="robots" content="noindex,follow">`, "LADD", "N1LADD"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("LADD page lacks %q", want)
 		}
 	}
 }
