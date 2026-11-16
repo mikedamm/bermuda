@@ -131,7 +131,7 @@ func TestPages(t *testing.T) {
 	}{
 		{"/flight/ASA14", 200, "", []string{
 			`<link rel="canonical" href="https://www.wingview.com/flight/ASA14">`,
-			`"@type":"Flight"`, ">AS14</h1>", "Alaska Airlines", "In the air, landing in",
+			`"@type":"Flight"`, ">AS14</h1>", "Alaska Airlines", `<p class="status s-`, "<strong>En route</strong>", "Gate departure",
 			`href="/aircraft/N527AS"`, `href="/airport/KSEA"`, "2h 30m", // history duration from off/on, not the "seen" span
 		}},
 		{"/flight/AS14", 301, "/flight/ASA14", nil},
@@ -142,7 +142,7 @@ func TestPages(t *testing.T) {
 		{"/aircraft/a6a300", 301, "/aircraft/N527AS", nil},
 		{"/aircraft/N0NE", 404, "", nil},
 		{"/airport/SEA", 301, "/airport/KSEA", nil},
-		{"/airport/KSEA", 200, "", []string{`"@type":"Airport"`, "Seattle–Tacoma International Airport", "Arriving at SEA", `href="/flight/ASA14"`}},
+		{"/airport/KSEA", 200, "", []string{`"@type":"Airport"`, "Seattle–Tacoma International Airport", ">Arrivals <", `href="/flight/ASA14"`}},
 		{"/airport/XXXX", 404, "", nil},
 		{"/tracker/", 200, "", []string{`action="/tracker/search"`}},
 		{"/", 301, "/tracker/", nil},
@@ -191,6 +191,32 @@ func TestLADDAircraftShowsNoFlights(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("LADD page lacks %q", want)
 		}
+	}
+}
+
+// With a Mapbox token the page embeds map data for site.js and loads it;
+// without one it draws the SVG map and ships no script.
+func TestMapboxMaps(t *testing.T) {
+	up := fakeAPI(t)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	s, err := New(api.New(up.URL, "test-token", 4, log), store.NewIndex(),
+		Config{SiteURL: "https://www.wingview.com", AppURL: "https://app.wingview.com", MapboxToken: "pk.test"}, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := get(t, s.Handler(), "/flight/ASA14")
+	body := rec.Body.String()
+	for _, want := range []string{`data-mapbox="pk.test"`, `data-map role="region"`, `"k":"flown"`, `"k":"ahead"`, `"plane":`, "/site.js"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("mapbox page lacks %q", want)
+		}
+	}
+	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "https://api.mapbox.com") || !strings.Contains(csp, "worker-src blob:") {
+		t.Errorf("CSP does not allow Mapbox: %q", csp)
+	}
+	plain := get(t, testServer(t), "/flight/ASA14").Body.String()
+	if strings.Contains(plain, "site.js") || !strings.Contains(plain, "map-svg") {
+		t.Error("without a token the page must draw the SVG map and load no script")
 	}
 }
 

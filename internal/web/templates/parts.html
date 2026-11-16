@@ -3,21 +3,50 @@
 {{/* a top-down airliner, nose up; rotated by heading where it is used */}}
 {{define "icon-plane"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1.6c.9 0 1.5 1 1.5 2.3v5.3l8 4.6v2.1l-8-2.4v4.6l2.4 1.8v1.7L12 20.6l-3.9 1v-1.7l2.4-1.8v-4.6l-8 2.4v-2.1l8-4.6V3.9c0-1.3.6-2.3 1.5-2.3Z"/></svg>{{end}}
 
-{{define "map"}}{{with .}}<div class="map-box" style="aspect-ratio:{{.W}}/{{.H}}">{{svg .SVG}}{{range .Markers}}{{if eq .Kind "plane"}}<span class="mk-plane" style="left:{{pct .X}};top:{{pct .Y}};--r:{{rot .Rot}}">{{template "icon-plane"}}</span>{{else}}<span class="mk-pin{{if eq .Kind "pin primary"}} is-primary{{end}} at-{{.LabelAt}}" style="left:{{pct .X}};top:{{pct .Y}}"><i></i>{{if .Label}}<b>{{.Label}}</b>{{end}}</span>{{end}}{{end}}</div>{{end}}{{end}}
+{{/* The map: an interactive Mapbox map drawn by site.js from the embedded
+     data, or the server's SVG when no token is configured. */}}
+{{define "map"}}{{with .}}{{if .JSON}}<div class="map" data-map role="region" aria-label="{{.Label}}"><div class="map-canvas"></div><script type="application/json">{{.JSON}}</script></div>{{else if .SVG}}<div class="map map-static" role="img" aria-label="{{.Label}}">{{with .SVG}}<div class="map-box" style="aspect-ratio:{{.W}}/{{.H}}">{{svg .SVG}}{{range .Markers}}{{if eq .Kind "plane"}}<span class="mk-plane" style="left:{{pct .X}};top:{{pct .Y}};--r:{{rot .Rot}}">{{template "icon-plane"}}</span>{{else}}<span class="mk-pin{{if eq .Kind "pin primary"}} mk-main{{end}} at-{{.LabelAt}}" style="left:{{pct .X}};top:{{pct .Y}}"><i></i>{{if .Label}}<b>{{.Label}}</b>{{end}}</span>{{end}}{{end}}</div>{{end}}</div>{{end}}{{end}}{{end}}
 
-{{define "status"}}<span class="pill pill-{{.StatusClass}}">{{if .PhaseWord}}{{.PhaseWord}}{{else}}Unknown{{end}}</span>{{end}}
+{{define "band-status"}}<p class="status s-{{.Class}}"><strong>{{.Title}}</strong>{{with .Detail}} <span>{{.}}</span>{{end}}</p>{{end}}
+
+{{define "pill"}}<span class="tag tag-{{.StatusClass}}">{{if .PhaseWord}}{{.PhaseWord}}{{else}}Unknown{{end}}</span>{{end}}
 
 {{define "airport-inline"}}{{if .URL}}<a href="{{.URL}}" title="{{.Name}}">{{.Code}}</a>{{else if .Code}}<span title="{{.Name}}">{{.Code}}</span>{{else}}<span class="dim">Unknown</span>{{end}}{{end}}
 
-{{define "time"}}{{if .Set}}<time datetime="{{.ISO}}">{{.Clock}} <small>{{.Zone}}</small></time>{{else}}<span class="dim">&ndash;</span>{{end}}{{end}}
+{{define "time"}}{{if .Set}}<time datetime="{{.ISO}}">{{.Clock}}<small> {{.Zone}}</small></time>{{else}}<span class="dim">&ndash;</span>{{end}}{{end}}
 
-{{define "facts"}}{{if .}}<dl class="facts">{{range .}}<div><dt>{{.Label}}</dt><dd>{{if .URL}}<a href="{{.URL}}">{{.Value}}</a>{{else}}{{.Value}}{{end}}</dd></div>{{end}}</dl>{{end}}{{end}}
+{{define "kv"}}{{if .}}<dl class="kv">{{range .}}<div><dt>{{.Label}}</dt><dd>{{if .URL}}<a href="{{.URL}}">{{.Value}}</a>{{else}}{{.Value}}{{end}}</dd></div>{{end}}</dl>{{end}}{{end}}
 
-{{/* legs: a list of LegV. showFlight adds a flight number column (aircraft page);
-     otherwise an aircraft column (flight page). */}}
+{{/* route: the codes, the track between them with the plane at its
+     progress, and the two times that matter */}}
+{{define "route"}}{{$d := .DepMoment}}{{$a := .ArrMoment}}
+<div class="route">
+	<div class="route-end">
+		{{if .Dep.URL}}<a class="route-code" href="{{.Dep.URL}}">{{.Dep.Code}}</a>{{else}}<span class="route-code">{{or .Dep.Code "?"}}</span>{{end}}
+		<span class="route-city">{{.Dep.City}}</span>
+	</div>
+	<div class="route-track" role="img" aria-label="{{if .FlownMi}}{{.Progress}}% of the way, {{.LeftMi}} to go{{else}}{{.Headline}}{{end}}">
+		<span class="track-done" style="width:{{.Progress}}%"></span>
+		<span class="track-plane" style="left:{{.Progress}}%">{{template "icon-plane"}}</span>
+	</div>
+	<div class="route-end route-end-arr">
+		{{if .DivertedTo}}{{with .DivertedTo}}{{if .URL}}<a class="route-code" href="{{.URL}}">{{.Code}}</a>{{else}}<span class="route-code">{{.Code}}</span>{{end}}<span class="route-city">{{.City}}</span>{{end}}
+		{{else}}{{if .Arr.URL}}<a class="route-code" href="{{.Arr.URL}}">{{.Arr.Code}}</a>{{else}}<span class="route-code">{{or .Arr.Code "?"}}</span>{{end}}
+		<span class="route-city">{{.Arr.City}}</span>{{end}}
+	</div>
+</div>
+<div class="route-times">
+	<div>{{if $d.Label}}<span class="route-label">{{$d.Label}}</span>{{template "time" $d.T}}{{with $d.Delay}}<span class="delta delta-{{$d.Class}}">{{.}}</span>{{end}}{{end}}</div>
+	<div class="route-end-arr">{{if $a.Label}}<span class="route-label">{{$a.Label}}</span>{{template "time" $a.T}}{{with $a.Delay}}<span class="delta delta-{{$a.Class}}">{{.}}</span>{{end}}{{end}}</div>
+</div>
+{{if .FlownMi}}<p class="route-note">{{.FlownMi}} flown, {{.LeftMi}} to go</p>{{else if .Dist}}<p class="route-note">{{.Dist}}{{if .Duration}}, {{.Duration}} in the air{{end}}</p>{{end}}
+{{end}}
+
+{{/* legs: a list of LegV. ShowFlight adds a flight column (aircraft
+     page); otherwise an aircraft column (flight page). */}}
 {{define "legs"}}
 <div class="table-scroll">
-<table class="legs">
+<table class="grid">
 	<thead><tr>
 		<th scope="col">Date</th>
 		{{if .ShowFlight}}<th scope="col">Flight</th>{{else}}<th scope="col">Aircraft</th>{{end}}
@@ -32,15 +61,44 @@
 	{{range .Legs}}<tr>
 		<td class="nowrap" data-label="Date">{{.Date}}</td>
 		{{if $.ShowFlight}}<td data-label="Flight">{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}</td>
-		{{else}}<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{else}}{{.Reg}}{{end}} <span class="dim">{{.Type}}</span></td>{{end}}
+		{{else}}<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a> {{else if .Reg}}{{.Reg}} {{end}}<span class="dim">{{or .Type "–"}}</span></td>{{end}}
 		<td data-label="From">{{template "airport-inline" .Dep}}</td>
 		<td data-label="To">{{if .DivertedTo}}{{template "airport-inline" .DivertedTo}} <span class="dim">(planned {{.Arr.Code}})</span>{{else}}{{template "airport-inline" .Arr}}{{end}}</td>
 		<td class="num" data-label="Departed">{{if .DepOff.Set}}{{template "time" .DepOff}}{{else}}{{template "time" .DepOut}}{{end}}</td>
 		<td class="num" data-label="Arrived">{{if .ArrOn.Set}}{{template "time" .ArrOn}}{{else}}{{template "time" .ArrIn}}{{end}}</td>
 		<td class="num" data-label="Duration">{{if .Duration}}{{.Duration}}{{else}}<span class="dim">&ndash;</span>{{end}}</td>
-		<td data-label="Status">{{template "status" .}}</td>
+		<td data-label="Status">{{template "pill" .}}</td>
 	</tr>
 	{{end}}</tbody>
 </table>
 </div>
+{{end}}
+
+{{/* scheduled versus actual, one table with a departure and an arrival group */}}
+{{define "times-table"}}
+<div class="table-scroll">
+<table class="grid grid-times">
+	<thead><tr><th scope="col"><span class="vh">Event</span></th><th scope="col" class="num">Scheduled</th><th scope="col" class="num">Actual</th><th scope="col" class="num">Difference</th></tr></thead>
+	{{range .}}<tbody>
+		<tr class="grid-group"><th scope="rowgroup" colspan="4">{{.Title}}</th></tr>
+		{{range .Rows}}<tr>
+			<th scope="row">{{.Event}}</th>
+			<td class="num">{{template "time" .Sched}}</td>
+			<td class="num">{{template "time" .Actual}}{{if .Estimated}} <span class="est">estimated</span>{{end}}</td>
+			<td class="num">{{if .Diff}}<span class="delta delta-{{.DiffClass}}">{{.Diff}}</span>{{else}}<span class="dim">&ndash;</span>{{end}}</td>
+		</tr>{{end}}
+	</tbody>{{end}}
+</table>
+</div>
+{{end}}
+
+{{/* live telemetry: four readings in a 2 x 2 grid, with the position's age */}}
+{{define "telemetry"}}
+<dl class="telemetry">
+	<div><dt>Altitude</dt><dd>{{or .Alt "–"}}</dd></div>
+	<div><dt>Ground speed</dt><dd>{{or .Speed "–"}}</dd></div>
+	<div><dt>Heading</dt><dd>{{or .Heading "–"}}</dd></div>
+	<div><dt>Squawk</dt><dd>{{or .Squawk "–"}}</dd></div>
+</dl>
+{{with .PosAge}}<p class="telemetry-age">Position reported {{.}}</p>{{end}}
 {{end}}

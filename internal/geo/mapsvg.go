@@ -766,3 +766,21 @@ func gratStep(r float64) float64 {
 	}
 	return 30
 }
+
+// GreatCircle samples n+1 points along the great circle from a to b, with
+// longitudes kept continuous across the antimeridian (for web map lines).
+func GreatCircle(a, b LL, n int) []LL {
+	pts := greatCircle(a, b, n)
+	for i := 1; i < len(pts); i++ {
+		for pts[i].Lon-pts[i-1].Lon > 180 {
+			pts[i].Lon -= 360
+		}
+		for pts[i].Lon-pts[i-1].Lon < -180 {
+			pts[i].Lon += 360
+		}
+	}
+	return pts
+}
+
+// CentralAngleDeg is the angular distance between two points in degrees.
+func CentralAngleDeg(a, b LL) float64 { return centralAngle(a.Lat, a.Lon, b.Lat, b.Lon) / rad }

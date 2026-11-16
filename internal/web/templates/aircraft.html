@@ -1,88 +1,100 @@
 {{define "content"}}{{$v := .Body}}
-<article class="wrap page-aircraft">
-	<header class="head">
-		<div class="head-id">
-			<h1 class="ident">{{$v.Registration}}</h1>
-			<p class="head-sub">
+<div class="band">
+	<div class="wrap band-in">
+		<div class="band-id">
+			<h1>{{$v.Registration}}</h1>
+			<p class="band-sub">
 				{{if $v.Name}}<span>{{$v.Name}}</span>{{end}}
 				{{if $v.OperatorURL}}<a href="{{$v.OperatorURL}}">{{$v.Operator}}</a>{{else if $v.Operator}}<span>{{$v.Operator}}</span>{{end}}
+				{{if and $v.Hex (ne $v.Hex $v.Registration)}}<span>Mode S {{$v.Hex}}</span>{{end}}
 			</p>
 		</div>
-		<p class="head-status status-{{$v.StatusClass}}"><span class="dot" aria-hidden="true"></span>{{$v.StatusDetail}}</p>
-	</header>
+		<p class="band-meta">{{with $v.Band}}<span class="band-state s-{{.Class}}">{{.Title}}</span>{{end}} Updated <time datetime="{{.Updated.ISO}}">{{.Updated.Clock}} UTC</time></p>
+	</div>
+</div>
 
-	{{if $v.LADD}}<p class="notice">The owner of {{$v.Registration}} has asked the FAA to limit public tracking of this aircraft through the Limiting Aircraft Data Displayed (LADD) program. Its identity and registration are public record; its flights are not shown.</p>{{end}}
-
-	{{if or $v.Map $v.Live}}
-	<section class="window" aria-label="{{if $v.Live}}Current flight{{else}}Routes flown in the last {{$v.Days}} days{{end}}">
-		{{with $v.Live}}
-		<div class="strip strip-compact">
-			<div class="end">{{if .Dep.URL}}<a class="code" href="{{.Dep.URL}}">{{.Dep.Code}}</a>{{else}}<span class="code">{{or .Dep.Code "?"}}</span>{{end}}<span class="city">{{.Dep.City}}</span></div>
-			<div class="track">
-				<div class="track-line" role="img" aria-label="{{.Progress}}% of the way"><span class="track-done" style="width:{{.Progress}}%"></span><span class="track-plane" style="left:{{.Progress}}%">{{template "icon-plane"}}</span></div>
-				<p class="track-note">{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}{{if .FlownMi}}, {{.LeftMi}} to go{{end}}</p>
+<section class="stage{{if not $v.Map}} stage-bare{{end}}" aria-label="Where {{$v.Registration}} is now">
+	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
+	<div class="wrap stage-wrap">
+		<div class="dock">
+			{{template "band-status" $v.Band}}
+			<div class="dock-body">
+				{{if $v.LADD}}
+				<p class="dock-note">The owner of {{$v.Registration}} has asked the FAA to limit public tracking of this aircraft (the LADD program). Its identity and registration are public record; its flights and positions are not shown.</p>
+				{{else if $v.Live}}{{with $v.Live}}
+				<p class="dock-flight">Flying {{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}{{if .Airline}} for {{.Airline}}{{end}}</p>
+				{{template "route" .}}
+				{{if .HasPos}}{{template "telemetry" .}}{{end}}
+				{{end}}{{else}}
+				{{template "kv" $v.LastSeen}}
+				{{end}}
+				<dl class="kv kv-dock">
+					{{if $v.Name}}<div><dt>Type</dt><dd>{{$v.Name}}</dd></div>{{end}}
+					{{if $v.Operator}}<div><dt>Operator</dt><dd>{{if $v.OperatorURL}}<a href="{{$v.OperatorURL}}">{{$v.Operator}}</a>{{else}}{{$v.Operator}}{{end}}</dd></div>{{end}}
+					{{if and $v.Owner (ne $v.Owner $v.Operator)}}<div><dt>Owner</dt><dd>{{$v.Owner}}</dd></div>{{end}}
+				</dl>
+				{{if and $v.Live (not $v.LADD)}}<a class="btn btn-app btn-block" href="{{.AppURL}}">Watch {{$v.Registration}} in 3D</a>{{end}}
 			</div>
-			<div class="end end-arr">{{if .Arr.URL}}<a class="code" href="{{.Arr.URL}}">{{.Arr.Code}}</a>{{else}}<span class="code">{{or .Arr.Code "?"}}</span>{{end}}<span class="city">{{.Arr.City}}</span></div>
 		</div>
-		{{else}}
-		<p class="window-cap">Routes flown in the last {{$v.Days}} days{{if $v.Map}}; the plane marks the last reported position{{end}}.</p>
-		{{end}}
-		{{template "map" $v.Map}}
-	</section>
-	{{end}}
+	</div>
+</section>
 
-	<div class="split">
-		<section aria-labelledby="about-h">
-			<h2 id="about-h">About {{$v.Registration}}</h2>
-			{{range $v.Summary}}<p>{{.}}</p>{{end}}
-			{{template "facts" $v.Specs}}
+<div class="wrap cols">
+	<div class="col-main">
+		{{if $v.Recent}}
+		<section class="panel" aria-labelledby="hist-h">
+			<h2 id="hist-h">Recent flights <span class="panel-count">last {{len $v.Recent}}, newest first</span></h2>
+			{{template "legs" (legTable $v.Recent true)}}
 		</section>
-		<aside class="side">
-			{{if $v.Stats}}
-			<h2>Last {{$v.Days}} days</h2>
-			<dl class="stats">{{range $v.Stats}}<div><dt>{{.Label}}</dt><dd>{{.Value}}</dd></div>{{end}}</dl>
+		{{end}}
+
+		{{if $v.Upcoming}}
+		<section class="panel" aria-labelledby="up-h">
+			<h2 id="up-h">Planned flights</h2>
+			<ul class="links links-rows">{{range $v.Upcoming}}<li>{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}
+				<span>{{template "airport-inline" .Dep}} to {{template "airport-inline" .Arr}}</span>{{with .DepPlanned}}{{if .Set}}<span class="dim">{{.Day}} {{.Clock}} {{.Zone}}</span>{{end}}{{end}}</li>{{end}}</ul>
+		</section>
+		{{end}}
+
+		{{if $v.Registry}}
+		<section class="panel" aria-labelledby="reg-h">
+			<h2 id="reg-h">Registration</h2>
+			{{template "kv" $v.Registry}}
+			{{if gt (len $v.History) 1}}
+			<div class="table-scroll">
+			<table class="grid grid-5">
+				<caption>Register history</caption>
+				<thead><tr><th scope="col">Registration</th><th scope="col">Owner</th><th scope="col">From</th><th scope="col">To</th><th scope="col">Status</th></tr></thead>
+				<tbody>{{range $v.History}}<tr><td data-label="Registration">{{.Registration}}</td><td data-label="Owner">{{title .OwnerName}}</td><td class="nowrap" data-label="From">{{date .ValidFrom}}</td><td class="nowrap" data-label="To">{{if .ValidTo}}{{date .ValidTo}}{{else}}Current{{end}}</td><td data-label="Status">{{.Status}}</td></tr>{{end}}</tbody>
+			</table>
+			</div>
 			{{end}}
-			{{if $v.TopAirports}}
-			<h3 class="side-h3">Busiest airports</h3>
-			<ol class="bars">
-				{{range $v.TopAirports}}<li>
-					<span class="bar-label">{{template "airport-inline" .Airport}} <span class="dim">{{.Airport.City}}</span></span>
-					<span class="bar-n">{{.Count}}</span>
-					<span class="bar" style="--w:{{barWidth .Count $v.MaxCount}}" aria-hidden="true"></span>
-				</li>{{end}}
-			</ol>
-			{{end}}
-		</aside>
+		</section>
+		{{end}}
 	</div>
 
-	{{if $v.Upcoming}}
-	<section aria-labelledby="up-h">
-		<h2 id="up-h">Planned flights</h2>
-		<ul class="plain-list">{{range $v.Upcoming}}<li>{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}
-			{{template "airport-inline" .Dep}} to {{template "airport-inline" .Arr}}{{with .DepPlanned}}{{if .Set}}, {{.Day}} {{.Clock}} {{.Zone}}{{end}}{{end}}</li>{{end}}</ul>
-	</section>
-	{{end}}
-
-	{{if $v.Recent}}
-	<section aria-labelledby="hist-h">
-		<h2 id="hist-h">Recent flights</h2>
-		<p class="lede">The last {{len $v.Recent}} flights of {{$v.Registration}}, newest first.</p>
-		{{template "legs" (legTable $v.Recent true)}}
-	</section>
-	{{end}}
-
-	{{if $v.Registry}}
-	<section aria-labelledby="reg-h">
-		<h2 id="reg-h">Registration</h2>
-		{{template "facts" $v.Registry}}
-		{{if gt (len $v.History) 1}}
-		<h3>Register history</h3>
-		<div class="table-scroll"><table class="legs">
-			<thead><tr><th scope="col">Registration</th><th scope="col">Owner</th><th scope="col">From</th><th scope="col">To</th><th scope="col">Status</th></tr></thead>
-			<tbody>{{range $v.History}}<tr><td>{{.Registration}}</td><td>{{title .OwnerName}}</td><td class="nowrap">{{date .ValidFrom}}</td><td class="nowrap">{{if .ValidTo}}{{date .ValidTo}}{{else}}Current{{end}}</td><td>{{.Status}}</td></tr>{{end}}</tbody>
-		</table></div>
+	<aside class="col-side">
+		<section class="panel" aria-labelledby="about-h">
+			<h2 id="about-h">About {{$v.Registration}}</h2>
+			<div class="panel-body prose">{{range $v.Summary}}<p>{{.}}</p>{{end}}</div>
+			{{template "kv" $v.Specs}}
+		</section>
+		{{if $v.Stats}}
+		<section class="panel" aria-labelledby="stats-h">
+			<h2 id="stats-h">Last {{$v.Days}} days</h2>
+			{{template "kv" $v.Stats}}
+			{{if $v.TopAirports}}
+			<table class="grid grid-bars">
+				<caption>Busiest airports</caption>
+				<tbody>{{range $v.TopAirports}}<tr>
+					<th scope="row">{{template "airport-inline" .Airport}} <span class="dim">{{.Airport.City}}</span></th>
+					<td class="num">{{.Count}}</td>
+					<td class="bar-cell" aria-hidden="true"><span class="bar" style="--w:{{barWidth .Count $v.MaxCount}}"></span></td>
+				</tr>{{end}}</tbody>
+			</table>
+			{{end}}
+		</section>
 		{{end}}
-	</section>
-	{{end}}
-</article>
+	</aside>
+</div>
 {{end}}

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/mikedamm/bermuda/internal/api"
-	"github.com/mikedamm/bermuda/internal/geo"
 	"github.com/mikedamm/bermuda/internal/store"
 )
 
@@ -23,7 +22,7 @@ type FlightPageV struct {
 	AirlineURL  string
 	AirlineICAO string
 	Featured    LegV
-	Map         *geo.Map
+	Map         *MapV
 	History     []LegV
 	Days        int
 	Summary     []string
@@ -158,7 +157,7 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 
 	v := FlightPageV{
 		Ident: canon, Number: featured.Number, Airline: featured.Airline, AirlineURL: featured.AirlineURL,
-		Featured: featured, Map: legMap(featured, 960, 420), History: legs, Days: flightHistoryDays,
+		Featured: featured, History: legs, Days: flightHistoryDays,
 	}
 	if al, _, ok := store.AirlineCallsign(canon); ok {
 		v.AirlineICAO = al
@@ -171,6 +170,7 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 	if live != nil {
 		v.AppURL = s.appLink("flight", live.FlightID)
 	}
+	v.Map = s.legMapV(featured, fmt.Sprintf("Map of %s from %s to %s", v.Number, featured.Dep.City, featured.Arr.City))
 	all := append([]LegV{featured}, legs...)
 	v.Summary = flightSummary(v, all, now)
 	v.Facts = flightFacts(all)

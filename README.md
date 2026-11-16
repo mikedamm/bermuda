@@ -29,9 +29,13 @@ One Go binary, standard library only.
   learns, plus everything pages render, goes into an index that feeds the
   sitemaps, airline pages and internal links. The index is snapshotted to
   `DATA_DIR` (a persistent volume) every 5 minutes and on shutdown.
-- **Maps** are drawn server-side as SVG: an orthographic projection centred on
-  each route, from embedded Natural Earth data, clipped and simplified per
-  view. Labels are HTML overlays so they stay legible at any width.
+- **Maps** are interactive Mapbox GL JS maps (light basemap tinted to the
+  brand). The server computes everything they draw (great-circle routes split
+  at the live position, airport pins, range rings, the aircraft and its
+  heading) and embeds it as JSON; `static/site.js` only renders it, loading
+  Mapbox after the page content and never for crawlers. Without
+  `MAPBOX_TOKEN` the server draws the same maps as SVG from embedded Natural
+  Earth data (local development, tests).
 - **Upstream protection.** At most 24 concurrent API calls, a 10 s timeout,
   one retry on 5xx, and short TTL caches per endpoint. Not-found answers are
   cached too, because bots probe a lot of nonsense.
@@ -42,7 +46,7 @@ internal/api        typed internal-API client + caching
 internal/cache      bounded TTL cache with request coalescing
 internal/store      discovery index, crawler, snapshots
 internal/geo        embedded airports/basemap, projection, SVG maps
-internal/web        handlers, view models, templates, CSS, sitemaps
+internal/web        handlers, view models, templates, CSS, map script, sitemaps
 tools/gendata       rebuilds internal/geo/data from public sources
 tools/ogcard        renders the default social share card
 ```
@@ -60,6 +64,7 @@ go test ./...
 | `WV_API_BASE`, `WV_API_TOKEN` | internal API (required) |
 | `SITE_URL` | canonical origin used in canonical tags, JSON-LD and sitemaps (required) |
 | `APP_URL` | the app, for "open live" deep links (default `https://app.wingview.com`) |
+| `MAPBOX_TOKEN` | Mapbox public (`pk.`) token for interactive maps; optional, SVG maps without it |
 | `DATA_DIR` | snapshot directory for the discovery index (optional) |
 | `CRAWL=0` | disable the crawler; `CRAWL_GAP_MS` (1200) and `RESOLVE_GAP_MS` (2500) set its pace |
 | `PORT`, `LOG_LEVEL` | 8080, info |
@@ -75,6 +80,12 @@ go test ./...
   `noindex` and left out of sitemaps.
 - The container's own hostname serves a `Disallow: /` robots.txt; canonical
   tags always point at `SITE_URL`.
+
+## Design
+
+The pages follow the flight-tracker convention FlightAware and Flightradar24
+set (owner's direction), in WingView's navy, sky blue and Inter. Product
+context is in `PRODUCT.md`; the visual system is in `DESIGN.md`.
 
 ## Reference data
 

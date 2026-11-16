@@ -417,19 +417,164 @@ func (l LegV) DepMoment() Moment {
 	return Moment{}
 }
 
+// shortDelay drops the "Expected " / "Landed " lead-in where a label already says it.
+func shortDelay(t string) string {
+	return capFirst(strings.TrimPrefix(strings.TrimPrefix(t, "Expected "), "Landed "))
+}
+
 // ArrMoment: landing if it happened, else the estimate, else the plan.
 func (l LegV) ArrMoment() Moment {
 	switch {
 	case l.ArrIn.Set && l.ArrOn.Set:
-		return Moment{"Landed", l.ArrOn, l.ArrDelay, l.ArrDelayClass}
+		return Moment{"Landed", l.ArrOn, shortDelay(l.ArrDelay), l.ArrDelayClass}
 	case l.ArrOn.Set:
-		return Moment{"Landed", l.ArrOn, l.ArrDelay, l.ArrDelayClass}
+		return Moment{"Landed", l.ArrOn, shortDelay(l.ArrDelay), l.ArrDelayClass}
 	case l.ArrIn.Set:
-		return Moment{"Reached the gate", l.ArrIn, l.ArrDelay, l.ArrDelayClass}
+		return Moment{"Reached the gate", l.ArrIn, shortDelay(l.ArrDelay), l.ArrDelayClass}
 	case l.ArrEst.Set && l.Phase != "cancelled":
-		return Moment{"Expected", l.ArrEst, l.ArrDelay, l.ArrDelayClass}
+		return Moment{"Expected", l.ArrEst, shortDelay(l.ArrDelay), l.ArrDelayClass}
 	case l.ArrPlanned.Set:
-		return Moment{"Scheduled arrival", l.ArrPlanned, l.ArrDelay, l.ArrDelayClass}
+		return Moment{"Scheduled arrival", l.ArrPlanned, shortDelay(l.ArrDelay), l.ArrDelayClass}
 	}
 	return Moment{}
+}
+
+// StatusBand is the one-line answer welded to the top of a flight panel,
+// coloured by state: ok (green), late (amber), bad (red), live (blue), idle.
+type StatusBand struct {
+	Class  string
+	Title  string
+	Detail string
+}
+
+// Band answers "where is it, and is it on time" for one leg.
+func (l LegV) Band() StatusBand {
+	delay := func() (string, string) {
+		t := strings.TrimPrefix(strings.TrimPrefix(l.ArrDelay, "Expected "), "Landed ")
+		if t == "" {
+			return "", ""
+		}
+		t = strings.ToUpper(t[:1]) + t[1:]
+		switch l.ArrDelayClass {
+		case "late":
+			return t, "late"
+		}
+		return t, "ok"
+	}
+	// A late departure outranks an on-time arrival estimate: schedules get
+	// re-timed after a delay, and green next to "3h 56m late" is a lie.
+	depLate := func() (StatusBand, bool) {
+		if l.DepDelayClass == "late" && (l.DepOut.Set || l.DepOff.Set) {
+			return StatusBand{"late", "", "Departed " + strings.ToLower(l.DepDelay)}, true
+		}
+		return StatusBand{}, false
+	}
+	switch l.Phase {
+	case "en_route":
+		d, c := delay()
+		if c != "late" {
+			if b, ok := depLate(); ok {
+				b.Title = "En route"
+				return b
+			}
+		}
+		if c == "" {
+			c = "live"
+		}
+		if d == "" {
+			d = strings.TrimPrefix(l.Headline, "In the air, ")
+			if d == "In the air" {
+				d = ""
+			}
+		}
+		return StatusBand{c, "En route", capFirst(d)}
+	case "taxiing":
+		return StatusBand{"live", "Taxiing", l.DepDelay}
+	case "scheduled":
+		c := "idle"
+		if l.DepDelayClass == "late" {
+			c = "late"
+		}
+		return StatusBand{c, "Scheduled", capFirst(strings.TrimPrefix(l.Headline, "Scheduled to depart "))}
+	case "landed", "arrived":
+		d, c := delay()
+		if c == "" {
+			if b, ok := depLate(); ok {
+				b.Title = map[string]string{"landed": "Landed", "arrived": "Arrived"}[l.Phase]
+				return b
+			}
+		}
+		if c == "" {
+			c, d = "ok", strings.TrimPrefix(strings.TrimPrefix(l.Headline, "Landed "), "Arrived ")
+		}
+		title := "Arrived"
+		if l.Phase == "landed" {
+			title = "Landed"
+		}
+		return StatusBand{c, title, capFirst(d)}
+	case "diverted":
+		d := ""
+		if l.DivertedTo != nil {
+			d = "Now going to " + l.DivertedTo.City
+		}
+		return StatusBand{"bad", "Diverted", d}
+	case "cancelled":
+		return StatusBand{"bad", "Cancelled", ""}
+	}
+	return StatusBand{"idle", "No current data", ""}
+}
+
+// TimeRow is one line of the scheduled-versus-actual times table.
+type TimeRow struct {
+	Event     string
+	Sched     TimeCell
+	Actual    TimeCell
+	Estimated bool
+	Diff      string
+	DiffClass string
+}
+
+// DepTimes and ArrTimes are the departure and arrival halves of the table.
+func (l LegV) DepTimes() []TimeRow {
+	gate := TimeRow{Event: "Gate departure", Sched: l.DepPlanned, Actual: l.DepOut, Diff: l.DepDelay, DiffClass: l.DepDelayClass}
+	if !l.DepOut.Set {
+		gate.Diff = ""
+	}
+	return []TimeRow{gate, {Event: "Takeoff", Actual: l.DepOff}}
+}
+
+func (l LegV) ArrTimes() []TimeRow {
+	landing := TimeRow{Event: "Landing", Actual: l.ArrOn}
+	if !l.ArrOn.Set && l.ArrEst.Set && l.Phase != "cancelled" {
+		landing.Actual, landing.Estimated = l.ArrEst, true
+	}
+	gate := TimeRow{Event: "Gate arrival", Sched: l.ArrPlanned, Actual: l.ArrIn}
+	if l.ArrIn.Set {
+		gate.Diff, gate.DiffClass = fmtDelay2(l.ArrIn, l.ArrPlanned)
+	}
+	return []TimeRow{landing, gate}
+}
+
+func fmtDelay2(actual, sched TimeCell) (string, string) {
+	a, err1 := time.Parse(time.RFC3339, actual.ISO)
+	s, err2 := time.Parse(time.RFC3339, sched.ISO)
+	if err1 != nil || err2 != nil || !actual.Set || !sched.Set {
+		return "", ""
+	}
+	return fmtDelay(a, s)
+}
+
+// ArrName is the airport the leg ends at: the diversion field if any.
+func (l LegV) ArrName() string {
+	if l.DivertedTo != nil {
+		return l.DivertedTo.Name
+	}
+	return l.Arr.Name
+}
+
+func capFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }

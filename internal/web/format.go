@@ -36,18 +36,14 @@ func loadZone(name string) *time.Location {
 	return l
 }
 
-// twelveHour countries print clocks the way their travellers read them.
-var twelveHour = map[string]bool{"US": true, "CA": true, "AU": true, "NZ": true, "PH": true, "IN": true, "MX": true, "PR": true}
-
 func timeCell(t time.Time, tz, country string) TimeCell {
 	if t.IsZero() {
 		return TimeCell{}
 	}
 	lt := t.In(loadZone(tz))
-	clock := lt.Format("15:04")
-	if twelveHour[country] {
-		clock = lt.Format("3:04 PM")
-	}
+	// One clock format per page, as FlightAware does: 12-hour with the
+	// local zone, whatever the airport's country.
+	clock := lt.Format("3:04 PM")
 	zone := lt.Format("MST")
 	if strings.HasPrefix(zone, "+") || strings.HasPrefix(zone, "-") {
 		zone = "UTC" + strings.TrimSuffix(strings.TrimSuffix(zone, "00"), "0")

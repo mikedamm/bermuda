@@ -1,47 +1,64 @@
 {{define "content"}}{{$v := .Body}}
-<article class="wrap page-airline">
-	<header class="head">
-		<div class="head-id">
-			<h1 class="ident ident-airport">{{if $v.IATA}}<span class="code-big">{{$v.IATA}}</span> {{end}}<span class="ident-name">{{$v.Name}}</span></h1>
-			<p class="head-sub"><span>ICAO {{$v.ICAO}}</span></p>
+<div class="band">
+	<div class="wrap band-in">
+		<div class="band-id">
+			<h1>{{$v.Name}}</h1>
+			<p class="band-sub"><span class="band-codes">{{if $v.IATA}}{{$v.IATA}} / {{end}}{{$v.ICAO}}</span><span>Flights and aircraft tracked this week</span></p>
 		</div>
-	</header>
+		<p class="band-meta">Updated <time datetime="{{.Updated.ISO}}">{{.Updated.Clock}} UTC</time></p>
+	</div>
+</div>
 
-	<section class="about" aria-labelledby="about-h">
-		<h2 id="about-h" class="vh">About {{$v.Name}}</h2>
-		{{range $v.Summary}}<p>{{.}}</p>{{end}}
-	</section>
+<section class="stage{{if not $v.Map}} stage-bare{{end}}" aria-label="{{$v.Name}} routes">
+	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
+	<div class="wrap stage-wrap">
+		<div class="dock">
+			{{template "band-status" (band "live" "This week" (printf "%d routes tracked" $v.Routes))}}
+			<div class="dock-body">
+				<dl class="counts">
+					<div><dt>Flight numbers</dt><dd>{{len $v.Flights}}</dd></div>
+					<div><dt>Aircraft</dt><dd>{{len $v.Fleet}}</dd></div>
+				</dl>
+				<div class="prose">{{range $v.Summary}}<p>{{.}}</p>{{end}}</div>
+			</div>
+		</div>
+	</div>
+</section>
 
-	<div class="split">
-		<section aria-labelledby="fl-h">
-			<h2 id="fl-h">{{$v.Name}} flights this week</h2>
+<div class="wrap cols">
+	<div class="col-main">
+		<section class="panel" aria-labelledby="fl-h">
+			<h2 id="fl-h">{{$v.Name}} flights <span class="panel-count">{{len $v.Flights}} this week</span></h2>
 			<div class="table-scroll">
-			<table class="legs">
-				<thead><tr><th scope="col">Flight</th><th scope="col">From</th><th scope="col">To</th><th scope="col">Aircraft</th><th scope="col">Last seen</th></tr></thead>
+			<table class="grid grid-5">
+				<thead><tr><th scope="col">Flight</th><th scope="col">From</th><th scope="col">To</th><th scope="col">Aircraft</th><th scope="col" class="num">Last seen</th></tr></thead>
 				<tbody>{{range $v.Flights}}<tr>
-					<td data-label="Flight"><a href="{{.URL}}">{{.Number}}</a>{{if .Live}} <span class="pill pill-air">Live</span>{{end}}</td>
+					<td data-label="Flight"><a href="{{.URL}}">{{.Number}}</a>{{if .Live}} <span class="tag tag-air">Live</span>{{end}}</td>
 					<td data-label="From">{{template "airport-inline" .Dep}}</td>
 					<td data-label="To">{{template "airport-inline" .Arr}}</td>
-					<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{else}}<span class="dim">–</span>{{end}}</td>
-					<td class="nowrap dim" data-label="Last seen">{{.Seen}}</td>
+					<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{else}}<span class="dim">&ndash;</span>{{end}}</td>
+					<td class="num dim" data-label="Last seen">{{.Seen}}</td>
 				</tr>{{end}}</tbody>
 			</table>
 			</div>
 		</section>
-		<aside class="side">
-			{{if $v.FleetTypes}}
-			<h2>Fleet seen</h2>
-			<ol class="bars">{{range $v.FleetTypes}}<li><span class="bar-label">{{.Type}}</span><span class="bar-n">{{.Count}}</span><span class="bar" style="--w:{{barWidth .Count (index $v.FleetTypes 0).Count}}" aria-hidden="true"></span></li>{{end}}</ol>
-			{{end}}
-		</aside>
 	</div>
-
-	{{if $v.Fleet}}
-	<section aria-labelledby="fleet-h">
-		<h2 id="fleet-h">{{$v.Name}} aircraft</h2>
-		<p class="lede">Aircraft we have seen flying for {{$v.Name}} in the last 30 days.</p>
-		<ul class="chips">{{range $v.Fleet}}<li><a href="{{.URL}}" title="{{.Type}}">{{.Reg}}</a></li>{{end}}</ul>
-	</section>
-	{{end}}
-</article>
+	<aside class="col-side">
+		{{if $v.FleetTypes}}
+		<section class="panel" aria-labelledby="types-h">
+			<h2 id="types-h">Fleet seen</h2>
+			<table class="grid grid-bars"><tbody>{{range $v.FleetTypes}}<tr>
+				<th scope="row">{{.Type}}</th><td class="num">{{.Count}}</td>
+				<td class="bar-cell" aria-hidden="true"><span class="bar" style="--w:{{barWidth .Count (index $v.FleetTypes 0).Count}}"></span></td>
+			</tr>{{end}}</tbody></table>
+		</section>
+		{{end}}
+		{{if $v.Fleet}}
+		<section class="panel" aria-labelledby="fleet-h">
+			<h2 id="fleet-h">Aircraft <span class="panel-count">last 30 days</span></h2>
+			<ul class="links links-inline">{{range $v.Fleet}}<li><a href="{{.URL}}" title="{{.Type}}">{{.Reg}}</a></li>{{end}}</ul>
+		</section>
+		{{end}}
+	</aside>
+</div>
 {{end}}

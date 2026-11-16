@@ -10,6 +10,7 @@
 //	DATA_DIR      where the discovery index is snapshotted         (optional; a persistent volume)
 //	CRAWL         "0" disables the background crawler              (default on)
 //	LOG_LEVEL     debug, info, warn                                (default info)
+//	MAPBOX_TOKEN  Mapbox public token for interactive maps          (optional; SVG maps without it)
 package main
 
 import (
@@ -80,7 +81,7 @@ func run(log *slog.Logger) error {
 		cr.Run(ctx)
 	}
 
-	srv, err := web.New(client, idx, web.Config{SiteURL: site, AppURL: env("APP_URL", "https://app.wingview.com"), Version: version}, log)
+	srv, err := web.New(client, idx, web.Config{SiteURL: site, AppURL: env("APP_URL", "https://app.wingview.com"), Version: version, MapboxToken: os.Getenv("MAPBOX_TOKEN")}, log)
 	if err != nil {
 		return err
 	}

@@ -1,10 +1,11 @@
 {{define "content"}}{{$v := .Body}}
-<div class="wrap page-search">
+<div class="band"><div class="wrap band-in"><div class="band-id"><h1>{{if $v.Query}}Results for {{$v.Query}}{{else}}Search{{end}}</h1></div></div></div>
+<div class="wrap page-plain">
 	{{if $v.Query}}
-	<h1>Results for {{$v.Query}}</h1>
-	<ul class="results">{{range $v.Results}}<li><a href="{{.URL}}">{{.Title}}</a> <span class="dim">{{.Detail}}</span></li>{{end}}</ul>
+	<section class="panel"><h2>Matches</h2>
+	<table class="grid grid-plain"><tbody>{{range $v.Results}}<tr><th scope="row"><a href="{{.URL}}">{{.Title}}</a></th><td class="dim">{{.Detail}}</td></tr>{{end}}</tbody></table>
+	</section>
 	{{else}}
-	<h1>Search</h1>
 	<p>Type a flight number (UA1275), a tail number (N527AS) or an airport code (SEA) in the search box above.</p>
 	{{end}}
 </div>

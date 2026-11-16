@@ -7,6 +7,7 @@
 #   WV_API_TOKEN      internal API token (key `web` of the gateway-internal secret)
 #   WV_API_BASE       internal API base URL, ending in /internal/v1
 #   IMAGE_TAG         image tag to start from on first create (a commit SHA CI pushed)
+#   MAPBOX_TOKEN      Mapbox public token (pk.); optional, maps fall back to SVG
 #
 # Optional: APP_NAME (wingview-seo), REGION (SIL, next to the API in Fremont),
 # SITE_URL (https://www.wingview.com), REGISTRY_ID (Bunny registry holding
@@ -35,9 +36,9 @@ call() {
 # send METHOD PATH JSON: the body goes over stdin
 send() { printf '%s' "$3" | call "$1" "$2" --data-binary @-; }
 
-export WV_API_TOKEN
+export WV_API_TOKEN MAPBOX_TOKEN=${MAPBOX_TOKEN:-}
 env_obj=$(jq -n --arg base "$WV_API_BASE" --arg site "$SITE_URL" '{
-	WV_API_BASE: $base, WV_API_TOKEN: $ENV.WV_API_TOKEN, SITE_URL: $site,
+	WV_API_BASE: $base, WV_API_TOKEN: $ENV.WV_API_TOKEN, SITE_URL: $site, MAPBOX_TOKEN: $ENV.MAPBOX_TOKEN,
 	APP_URL: "https://app.wingview.com", DATA_DIR: "/data", GOMAXPROCS: "2", LOG_LEVEL: "info"
 }')
 

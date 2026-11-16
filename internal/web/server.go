@@ -45,7 +45,14 @@ type Config struct {
 	SiteURL string // canonical origin, no trailing slash
 	AppURL  string // the WingView app, for deep links
 	Version string // build commit, reported by /healthz
+	// MapboxToken is a public (pk.) token. It reaches every browser by design;
+	// restrict it to the site's URLs in the Mapbox account. Empty means maps
+	// are drawn server-side as SVG instead.
+	MapboxToken string
 }
+
+// MapboxGL is the pinned Mapbox GL JS release the pages load.
+const MapboxGL = "3.34.1"
 
 type Server struct {
 	api    *api.Client
@@ -353,8 +360,12 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' https://i.wvcdn.com data:; style-src 'self' 'unsafe-inline'; "+
-			"script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+		// Mapbox GL JS needs its script and stylesheet, tile and event
+		// endpoints, and blob: workers (docs.mapbox.com, "CSP directives").
+		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' https://i.wvcdn.com https://api.mapbox.com data: blob:; "+
+			"style-src 'self' 'unsafe-inline' https://api.mapbox.com; script-src 'self' https://api.mapbox.com; font-src 'self'; "+
+			"connect-src 'self' https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com; worker-src blob:; child-src blob:; "+
+			"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		rec := &statusRecorder{ResponseWriter: w, status: 200}
 		defer func() {

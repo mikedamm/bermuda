@@ -54,7 +54,21 @@ func TestTimeCell(t *testing.T) {
 	if c := timeCell(at, "America/Los_Angeles", "US"); c.Clock != "8:50 PM" || c.Zone != "PST" || c.Day != "Sun 15 Nov" {
 		t.Errorf("US cell = %+v", c)
 	}
-	if c := timeCell(at, "Europe/London", "GB"); c.Clock != "04:50" || c.Zone != "GMT" {
+	if c := timeCell(at, "Europe/London", "GB"); c.Clock != "4:50 AM" || c.Zone != "GMT" {
 		t.Errorf("GB cell = %+v", c)
+	}
+}
+
+// A late departure must never sit under a green "on time" band, even when the
+// re-timed arrival estimate looks on schedule.
+func TestBandLateDeparture(t *testing.T) {
+	l := LegV{Phase: "en_route", PhaseWord: "En Route", DepDelay: "3h 56m late", DepDelayClass: "late",
+		DepOut: TimeCell{Set: true}, ArrDelay: "Expected on time", ArrDelayClass: "ontime"}
+	if b := l.Band(); b.Class != "late" || b.Detail != "Departed 3h 56m late" {
+		t.Fatalf("band = %+v", b)
+	}
+	l.DepDelay, l.DepDelayClass = "On time", "ontime"
+	if b := l.Band(); b.Class != "ok" || b.Detail != "On time" {
+		t.Fatalf("on-time band = %+v", b)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"strings"
@@ -16,25 +17,29 @@ import (
 )
 
 type AirportPageV struct {
-	Airport   geo.Airport
-	Code      string
-	Region    string
-	Country   string
-	LocalTime TimeCell
-	Map       *geo.Map
-	RadiusMi  int
-	Inbound   []TrafficRow
-	Outbound  []TrafficRow
-	Ground    []TrafficRow
-	Overhead  []TrafficRow
-	Parked    []TrafficRow
-	ParkedN   int
-	Airlines  []AirlineCountV
-	Nearby    []NearbyV
-	Live      bool
-	Summary   []string
-	Facts     []Fact
-	Wikipedia string
+	Airport        geo.Airport
+	Code           string
+	Region         string
+	Country        string
+	LocalTime      TimeCell
+	Map            *MapV
+	RadiusMi       int
+	Inbound        []TrafficRow
+	Outbound       []TrafficRow
+	Ground         []TrafficRow
+	Overhead       []TrafficRow
+	Parked         []TrafficRow
+	ParkedN        int
+	ParkedShown    int
+	GroundN        int
+	GroundHasReg   bool
+	GroundHasRoute bool
+	Airlines       []AirlineCountV
+	Nearby         []NearbyV
+	Live           bool
+	Summary        []string
+	Facts          []Fact
+	Wikipedia      string
 }
 
 type TrafficRow struct {
@@ -44,7 +49,13 @@ type TrafficRow struct {
 	Alt                   string
 	Dist                  string
 	Status                string
+	State                 string // on the ground: Landed, Departing
+	Type                  string // parked: aircraft type from the index
+	Airline               string
 	distMi                float64
+	pos                   geo.LL // live position, when resolved
+	hdg                   float64
+	direction             string
 }
 
 type AirlineCountV struct {
@@ -92,29 +103,36 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 	}
 
 	center := geo.LL{Lat: a.Lat, Lon: a.Lon}
-	spec := geo.MapSpec{W: 960, H: 360, Center: &center, RadiusMi: airportRadius + 6, Rings: []float64{25, airportRadius},
-		Pins: []geo.MapPin{{At: center, Label: a.Code(), Primary: true}}}
-	for _, n := range geo.NearbyAirports(a.Lat, a.Lon, airportRadius+10, 6, a.ICAO) {
-		spec.Pins = append(spec.Pins, geo.MapPin{At: geo.LL{Lat: n.Lat, Lon: n.Lon}, Label: n.Code()})
+	close := geo.NearbyAirports(a.Lat, a.Lon, airportRadius+10, 6, a.ICAO)
+	var closeV []AirportV
+	for _, n := range close {
+		closeV = append(closeV, airportV(n.ICAO, nil))
 	}
-	m := geo.RenderMap(spec)
-	v.Map = &m
+	var planes []mapPlane
+	for _, rs := range [][]TrafficRow{v.Inbound, v.Outbound, v.Overhead} {
+		for _, r := range rs {
+			if r.pos.Valid() {
+				planes = append(planes, mapPlane{P: pt(r.pos), H: math.Round(r.hdg), L: r.Number, U: r.URL})
+			}
+		}
+	}
+	v.Map = s.placeMapV(center, a.Code(), "/airport/"+a.ICAO, []float64{25, airportRadius}, closeV, planes,
+		fmt.Sprintf("Map of the area within %d miles of %s", airportRadius, a.Name),
+		func() *geo.Map {
+			spec := geo.MapSpec{W: 960, H: 360, Center: &center, RadiusMi: airportRadius + 6, Rings: []float64{25, airportRadius},
+				Pins: []geo.MapPin{{At: center, Label: a.Code(), Primary: true}}}
+			for _, n := range close {
+				spec.Pins = append(spec.Pins, geo.MapPin{At: geo.LL{Lat: n.Lat, Lon: n.Lon}, Label: n.Code()})
+			}
+			m := geo.RenderMap(spec)
+			return &m
+		})
 
 	add := func(label, val string) {
 		if val != "" {
 			v.Facts = append(v.Facts, Fact{Label: label, Value: val})
 		}
 	}
-	codes := []string{}
-	if a.IATA != "" {
-		codes = append(codes, "IATA "+a.IATA)
-	}
-	codes = append(codes, "ICAO "+a.ICAO)
-	if a.Local != "" && a.Local != a.IATA {
-		codes = append(codes, "FAA "+a.Local)
-	}
-	add("Codes", strings.Join(codes, ", "))
-	add("Location", a.Place())
 	add("Elevation", fmt.Sprintf("%s ft (%s m)", commas(a.ElevFt), commas(int(float64(a.ElevFt)*0.3048))))
 	add("Coordinates", fmt.Sprintf("%.4f, %.4f", a.Lat, a.Lon))
 	if a.TZ != "" {
@@ -154,6 +172,15 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 		}
 		if row.Number == "" {
 			row.Number = x.Registration
+		}
+		row.direction = x.Direction
+		switch {
+		case x.Status == "landed" || x.Direction == "arriving":
+			row.State = "Landed"
+		case x.Direction == "departing":
+			row.State = "Departing"
+		default:
+			row.State = "On the ground"
 		}
 		if row.Dist == "" {
 			row.Dist = "0 mi"
@@ -216,18 +243,52 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 	if len(v.Overhead) > 25 {
 		v.Overhead = v.Overhead[:25]
 	}
-	sort.Slice(v.Parked, func(i, j int) bool { return v.Parked[i].Reg < v.Parked[j].Reg })
-	if len(v.Parked) > 80 {
-		v.Parked = v.Parked[:80]
+	for i := range v.Parked {
+		if a, ok := s.index.AircraftByReg(v.Parked[i].Reg); ok {
+			v.Parked[i].Type = a.Model
+			if v.Parked[i].Type == "" {
+				v.Parked[i].Type = a.Type
+			}
+			if al, ok := s.index.Airline(a.Airline); ok {
+				v.Parked[i].Airline = al.Name
+			}
+		}
 	}
-	for _, rs := range [][]TrafficRow{v.Inbound, v.Outbound} {
+	// parked aircraft with an identity first, then by registration
+	sort.SliceStable(v.Parked, func(i, j int) bool {
+		if (v.Parked[i].Type != "") != (v.Parked[j].Type != "") {
+			return v.Parked[i].Type != ""
+		}
+		return v.Parked[i].Reg < v.Parked[j].Reg
+	})
+	// ground rows that carry more than a flight number first; parked
+	// aircraft are listed only when the index can say what they are (the
+	// heading keeps the full count)
+	sort.SliceStable(v.Ground, func(i, j int) bool { return groundDetail(v.Ground[i]) > groundDetail(v.Ground[j]) })
+	v.GroundN = len(v.Ground)
+	v.Ground = v.Ground[:min(len(v.Ground), 30)]
+	for _, g := range v.Ground {
+		v.GroundHasReg = v.GroundHasReg || g.RegURL != ""
+		v.GroundHasRoute = v.GroundHasRoute || g.Other.Code != ""
+	}
+	known := v.Parked[:0]
+	for _, p := range v.Parked {
+		if p.Type != "" {
+			known = append(known, p)
+		}
+	}
+	v.Parked = known[:min(len(known), 30)]
+	v.ParkedShown = len(v.Parked)
+	// every airborne row gets a live lookup (cached, shared): its position for
+	// the map, and the far end of its route when the index does not know it
+	for _, rs := range [][]TrafficRow{v.Inbound, v.Outbound, v.Overhead} {
 		for i := range rs {
-			if rs[i].Other.Code == "" && rs[i].URL != "" {
+			if rs[i].Callsign != "" {
 				needRoute = append(needRoute, &rs[i])
 			}
 		}
 	}
-	s.resolveRoutes(ctx, v.Airport.ICAO, needRoute, 16)
+	s.resolveLive(ctx, v.Airport.ICAO, needRoute, 36)
 
 	for icao, n := range airlines {
 		name := icao
@@ -250,7 +311,7 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 
 // resolveRoutes looks up the far end of up to n flights in parallel; each
 // lookup is cached by the client and also lands in the index.
-func (s *Server) resolveRoutes(ctx context.Context, here string, rows []*TrafficRow, n int) {
+func (s *Server) resolveLive(ctx context.Context, here string, rows []*TrafficRow, n int) {
 	if len(rows) > n {
 		rows = rows[:n]
 	}
@@ -267,25 +328,41 @@ func (s *Server) resolveRoutes(ctx context.Context, here string, rows []*Traffic
 				return
 			}
 			for _, x := range res.Results {
-				if x.Live == nil || x.Live.Callsign != row.Callsign {
+				if x.Live == nil || x.Live.LADDRedacted || (x.Live.Callsign != row.Callsign && x.Registration != row.Reg) {
 					continue
 				}
 				s.index.NoteLive(*x.Live)
 				if x.Live.IATAFlight != "" {
 					row.Number = x.Live.IATAFlight
 				}
-				other := x.Live.Dep
-				if other == here {
-					other = x.Live.Arr
+				if p := (geo.LL{Lat: x.Live.Lat, Lon: x.Live.Lon}); p.Valid() && !x.Live.OnGround {
+					row.pos, row.hdg = p, x.Live.Hdg
 				}
-				if other != "" && other != here {
-					row.Other = airportV(other, nil)
+				if row.Other.Code == "" && row.direction != "transit" {
+					other := x.Live.Dep
+					if other == here {
+						other = x.Live.Arr
+					}
+					if other != "" && other != here {
+						row.Other = airportV(other, nil)
+					}
 				}
 				return
 			}
 		}()
 	}
 	wg.Wait()
+}
+
+func groundDetail(r TrafficRow) int {
+	n := 0
+	if r.RegURL != "" {
+		n++
+	}
+	if r.Other.Code != "" {
+		n++
+	}
+	return n
 }
 
 func airportSummary(v AirportPageV) []string {
@@ -298,7 +375,7 @@ func airportSummary(v AirportPageV) []string {
 	}
 	out = append(out, s+".")
 	if v.Live {
-		in, outN, g := len(v.Inbound), len(v.Outbound), len(v.Ground)
+		in, outN, g := len(v.Inbound), len(v.Outbound), v.GroundN
 		if in+outN+g > 0 {
 			out = append(out, fmt.Sprintf("Within %d miles right now there are %s inbound and %s outbound, with %s on the ground that just landed or are about to leave.",
 				v.RadiusMi, plural(in, "flight", "flights"), plural(outN, "flight", "flights"), plural(g, "more", "more")))

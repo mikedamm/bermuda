@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"regexp"
 	"sort"
@@ -26,9 +27,11 @@ type AircraftPageV struct {
 	Status       string
 	StatusClass  string
 	StatusDetail string
+	Band         StatusBand
+	LastSeen     []Fact // where and when it was last seen, when not flying
 	Live         *LegV
 	LiveURL      string
-	Map          *geo.Map
+	Map          *MapV
 	Specs        []Fact
 	Registry     []Fact
 	Stats        []Fact
@@ -137,14 +140,24 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 		if st.Last.Airport != nil && st.Last.OnGround {
 			ap := airportV("", st.Last.Airport)
 			v.StatusDetail = fmt.Sprintf("Last seen at %s (%s), %s", ap.Name, ap.Code, at)
+			v.Band = StatusBand{"idle", "On the ground", "At " + ap.Code + ", " + at}
+			v.LastSeen = append(v.LastSeen, Fact{Label: "Last seen at", Value: ap.Name, URL: ap.URL})
 		} else {
 			v.StatusDetail = "Last position reported " + at
+			v.Band = StatusBand{"idle", "Not tracked now", "Last position " + at}
 		}
+		v.LastSeen = append(v.LastSeen, Fact{Label: "Last position", Value: at})
 	default:
 		v.Status, v.StatusClass = "No recent activity", "muted"
 		v.StatusDetail = fmt.Sprintf("No positions on record in the last %d days", p0.Days)
 	}
 
+	switch {
+	case v.Live != nil:
+		v.Band = v.Live.Band()
+	case v.Band.Title == "":
+		v.Band = StatusBand{"idle", v.Status, ""}
+	}
 	v.History = p0.RegistryHistory
 	for _, h := range recent {
 		v.Recent = append(v.Recent, legFromHistory(h, now))
@@ -154,7 +167,19 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 	}
 	if !v.LADD {
 		// network map: every route of the window, the busiest drawn strongest
-		v.Map = aircraftMap(p0, recent, v, rf)
+		if v.Live != nil {
+			v.Map = s.legMapV(*v.Live, "Map of "+v.Registration+"'s current flight")
+		} else {
+			var plane *mapPlane
+			if last := p0.Status.Last; last != nil && (st.Flight == nil || !st.Flight.LADDRedacted) {
+				if pos := (geo.LL{Lat: last.Lat, Lon: last.Lon}); pos.Valid() {
+					plane = &mapPlane{P: pt(pos), H: math.Round(last.Hdg)}
+				}
+			}
+			v.Map = s.networkMapV(aircraftRoutes(recent, rf), plane,
+				fmt.Sprintf("Map of the routes %s flew in the last %d days", v.Registration, p0.Days),
+				func() *geo.Map { return aircraftMap(p0, recent, v, rf) })
+		}
 	}
 
 	// facts
@@ -269,6 +294,36 @@ func visibleFlights(p0 *api.AircraftPage) (recent []api.HistoryEntry, upcoming [
 		}
 	}
 	return recent, upcoming
+}
+
+// aircraftRoutes counts each airport pair flown, in a stable order.
+func aircraftRoutes(recent []api.HistoryEntry, rf refs) []routeCount {
+	type pair struct{ a, b string }
+	counts := map[pair]int{}
+	for _, h := range recent {
+		if h.Dep == nil || h.Arr == nil || h.Dep.ICAO == h.Arr.ICAO {
+			continue
+		}
+		k := pair{h.Dep.ICAO, h.Arr.ICAO}
+		if k.b < k.a {
+			k = pair{k.b, k.a}
+		}
+		counts[k]++
+	}
+	var out []routeCount
+	for k, n := range counts {
+		a, b := rf.airport(k.a), rf.airport(k.b)
+		if a.LL.Valid() && b.LL.Valid() {
+			out = append(out, routeCount{a, b, n})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].n != out[j].n {
+			return out[i].n > out[j].n
+		}
+		return out[i].a.ICAO+out[i].b.ICAO < out[j].a.ICAO+out[j].b.ICAO
+	})
+	return out
 }
 
 func aircraftMap(p0 *api.AircraftPage, recent []api.HistoryEntry, v AircraftPageV, rf refs) *geo.Map {

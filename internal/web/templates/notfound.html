@@ -1,11 +1,13 @@
 {{define "content"}}{{$v := .Body}}
-<div class="wrap page-empty">
-	<h1>Nothing to show here</h1>
-	<p>{{$v.Message}}</p>
-	<form class="find find-big" action="/tracker/search" method="get" role="search">
-		<label class="vh" for="q3">Flight number, tail number or airport</label>
-		<input id="q3" name="q" type="search" value="{{$v.Query}}" placeholder="UA1275, N527AS or SEA" autocomplete="off" autocapitalize="characters" spellcheck="false">
-		<button type="submit">Track</button>
+<div class="band"><div class="wrap band-in"><div class="band-id"><h1>Nothing to show here</h1></div></div></div>
+<div class="wrap page-plain">
+	<p class="lead">{{$v.Message}}</p>
+	<form class="find find-dock" action="/tracker/search" method="get" role="search">
+		<label for="q3">Try another search</label>
+		<div class="find-row">
+			<input id="q3" name="q" type="search" value="{{$v.Query}}" placeholder="UA1275, N527AS or SEA" autocomplete="off" autocapitalize="characters" spellcheck="false">
+			<button class="btn btn-primary" type="submit">Track</button>
+		</div>
 	</form>
 </div>
 {{end}}

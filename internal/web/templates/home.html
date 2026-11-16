@@ -1,44 +1,65 @@
 {{define "content"}}{{$v := .Body}}
-<div class="wrap page-home">
-	<section class="hero">
-		<h1>Where is that flight right now?</h1>
-		<p class="hero-lede">Look up any flight number, tail number or airport. WingView shows where it is, when it lands and what it has flown before.</p>
-		<form class="find find-big" action="/tracker/search" method="get" role="search">
-			<label class="vh" for="q2">Flight number, tail number or airport</label>
-			<input id="q2" name="q" type="search" placeholder="UA1275, N527AS or SEA" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="search">
-			<button type="submit">Track</button>
-		</form>
-		{{if $v.Examples}}<p class="examples">In the air now: {{range $i, $e := $v.Examples}}{{if $i}}, {{end}}<a href="{{$e.URL}}">{{$e.Number}}</a> <span class="dim">{{$e.Route}}</span>{{end}}</p>{{end}}
-	</section>
+<div class="band">
+	<div class="wrap band-in">
+		<div class="band-id">
+			<h1>Flight tracker</h1>
+			<p class="band-sub"><span>Live status, history and aircraft for any flight WingView sees</span></p>
+		</div>
+		<p class="band-meta">Updated <time datetime="{{.Updated.ISO}}">{{.Updated.Clock}} UTC</time></p>
+	</div>
+</div>
 
-	{{if $v.Map}}
-	<section class="window" aria-label="Busiest airports right now">
-		{{template "map" $v.Map}}
-	</section>
-	{{end}}
+<section class="stage{{if not $v.Map}} stage-bare{{end}}" aria-label="Busiest airports right now">
+	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
+	<div class="wrap stage-wrap">
+		<div class="dock dock-search">
+			<div class="dock-body">
+				<form class="find find-dock" action="/tracker/search" method="get" role="search">
+					<label for="q2">Track a flight</label>
+					<div class="find-row">
+						<input id="q2" name="q" type="search" placeholder="UA1275, N527AS or SEA" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="search">
+						<button class="btn btn-primary" type="submit">Track</button>
+					</div>
+				</form>
+				{{if $v.Examples}}
+				<table class="grid grid-plain">
+					<caption>In the air now</caption>
+					<tbody>{{range $v.Examples}}<tr><th scope="row"><a href="{{.URL}}">{{.Number}}</a></th><td class="num dim">{{.Route}}</td></tr>{{end}}</tbody>
+				</table>
+				{{end}}
+			</div>
+		</div>
+	</div>
+</section>
 
-	<div class="split">
+<div class="wrap cols">
+	<div class="col-main">
 		{{if $v.Airports}}
-		<section aria-labelledby="ap-h">
-			<h2 id="ap-h">Busiest airports right now</h2>
-			<p class="lede">Flights arriving and departing within 40 miles, from our most recent look at each airport.</p>
-			<ol class="bars bars-wide">{{range $v.Airports}}<li>
-				<span class="bar-label"><a href="{{.URL}}">{{.Code}}</a> {{.Name}}</span>
-				<span class="bar-n">{{add .Inbound .Outbound}}</span>
-				<span class="bar" style="--w:{{barWidth (add .Inbound .Outbound) $v.MaxTraffic}}" aria-hidden="true"></span>
-			</li>{{end}}</ol>
+		<section class="panel" aria-labelledby="ap-h">
+			<h2 id="ap-h">Busiest airports right now <span class="panel-count">flights within 40 miles</span></h2>
+			<div class="table-scroll">
+			<table class="grid grid-bars">
+				<thead><tr><th scope="col">Airport</th><th scope="col" class="num">Arriving</th><th scope="col" class="num">Departing</th><th scope="col"><span class="vh">Share</span></th></tr></thead>
+				<tbody>{{range $v.Airports}}<tr>
+					<th scope="row"><a href="{{.URL}}">{{.Code}}</a> <span class="dim">{{.Name}}</span></th>
+					<td class="num">{{.Inbound}}</td><td class="num">{{.Outbound}}</td>
+					<td class="bar-cell" aria-hidden="true"><span class="bar" style="--w:{{barWidth (add .Inbound .Outbound) $v.MaxTraffic}}"></span></td>
+				</tr>{{end}}</tbody>
+			</table>
+			</div>
 		</section>
 		{{end}}
-		{{if $v.Airlines}}
-		<aside class="side">
-			<h2>Airlines in the last day</h2>
-			<ul class="plain-list">{{range $v.Airlines}}<li><a href="{{.URL}}">{{.Name}}</a> <span class="dim">{{plural .Count "flight" "flights"}}</span></li>{{end}}</ul>
-		</aside>
-		{{end}}
 	</div>
-
-	{{if $v.Totals.Flights24h}}
-	<p class="note">In the last 24 hours WingView tracked {{commas $v.Totals.Flights24h}} airline flights and {{commas $v.Totals.Aircraft24h}} aircraft.</p>
-	{{end}}
+	<aside class="col-side">
+		{{if $v.Airlines}}
+		<section class="panel" aria-labelledby="al-h">
+			<h2 id="al-h">Airlines, last 24 hours</h2>
+			<table class="grid grid-plain"><tbody>{{range $v.Airlines}}<tr><th scope="row"><a href="{{.URL}}">{{.Name}}</a></th><td class="num">{{plural .Count "flight" "flights"}}</td></tr>{{end}}</tbody></table>
+		</section>
+		{{end}}
+		{{if $v.Totals.Flights24h}}
+		<p class="side-note">In the last 24 hours WingView tracked {{commas $v.Totals.Flights24h}} airline flights and {{commas $v.Totals.Aircraft24h}} aircraft.</p>
+		{{end}}
+	</aside>
 </div>
 {{end}}

@@ -9,7 +9,8 @@
 {{end}}{{with .Canonical}}<link rel="canonical" href="{{.}}">
 {{end}}<meta name="theme-color" content="#002f64">
 <link rel="preload" href="{{static "fonts/inter-latin.woff2"}}" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="{{static "site.css"}}">
+{{if .MapToken}}<link rel="preconnect" href="https://api.mapbox.com" crossorigin>
+{{end}}<link rel="stylesheet" href="{{static "site.css"}}">
 <link rel="icon" type="image/png" sizes="192x192" href="{{static "icon-192.png"}}">
 <link rel="apple-touch-icon" href="{{static "icon-180.png"}}">
 <meta property="og:site_name" content="WingView">
@@ -22,36 +23,38 @@
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 {{range .JSONLD}}<script type="application/ld+json">{{jsonld .}}</script>
+{{end}}{{if .MapToken}}<script src="{{static "site.js"}}" defer></script>
 {{end}}</head>
-<body>
+<body{{if .MapToken}} data-mapbox="{{.MapToken}}" data-mapbox-gl="{{.MapboxGL}}"{{end}}>
 <a class="skip" href="#main">Skip to content</a>
-<header class="top">
-	<div class="wrap top-in">
+<header class="masthead">
+	<div class="wrap masthead-in">
 		<a class="brand" href="/"><img src="{{static "wingview-header.svg"}}" width="160" height="44" alt="WingView"></a>
 		<form class="find" action="/tracker/search" method="get" role="search">
 			<label class="vh" for="q">Flight number, tail number or airport</label>
 			<input id="q" name="q" type="search" value="{{.Query}}" placeholder="Flight, tail number or airport" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="search">
 			<button type="submit"><span class="vh">Search</span>{{template "icon-search"}}</button>
 		</form>
-		<a class="app-link" href="{{.AppURL}}">{{.AppLabel}}</a>
+		<nav class="masthead-nav" aria-label="WingView">
+			<a href="/tracker/"{{if eq .Section "home"}} aria-current="page"{{end}}>Flight tracker</a>
+			<a class="btn btn-app" href="{{.AppURL}}">{{.AppLabel}}</a>
+		</nav>
 	</div>
 </header>
-{{if gt (len .Crumbs) 1}}<nav class="wrap crumbs" aria-label="Breadcrumb"><ol>{{range .Crumbs}}<li>{{if .URL}}<a href="{{.URL}}">{{.Name}}</a>{{else}}<span aria-current="page">{{.Name}}</span>{{end}}</li>{{end}}</ol></nav>
-{{end}}<main id="main">
+<main id="main">
 {{template "content" .}}
 </main>
-<footer class="foot">
+{{if gt (len .Crumbs) 1}}<nav class="crumbs" aria-label="Breadcrumb"><ol class="wrap">{{range .Crumbs}}<li>{{if .URL}}<a href="{{.URL}}">{{.Name}}</a>{{else}}<span aria-current="page">{{.Name}}</span>{{end}}</li>{{end}}</ol></nav>
+{{end}}<footer class="foot">
 	<div class="wrap foot-in">
-		<div class="foot-brand">
-			<img src="{{static "wingview-icon.svg"}}" width="44" height="44" alt="">
-			<p>WingView tracks aircraft from ADS-B, MLAT and other position reports. Times are shown in each airport's local time.</p>
-		</div>
-		<nav class="foot-links" aria-label="Site">
+		<img class="foot-mark" src="{{static "wingview-icon.svg"}}" width="40" height="40" alt="">
+		<p>WingView tracks aircraft from ADS-B, MLAT and other position reports. Times are local to each airport. Flight data may be delayed or incomplete; do not use it for navigation.</p>
+		<nav class="foot-links" aria-label="More from WingView">
 			<a href="/tracker/">Flight tracker</a>
-			<a href="{{.AppURL}}">Live map</a>
-			<a href="/">WingView home</a>
+			<a href="{{.AppURL}}">WingView 3D</a>
+			<a href="/">wingview.com</a>
 		</nav>
-		<p class="foot-small">&copy; {{.Year}} WingView. Flight data may be delayed or incomplete; do not use it for navigation.</p>
+		<p class="foot-small">&copy; {{.Year}} WingView</p>
 	</div>
 </footer>
 </body>

@@ -1,17 +1,17 @@
 {{define "board"}}
 <div class="table-scroll">
-<table class="legs board">
+<table class="grid grid-5 board">
 	<thead><tr>
 		<th scope="col">Flight</th>
-		<th scope="col">Aircraft</th>
 		<th scope="col">{{.Other}}</th>
+		<th scope="col">Aircraft</th>
 		<th scope="col" class="num">Altitude</th>
 		<th scope="col" class="num">Distance</th>
 	</tr></thead>
 	<tbody>{{range .Rows}}<tr>
 		<td data-label="Flight">{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{or .Number "?"}}{{end}}</td>
+		<td data-label="{{$.Other}}">{{if .Other.Code}}{{template "airport-inline" .Other}} <span class="dim">{{.Other.City}}</span>{{else}}<span class="dim">&ndash;</span>{{end}}</td>
 		<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{else}}<span class="dim">{{or .Reg "–"}}</span>{{end}}</td>
-		<td data-label="{{$.Other}}">{{if .Other.Code}}{{template "airport-inline" .Other}} <span class="dim">{{.Other.City}}</span>{{else}}<span class="dim">–</span>{{end}}</td>
 		<td class="num" data-label="Altitude">{{.Alt}}</td>
 		<td class="num" data-label="Distance">{{.Dist}}</td>
 	</tr>{{end}}</tbody>
@@ -20,79 +20,117 @@
 {{end}}
 
 {{define "content"}}{{$v := .Body}}{{$a := $v.Airport}}
-<article class="wrap page-airport">
-	<header class="head">
-		<div class="head-id">
-			<h1 class="ident ident-airport"><span class="code-big">{{$v.Code}}</span> <span class="ident-name">{{$a.Name}}</span></h1>
-			<p class="head-sub"><span>{{$a.Place}}{{if and $v.Country (ne $a.Country "US") (ne $a.Country "CA") (ne $a.Country "AU")}}{{else if $v.Country}}, {{$v.Country}}{{end}}</span>
-				{{if $v.LocalTime.Set}}<span>Local time {{$v.LocalTime.Clock}} {{$v.LocalTime.Zone}}</span>{{end}}</p>
+<div class="band">
+	<div class="wrap band-in">
+		<div class="band-id">
+			<h1>{{$a.Name}}</h1>
+			<p class="band-sub">
+				<span class="band-codes">{{if $a.IATA}}{{$a.IATA}} / {{end}}{{$a.ICAO}}</span>
+				<span>{{$a.Place}}{{if or (eq $a.Country "US") (eq $a.Country "CA") (eq $a.Country "AU")}}, {{$v.Country}}{{end}}</span>
+			</p>
 		</div>
-		{{if $v.Live}}<p class="head-status status-air"><span class="dot" aria-hidden="true"></span>{{len $v.Inbound}} inbound, {{len $v.Outbound}} outbound right now</p>{{end}}
-	</header>
+		{{if $v.LocalTime.Set}}<p class="band-meta">Local time <time datetime="{{$v.LocalTime.ISO}}">{{$v.LocalTime.Clock}} {{$v.LocalTime.Zone}}</time></p>{{end}}
+	</div>
+</div>
 
-	<section class="window" aria-label="Map of the area within {{$v.RadiusMi}} miles">
-		{{template "map" $v.Map}}
-	</section>
-
-	<div class="split">
-		<div class="main-col">
-			<section aria-labelledby="about-h">
-				<h2 id="about-h">About {{$a.Name}}</h2>
-				{{range $v.Summary}}<p>{{.}}</p>{{end}}
-				{{template "facts" $v.Facts}}
-				{{if $v.Wikipedia}}<p class="note"><a href="https://en.wikipedia.org/wiki/{{$v.Wikipedia}}" rel="nofollow noopener">{{$a.Name}} on Wikipedia</a></p>{{end}}
-			</section>
-			{{if $v.Live}}
-			<section aria-labelledby="in-h">
-				<h2 id="in-h">Arriving at {{$v.Code}}</h2>
-				{{if $v.Inbound}}<p class="lede">Flights inbound within {{$v.RadiusMi}} miles, nearest first.</p>
-				{{template "board" (board $v.Inbound "From")}}{{else}}<p class="empty">No arrivals inside {{$v.RadiusMi}} miles at the moment.</p>{{end}}
-			</section>
-			<section aria-labelledby="out-h">
-				<h2 id="out-h">Departing {{$v.Code}}</h2>
-				{{if $v.Outbound}}<p class="lede">Flights that have left {{$v.Code}} and are still within {{$v.RadiusMi}} miles.</p>
-				{{template "board" (board $v.Outbound "To")}}{{else}}<p class="empty">No departures in the air nearby at the moment.</p>{{end}}
-			</section>
-			{{end}}
+<section class="stage{{if not $v.Map}} stage-bare{{end}}" aria-label="{{$v.Code}} and the area around it">
+	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
+	<div class="wrap stage-wrap">
+		<div class="dock">
+			{{if $v.Live}}{{template "band-status" (band "live" "Live traffic" (printf "Within %d miles" $v.RadiusMi))}}
+			{{else}}{{template "band-status" (band "idle" "No live traffic data" "")}}{{end}}
+			<div class="dock-body">
+				{{if $v.Live}}
+				<dl class="counts">
+					<div><dt>Arriving</dt><dd>{{len $v.Inbound}}</dd></div>
+					<div><dt>Departing</dt><dd>{{len $v.Outbound}}</dd></div>
+					<div><dt>On the ground</dt><dd>{{$v.GroundN}}</dd></div>
+					<div><dt>Overhead</dt><dd>{{len $v.Overhead}}</dd></div>
+				</dl>
+				{{end}}
+				{{template "kv" $v.Facts}}
+				<a class="btn btn-app btn-block" href="{{.AppURL}}">See {{$v.Code}} in 3D</a>
+			</div>
 		</div>
-		<aside class="side">
-			{{if $v.Airlines}}
-			<h2>Airlines here now</h2>
-			<ul class="plain-list">{{range $v.Airlines}}<li>{{if .URL}}<a href="{{.URL}}">{{.Name}}</a>{{else}}{{.Name}}{{end}} <span class="dim">{{plural .Count "flight" "flights"}}</span></li>{{end}}</ul>
-			{{end}}
-			{{if $v.Nearby}}
-			<h2 class="side-h2">Nearby airports</h2>
-			<ul class="plain-list">{{range $v.Nearby}}<li><a href="{{.URL}}">{{.Code}}</a> {{.Name}} <span class="dim">{{.Dist}}</span></li>{{end}}</ul>
-			{{end}}
-		</aside>
+	</div>
+</section>
+
+<div class="wrap cols">
+	<div class="col-main">
+		{{if $v.Live}}
+		<div class="boards">
+			<section class="panel" aria-labelledby="in-h">
+				<h2 id="in-h">Arrivals <span class="panel-count">{{len $v.Inbound}} inbound</span></h2>
+				{{if $v.Inbound}}{{template "board" (board $v.Inbound "From")}}{{else}}<p class="panel-empty">No flights inbound within {{$v.RadiusMi}} miles right now.</p>{{end}}
+			</section>
+			<section class="panel" aria-labelledby="out-h">
+				<h2 id="out-h">Departures <span class="panel-count">{{len $v.Outbound}} outbound</span></h2>
+				{{if $v.Outbound}}{{template "board" (board $v.Outbound "To")}}{{else}}<p class="panel-empty">No departures in the air within {{$v.RadiusMi}} miles right now.</p>{{end}}
+			</section>
+		</div>
+
+		{{if $v.Ground}}
+		<section class="panel" aria-labelledby="gnd-h">
+			<h2 id="gnd-h">On the ground <span class="panel-count">{{if lt (len $v.Ground) $v.GroundN}}{{len $v.Ground}} of {{$v.GroundN}}, {{end}}just landed or about to leave</span></h2>
+			<div class="table-scroll">
+			<table class="grid">
+				<thead><tr><th scope="col">Flight</th>{{if $v.GroundHasReg}}<th scope="col">Aircraft</th>{{end}}{{if $v.GroundHasRoute}}<th scope="col">From or to</th>{{end}}<th scope="col">State</th></tr></thead>
+				<tbody>{{range $v.Ground}}<tr>
+					<td data-label="Flight">{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{or .Number "–"}}{{end}}</td>
+					{{if $v.GroundHasReg}}<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{else}}<span class="dim">&ndash;</span>{{end}}</td>{{end}}
+					{{if $v.GroundHasRoute}}<td data-label="From or to">{{if .Other.Code}}{{template "airport-inline" .Other}} <span class="dim">{{.Other.City}}</span>{{else}}<span class="dim">&ndash;</span>{{end}}</td>{{end}}
+					<td data-label="State"><span class="tag{{if eq .State "Landed"}} tag-landed{{else if eq .State "Departing"}} tag-air{{end}}">{{.State}}</span></td>
+				</tr>{{end}}</tbody>
+			</table>
+			</div>
+		</section>
+		{{end}}
+
+		{{if $v.Overhead}}
+		<section class="panel" aria-labelledby="over-h">
+			<h2 id="over-h">Passing overhead <span class="panel-count">not landing at or leaving {{$v.Code}}</span></h2>
+			{{template "board" (board $v.Overhead "Route")}}
+		</section>
+		{{end}}
+
+		{{if $v.Parked}}
+		<section class="panel" aria-labelledby="park-h">
+			<h2 id="park-h">Parked aircraft <span class="panel-count">{{$v.ParkedN}} within {{$v.RadiusMi}} miles, {{$v.ParkedShown}} identified below</span></h2>
+			<div class="table-scroll">
+			<table class="grid">
+				<thead><tr><th scope="col">Registration</th><th scope="col">Type</th><th scope="col">Operator</th></tr></thead>
+				<tbody>{{range $v.Parked}}<tr>
+					<td data-label="Registration"><a href="{{.RegURL}}">{{.Reg}}</a></td>
+					<td data-label="Type">{{or .Type "–"}}</td>
+					<td data-label="Operator">{{or .Airline "–"}}</td>
+				</tr>{{end}}</tbody>
+			</table>
+			</div>
+		</section>
+		{{end}}
+		{{else}}
+		<section class="panel"><h2>Live traffic</h2><p class="panel-empty">Live traffic for {{$v.Code}} is not available. The reference details are still current.</p></section>
+		{{end}}
 	</div>
 
-	{{if $v.Live}}
-	{{if $v.Ground}}
-	<section aria-labelledby="gnd-h">
-		<h2 id="gnd-h">On the ground</h2>
-		<p class="lede">Flights that have just landed at {{$v.Code}} or are getting ready to leave.</p>
-		<ul class="chips">{{range $v.Ground}}<li>{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{end}}</li>{{end}}</ul>
-	</section>
-	{{end}}
-
-	{{if $v.Overhead}}
-	<section aria-labelledby="over-h">
-		<h2 id="over-h">Passing overhead</h2>
-		<p class="lede">Flights within {{$v.RadiusMi}} miles that are not landing at or departing {{$v.Code}}.</p>
-		{{template "board" (board $v.Overhead "Route")}}
-	</section>
-	{{end}}
-
-	{{if $v.Parked}}
-	<section aria-labelledby="park-h">
-		<h2 id="park-h">Parked aircraft</h2>
-		<p class="lede">{{plural $v.ParkedN "aircraft has" "aircraft have"}} finished flying and are parked within {{$v.RadiusMi}} miles.</p>
-		<ul class="chips">{{range $v.Parked}}<li><a href="{{.RegURL}}">{{.Reg}}</a></li>{{end}}</ul>
-	</section>
-	{{end}}
-	{{else}}
-	<p class="empty">Live traffic for {{$v.Code}} is not available. The map and reference details above are still current.</p>
-	{{end}}
-</article>
+	<aside class="col-side">
+		<section class="panel" aria-labelledby="about-h">
+			<h2 id="about-h">About {{$v.Code}}</h2>
+			<div class="panel-body prose">{{range $v.Summary}}<p>{{.}}</p>{{end}}
+			{{if $v.Wikipedia}}<p><a href="https://en.wikipedia.org/wiki/{{$v.Wikipedia}}" rel="nofollow noopener">{{$a.Name}} on Wikipedia</a></p>{{end}}</div>
+		</section>
+		{{if $v.Airlines}}
+		<section class="panel" aria-labelledby="al-h">
+			<h2 id="al-h">Airlines here now</h2>
+			<table class="grid grid-plain"><tbody>{{range $v.Airlines}}<tr><th scope="row">{{if .URL}}<a href="{{.URL}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</th><td class="num">{{plural .Count "flight" "flights"}}</td></tr>{{end}}</tbody></table>
+		</section>
+		{{end}}
+		{{if $v.Nearby}}
+		<section class="panel" aria-labelledby="near-h">
+			<h2 id="near-h">Nearby airports</h2>
+			<table class="grid grid-plain"><tbody>{{range $v.Nearby}}<tr><th scope="row"><a href="{{.URL}}">{{.Code}}</a> <span class="dim">{{.Name}}</span></th><td class="num">{{.Dist}}</td></tr>{{end}}</tbody></table>
+		</section>
+		{{end}}
+	</aside>
+</div>
 {{end}}

@@ -31,6 +31,9 @@ type Page struct {
 	Site        string
 	Year        int
 	OGImage     string
+	MapToken    string
+	MapboxGL    string
+	Updated     TimeCell // when the data on this page was read
 }
 
 type Crumb struct {
@@ -40,9 +43,11 @@ type Crumb struct {
 func (s *Server) basePage(status int, title, desc, canonicalPath string) Page {
 	p := Page{
 		Status: status, Title: title, Description: desc,
-		AppURL: s.cfg.AppURL, AppLabel: "Open the live map",
+		AppURL: s.cfg.AppURL, AppLabel: "Open WingView 3D",
 		Site: s.cfg.SiteURL, Year: time.Now().Year(),
-		OGImage: s.cfg.SiteURL + s.staticURL("og-default.jpg"),
+		OGImage:  s.cfg.SiteURL + s.staticURL("og-default.jpg"),
+		MapToken: s.cfg.MapboxToken, MapboxGL: MapboxGL,
+		Updated: timeCell(time.Now(), "UTC", ""),
 	}
 	if canonicalPath != "" {
 		p.Canonical = s.cfg.SiteURL + canonicalPath
@@ -120,6 +125,14 @@ func (s *Server) funcs() template.FuncMap {
 				Rows  []TrafficRow
 				Other string
 			}{rows, other}
+		},
+		"band": func(class, title, detail string) StatusBand { return StatusBand{class, title, detail} },
+		"timeGroups": func(depTitle string, dep []TimeRow, arrTitle string, arr []TimeRow) any {
+			type group struct {
+				Title string
+				Rows  []TimeRow
+			}
+			return []group{{depTitle, dep}, {arrTitle, arr}}
 		},
 		"title":    titleCase,
 		"date":     fmtDate,

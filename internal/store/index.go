@@ -275,6 +275,17 @@ func (x *Index) Flight(ident string) (Flight, bool) {
 	return *f, true
 }
 
+// AircraftByReg returns what the index knows about one registration.
+func (x *Index) AircraftByReg(reg string) (Aircraft, bool) {
+	x.mu.RLock()
+	defer x.mu.RUnlock()
+	a, ok := x.aircraft[reg]
+	if !ok {
+		return Aircraft{}, false
+	}
+	return *a, true
+}
+
 func (x *Index) Airline(icao string) (Airline, bool) {
 	x.mu.RLock()
 	defer x.mu.RUnlock()
