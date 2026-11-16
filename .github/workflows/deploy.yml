@@ -88,13 +88,3 @@ jobs:
           done
           echo "new version did not come up within 10 minutes" >&2
           exit 1
-      - name: Purge the CDN's copies of pages built by the old version
-        # Cached HTML from the old build would otherwise pair with new assets
-        # for up to its stale window (5x max-age).
-        if: vars.BUNNY_PULLZONE_ID != ''
-        env:
-          KEY: ${{ secrets.BUNNYNET_API_KEY }}
-          ZONE: ${{ vars.BUNNY_PULLZONE_ID }}
-        run: |
-          curl -fsS -X POST -H "AccessKey: $KEY" "https://api.bunny.net/pullzone/$ZONE/purgeCache"
-          echo "purged pull zone $ZONE"
