@@ -50,6 +50,7 @@
 			zoom: data.focus ? data.zoom || 7 : 1.5,
 		});
 		map.addControl(new ml.NavigationControl({ showCompass: false }), "top-right");
+		foldCredit(map, el);
 
 		// the camera keeps clear of the docked panel when it sits over the map
 		const padding = () => {
@@ -204,6 +205,33 @@
 		};
 		if (map.isStyleLoaded()) overlays();
 		else map.once("style.load", overlays);
+	}
+
+	// The credit stays readable until it has been on screen for five seconds
+	// (OSM's attribution guideline), then fades over two and folds to the
+	// (i) button, the way MapLibre folds it when the map is dragged.
+	function foldCredit(map, el) {
+		const credit = el.querySelector(".maplibregl-ctrl-attrib");
+		if (!credit || !("IntersectionObserver" in window)) return;
+		let timer = 0;
+		const seen = new IntersectionObserver(([e]) => {
+			clearTimeout(timer);
+			if (!e.isIntersecting) return; // the clock runs only while it is in view
+			timer = setTimeout(() => {
+				seen.disconnect();
+				if (!credit.classList.contains("maplibregl-compact-show")) return; // already folded
+				credit.classList.add("wv-credit-out");
+				setTimeout(() => credit.classList.remove("maplibregl-compact-show", "wv-credit-out"), 2000);
+			}, 5000);
+		}, { threshold: 1 });
+		// the credit has text once the basemap source reports its attribution;
+		// MapLibre's own listener runs first and opens it
+		const start = () => {
+			if (!credit.classList.contains("maplibregl-compact-show")) return;
+			map.off("sourcedata", start);
+			seen.observe(credit);
+		};
+		map.on("sourcedata", start);
 	}
 
 	// the map's lines: routes and range rings

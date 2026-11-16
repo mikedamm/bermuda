@@ -311,21 +311,20 @@ a.mk-pin:hover b { color: var(--link); text-decoration: underline; }
 .mk-plane-sm .i { width: 100%; height: 100%; }
 a.mk-plane-sm:hover { color: var(--link); }
 .maplibregl-ctrl-group { border-radius: 4px !important; box-shadow: 0 1px 4px rgb(16 31 51 / 0.2) !important; }
-/* The map credit: legible when the map appears, then fading to a whisper
-   over the first minute; hover or focus brings it back. It never leaves the
-   page: OSM's licence asks that it be seen without anyone interacting.
+/* The map credit: quiet, and legible until it has been on screen for five
+   seconds (OSM's attribution guideline); then site.js fades it over two
+   seconds and folds it to the (i) button, which opens it again.
    (MapLibre's stylesheet loads after this one, hence the extra class.) */
 .map .maplibregl-ctrl.maplibregl-ctrl-attrib {
 	margin: 0 6px 6px 0; min-height: 18px;
 	font-size: 10px; line-height: 14px; color: var(--muted);
 	background-color: rgb(255 255 255 / 0.55); box-shadow: none;
-	animation: credit-fade 60s ease-in forwards;
 }
-.map .maplibregl-ctrl.maplibregl-ctrl-attrib:hover,
-.map .maplibregl-ctrl.maplibregl-ctrl-attrib:focus-within { animation: none; opacity: 1; }
 .map .maplibregl-ctrl-attrib a { color: var(--muted); }
 .map .maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button { background-color: transparent; opacity: 0.55; }
-@keyframes credit-fade { 0%, 8% { opacity: 1; } 100% { opacity: 0.2; } }
+.map .maplibregl-ctrl.maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) { background-color: transparent; }
+.map .maplibregl-ctrl.maplibregl-ctrl-attrib.wv-credit-out { background-color: transparent; transition: background-color 2s ease; }
+.map .maplibregl-ctrl-attrib.wv-credit-out .maplibregl-ctrl-attrib-inner { opacity: 0; transition: opacity 2s ease; }
 
 /* server-drawn fallback map (no tiles configured) */
 .map-static { overflow: hidden; }
