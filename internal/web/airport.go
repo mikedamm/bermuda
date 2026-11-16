@@ -309,49 +309,94 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 	}
 }
 
-// resolveRoutes looks up the far end of up to n flights in parallel; each
-// lookup is cached by the client and also lands in the index.
+// liveLookupBudget bounds how long a page waits for optional live lookups.
+// Lookups still running at the deadline finish in the background and fill
+// the caches, so the next render has them.
+const liveLookupBudget = 3500 * time.Millisecond
+
+// resolveLive looks up up to n airborne rows in parallel (cached, shared):
+// each one's position for the map, its IATA number, and the far end of its
+// route when the index does not know it. Results that arrive after the
+// budget are ignored for this render.
 func (s *Server) resolveLive(ctx context.Context, here string, rows []*TrafficRow, n int) {
 	if len(rows) > n {
 		rows = rows[:n]
 	}
+	type found struct {
+		ok     bool
+		number string
+		other  string
+		pos    geo.LL
+		hdg    float64
+	}
+	results := make([]found, len(rows))
+	var mu sync.Mutex
+	closed := false
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 6)
-	for _, row := range rows {
+	sem := make(chan struct{}, 8)
+	for i, row := range rows {
+		callsign, reg, transit := row.Callsign, row.Reg, row.direction == "transit"
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			res, err := s.api.Search(ctx, row.Callsign, 5)
+			res, err := s.api.Search(ctx, callsign, 5)
 			if err != nil {
 				return
 			}
 			for _, x := range res.Results {
-				if x.Live == nil || x.Live.LADDRedacted || (x.Live.Callsign != row.Callsign && x.Registration != row.Reg) {
+				if x.Live == nil || x.Live.LADDRedacted || (x.Live.Callsign != callsign && x.Registration != reg) {
 					continue
 				}
 				s.index.NoteLive(*x.Live)
-				if x.Live.IATAFlight != "" {
-					row.Number = x.Live.IATAFlight
-				}
+				f := found{ok: true, number: x.Live.IATAFlight, hdg: x.Live.Hdg}
 				if p := (geo.LL{Lat: x.Live.Lat, Lon: x.Live.Lon}); p.Valid() && !x.Live.OnGround {
-					row.pos, row.hdg = p, x.Live.Hdg
+					f.pos = p
 				}
-				if row.Other.Code == "" && row.direction != "transit" {
-					other := x.Live.Dep
-					if other == here {
-						other = x.Live.Arr
+				if !transit {
+					f.other = x.Live.Dep
+					if f.other == here {
+						f.other = x.Live.Arr
 					}
-					if other != "" && other != here {
-						row.Other = airportV(other, nil)
+					if f.other == here {
+						f.other = ""
 					}
 				}
+				mu.Lock()
+				if !closed {
+					results[i] = f
+				}
+				mu.Unlock()
 				return
 			}
 		}()
 	}
-	wg.Wait()
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(liveLookupBudget):
+	case <-ctx.Done():
+	}
+	mu.Lock()
+	closed = true
+	mu.Unlock()
+	for i, f := range results {
+		if !f.ok {
+			continue
+		}
+		row := rows[i]
+		if f.number != "" {
+			row.Number = f.number
+		}
+		if f.pos.Valid() {
+			row.pos, row.hdg = f.pos, f.hdg
+		}
+		if row.Other.Code == "" && f.other != "" {
+			row.Other = airportV(f.other, nil)
+		}
+	}
 }
 
 func groundDetail(r TrafficRow) int {

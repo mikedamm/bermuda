@@ -52,6 +52,9 @@ func fakeAPI(t *testing.T) *httptest.Server {
 	write := func(w http.ResponseWriter, v any) { json.NewEncoder(w).Encode(v) }
 	mux.HandleFunc("GET /search/aircraft", func(w http.ResponseWriter, r *http.Request) {
 		switch strings.ToUpper(r.URL.Query().Get("q")) {
+		case "SLOW1": // an upstream having a bad moment
+			time.Sleep(5 * time.Second)
+			write(w, map[string]any{"results": []any{}})
 		case "ASA14", "AS14":
 			write(w, map[string]any{"results": []any{map[string]any{"airframe_id": "af-1", "registration": "N527AS", "icao_type": "B738",
 				"name": "Boeing 737-800", "matched": map[string]any{"kind": "callsign", "value": "ASA14"}, "live": live}}})
@@ -89,6 +92,7 @@ func fakeAPI(t *testing.T) *httptest.Server {
 	mux.HandleFunc("GET /airports/{code}/aircraft", func(w http.ResponseWriter, r *http.Request) {
 		write(w, map[string]any{"airport": r.PathValue("code"), "radius_mi": 50, "aircraft": []any{
 			map[string]any{"callsign": "ASA14", "direction": "arriving", "registration": "N527AS", "alt_ft": 9000, "status": "active", "distance_mi": 30},
+			map[string]any{"callsign": "SLOW1", "direction": "arriving", "alt_ft": 8000, "status": "active", "distance_mi": 20},
 		}})
 	})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -239,6 +243,19 @@ func TestMapLibreMaps(t *testing.T) {
 	plain := get(t, testServer(t), "/flight/ASA14").Body.String()
 	if strings.Contains(plain, "site.js") || !strings.Contains(plain, "map-svg") {
 		t.Error("without tiles the page must draw the SVG map and load no script")
+	}
+}
+
+// A slow upstream lookup must not hold the airport page past the budget.
+func TestAirportLiveLookupBudget(t *testing.T) {
+	h := testServer(t)
+	start := time.Now()
+	rec := get(t, h, "/airport/KJFK")
+	if rec.Code != 200 {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if took := time.Since(start); took > liveLookupBudget+1500*time.Millisecond {
+		t.Fatalf("airport page took %v with a slow lookup; budget is %v", took, liveLookupBudget)
 	}
 }
 

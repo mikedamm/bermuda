@@ -237,9 +237,11 @@ func (s *Server) homePage(ctx context.Context, r *http.Request) (resp, error) {
 	return s.html("home", p, v, time.Minute)
 }
 
-// livePlanes looks up where each listed flight is now (cached lookups).
+// livePlanes looks up where each listed flight is now (cached lookups),
+// waiting at most the live-lookup budget.
 func (s *Server) livePlanes(ctx context.Context, fs []FlightLink) []mapPlane {
 	var mu sync.Mutex
+	closed := false
 	var out []mapPlane
 	var wg sync.WaitGroup
 	for _, f := range fs {
@@ -255,7 +257,9 @@ func (s *Server) livePlanes(ctx context.Context, fs []FlightLink) []mapPlane {
 				if x.Live != nil && x.Live.Callsign == ident && !x.Live.OnGround && !x.Live.LADDRedacted {
 					if p := (geo.LL{Lat: x.Live.Lat, Lon: x.Live.Lon}); p.Valid() {
 						mu.Lock()
-						out = append(out, mapPlane{P: pt(p), H: math.Round(x.Live.Hdg), L: f.Number, U: f.URL})
+						if !closed {
+							out = append(out, mapPlane{P: pt(p), H: math.Round(x.Live.Hdg), L: f.Number, U: f.URL})
+						}
 						mu.Unlock()
 					}
 					return
@@ -263,9 +267,19 @@ func (s *Server) livePlanes(ctx context.Context, fs []FlightLink) []mapPlane {
 			}
 		}()
 	}
-	wg.Wait()
-	sort.Slice(out, func(i, j int) bool { return out[i].L < out[j].L })
-	return out
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(liveLookupBudget):
+	case <-ctx.Done():
+	}
+	mu.Lock()
+	closed = true
+	planes := append([]mapPlane(nil), out...)
+	mu.Unlock()
+	sort.Slice(planes, func(i, j int) bool { return planes[i].L < planes[j].L })
+	return planes
 }
 
 // ---------- search ----------

@@ -133,7 +133,11 @@ func newAsset(b []byte, ctype string) asset {
 	a := asset{body: b, ctype: ctype, hash: hex.EncodeToString(sum[:])[:10]}
 	if strings.HasPrefix(ctype, "text/") || strings.Contains(ctype, "javascript") || strings.Contains(ctype, "svg") {
 		var buf bytes.Buffer
-		zw, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+		level := gzip.BestCompression
+		if len(b) > 256<<10 { // the vendored map library: default level, much faster at start
+			level = gzip.DefaultCompression
+		}
+		zw, _ := gzip.NewWriterLevel(&buf, level)
 		zw.Write(b)
 		zw.Close()
 		a.gz = buf.Bytes()
