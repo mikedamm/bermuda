@@ -95,4 +95,6 @@ jobs:
         env:
           KEY: ${{ secrets.BUNNYNET_API_KEY }}
           ZONE: ${{ vars.BUNNY_PULLZONE_ID }}
-        run: curl -fsS -X POST -H "AccessKey: $KEY" "https://api.bunny.net/pullzone/$ZONE/purgeCache" && echo "purged pull zone $ZONE"
+        run: |
+          curl -fsS -X POST -H "AccessKey: $KEY" "https://api.bunny.net/pullzone/$ZONE/purgeCache"
+          echo "purged pull zone $ZONE"
