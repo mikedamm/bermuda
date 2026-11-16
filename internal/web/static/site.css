@@ -189,7 +189,7 @@ a.route-code:hover { color: var(--link); text-decoration: none; }
 .route-times > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .route-label { font-size: 12px; color: var(--muted); }
 .route-times time { font-size: 19px; font-weight: 700; color: var(--navy); }
-.route-times time small, .route-times time small { font-size: 12px; font-weight: 600; color: var(--muted); }
+.route-times time small { font-size: 12px; font-weight: 600; color: var(--muted); }
 .route-note { margin-top: 12px; font-size: 13px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
 .delta { font-size: 13px; font-weight: 600; }
 .delta-late { color: var(--late); }

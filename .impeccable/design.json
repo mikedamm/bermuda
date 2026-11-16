@@ -1,0 +1,706 @@
+{
+	"schemaVersion": 2,
+	"generatedAt": "2026-11-16T19:09:32.479Z",
+	"title": "Design System: WingView Flight Pages",
+	"extensions": {
+		"colorMeta": {
+			"navy": {
+				"role": "primary",
+				"displayName": "WingView Navy",
+				"canonical": "#002f64",
+				"oklch": "oklch(31.2% 0.105 255.6)",
+				"tonalRamp": [
+					"#000a23",
+					"#082446",
+					"#1f406b",
+					"#365f93",
+					"#5782bb",
+					"#81a7da",
+					"#accdf9",
+					"#e5f0fe"
+				]
+			},
+			"navy-deep": {
+				"role": "primary",
+				"displayName": "Footer Navy",
+				"canonical": "#00244d",
+				"oklch": "oklch(26.4% 0.086 254.7)",
+				"tonalRamp": [
+					"#000b1f",
+					"#0e2440",
+					"#254163",
+					"#3e5f8a",
+					"#5e83b0",
+					"#87a7d0",
+					"#b1cdf1",
+					"#e4f0fe"
+				]
+			},
+			"navy-hover": {
+				"role": "primary",
+				"displayName": "Navy Lift",
+				"canonical": "#0a3d7a",
+				"oklch": "oklch(36.6% 0.116 256.3)",
+				"tonalRamp": [
+					"#000a23",
+					"#052349",
+					"#1b4070",
+					"#325e99",
+					"#5382c1",
+					"#7ea7df",
+					"#a9cdfe",
+					"#e5effe"
+				]
+			},
+			"sky": {
+				"role": "secondary",
+				"displayName": "Sky",
+				"canonical": "#229cf8",
+				"oklch": "oklch(67.5% 0.169 247.7)",
+				"tonalRamp": [
+					"#000c1d",
+					"#012643",
+					"#004271",
+					"#0561a0",
+					"#0385d9",
+					"#56abf6",
+					"#9fd0ff",
+					"#e2f0fe"
+				]
+			},
+			"sky-hover": {
+				"role": "secondary",
+				"displayName": "Sky Hover",
+				"canonical": "#58b5fc",
+				"oklch": "oklch(74.6% 0.136 244.2)",
+				"tonalRamp": [
+					"#000c1b",
+					"#03263f",
+					"#05436a",
+					"#0f6398",
+					"#2c87c7",
+					"#64ace5",
+					"#9cd1fd",
+					"#e2f1fe"
+				]
+			},
+			"sky-edge": {
+				"role": "secondary",
+				"displayName": "Deep Sky Edge",
+				"canonical": "#0065ad",
+				"oklch": "oklch(49.8% 0.139 249.4)",
+				"tonalRamp": [
+					"#000c1d",
+					"#022543",
+					"#044272",
+					"#0d60a2",
+					"#3884cb",
+					"#6baae8",
+					"#a5cffb",
+					"#e3f0ff"
+				]
+			},
+			"link": {
+				"role": "secondary",
+				"displayName": "Link Blue",
+				"canonical": "#0065ad",
+				"oklch": "oklch(49.8% 0.139 249.4)",
+				"tonalRamp": [
+					"#000c1d",
+					"#022543",
+					"#044272",
+					"#0d60a2",
+					"#3884cb",
+					"#6baae8",
+					"#a5cffb",
+					"#e3f0ff"
+				]
+			},
+			"link-hover": {
+				"role": "secondary",
+				"displayName": "Link Blue Pressed",
+				"canonical": "#004d87",
+				"oklch": "oklch(41.3% 0.116 249.7)",
+				"tonalRamp": [
+					"#000b1e",
+					"#012545",
+					"#0e426e",
+					"#266197",
+					"#4884bf",
+					"#76a9de",
+					"#a3cffd",
+					"#e3f0fe"
+				]
+			},
+			"paper": {
+				"role": "neutral",
+				"displayName": "Paper",
+				"canonical": "#f1f4f8",
+				"oklch": "oklch(96.6% 0.006 255.5)",
+				"tonalRamp": [
+					"#0a0b0d",
+					"#232426",
+					"#3e4042",
+					"#5b5e61",
+					"#7e8084",
+					"#a2a5a8",
+					"#c9cbcd",
+					"#edeff1"
+				]
+			},
+			"surface": {
+				"role": "neutral",
+				"displayName": "Surface White",
+				"canonical": "#ffffff",
+				"oklch": "oklch(100.0% 0.000 89.9)",
+				"tonalRamp": [
+					"#0b0b0b",
+					"#242424",
+					"#404040",
+					"#5d5d5d",
+					"#808080",
+					"#a4a4a4",
+					"#cacaca",
+					"#eeeeee"
+				]
+			},
+			"ink": {
+				"role": "neutral",
+				"displayName": "Navy Ink",
+				"canonical": "#17305a",
+				"oklch": "oklch(31.4% 0.082 260.1)",
+				"tonalRamp": [
+					"#020a1e",
+					"#13243f",
+					"#2b4062",
+					"#445e88",
+					"#6581af",
+					"#8da6cf",
+					"#b6ccef",
+					"#e6effe"
+				]
+			},
+			"muted": {
+				"role": "neutral",
+				"displayName": "Muted Slate",
+				"canonical": "#53627a",
+				"oklch": "oklch(49.3% 0.043 259.7)",
+				"tonalRamp": [
+					"#060b15",
+					"#1c2432",
+					"#354052",
+					"#515e74",
+					"#728199",
+					"#98a5bb",
+					"#c0cbde",
+					"#e6effd"
+				]
+			},
+			"head": {
+				"role": "neutral",
+				"displayName": "Header Bar",
+				"canonical": "#e7eef6",
+				"oklch": "oklch(94.6% 0.013 251.6)",
+				"tonalRamp": [
+					"#090b0e",
+					"#212428",
+					"#3c4045",
+					"#595e64",
+					"#7b8188",
+					"#a0a5ab",
+					"#c6cbd0",
+					"#ebeff3"
+				]
+			},
+			"zebra": {
+				"role": "neutral",
+				"displayName": "Zebra",
+				"canonical": "#f6f8fb",
+				"oklch": "oklch(97.8% 0.005 258.3)",
+				"tonalRamp": [
+					"#0a0b0c",
+					"#232425",
+					"#3e4042",
+					"#5c5e60",
+					"#7f8083",
+					"#a3a5a7",
+					"#c9cacc",
+					"#edeef0"
+				]
+			},
+			"hover": {
+				"role": "neutral",
+				"displayName": "Row Hover",
+				"canonical": "#eaf3fd",
+				"oklch": "oklch(96.0% 0.017 250.8)",
+				"tonalRamp": [
+					"#080b0f",
+					"#202529",
+					"#3b4047",
+					"#575e66",
+					"#7a8189",
+					"#9fa5ad",
+					"#c5cbd2",
+					"#eaeff5"
+				]
+			},
+			"line": {
+				"role": "neutral",
+				"displayName": "Rule",
+				"canonical": "#d6dde7",
+				"oklch": "oklch(89.5% 0.016 257.2)",
+				"tonalRamp": [
+					"#090b0f",
+					"#212429",
+					"#3c4046",
+					"#595e66",
+					"#7b8189",
+					"#a0a5ad",
+					"#c6cbd2",
+					"#ebeff4"
+				]
+			},
+			"line-soft": {
+				"role": "neutral",
+				"displayName": "Soft Rule",
+				"canonical": "#e6ebf2",
+				"oklch": "oklch(93.8% 0.011 256.7)",
+				"tonalRamp": [
+					"#0a0b0e",
+					"#222428",
+					"#3d4044",
+					"#5a5e63",
+					"#7c8186",
+					"#a1a5aa",
+					"#c7cbcf",
+					"#eceff3"
+				]
+			},
+			"line-strong": {
+				"role": "neutral",
+				"displayName": "Strong Rule",
+				"canonical": "#b7c5d6",
+				"oklch": "oklch(81.8% 0.028 253.3)",
+				"tonalRamp": [
+					"#070c12",
+					"#1d252d",
+					"#37414c",
+					"#535f6c",
+					"#758290",
+					"#9ba6b3",
+					"#c2ccd7",
+					"#e7eff9"
+				]
+			},
+			"band-text": {
+				"role": "neutral",
+				"displayName": "On-Navy Soft",
+				"canonical": "#b9cce4",
+				"oklch": "oklch(83.9% 0.040 254.3)",
+				"tonalRamp": [
+					"#050c14",
+					"#1b2531",
+					"#344150",
+					"#505f72",
+					"#718297",
+					"#97a6b9",
+					"#bfccdc",
+					"#e5f0fe"
+				]
+			},
+			"band-meta": {
+				"role": "neutral",
+				"displayName": "On-Navy Meta",
+				"canonical": "#9db4d1",
+				"oklch": "oklch(76.2% 0.049 254.3)",
+				"tonalRamp": [
+					"#040c16",
+					"#192534",
+					"#314154",
+					"#4c5f77",
+					"#6e829c",
+					"#94a6be",
+					"#bccce0",
+					"#e5f0fe"
+				]
+			},
+			"grid-head-text": {
+				"role": "neutral",
+				"displayName": "Grid Header Text",
+				"canonical": "#dce8f6",
+				"oklch": "oklch(92.6% 0.023 252.2)",
+				"tonalRamp": [
+					"#070c11",
+					"#1f252c",
+					"#394149",
+					"#555f6a",
+					"#77818d",
+					"#9ca6b0",
+					"#c3cbd5",
+					"#e8eff7"
+				]
+			},
+			"ok": {
+				"role": "tertiary",
+				"displayName": "Landed Green",
+				"canonical": "#13794a",
+				"oklch": "oklch(51.0% 0.115 156.8)",
+				"tonalRamp": [
+					"#001005",
+					"#002d17",
+					"#094c2d",
+					"#156f44",
+					"#3f9365",
+					"#71b78d",
+					"#a0dbb6",
+					"#ccfcdd"
+				]
+			},
+			"late": {
+				"role": "tertiary",
+				"displayName": "Delay Amber",
+				"canonical": "#a24f00",
+				"oklch": "oklch(52.1% 0.132 53.0)",
+				"tonalRamp": [
+					"#190500",
+					"#3c1900",
+					"#62310a",
+					"#914600",
+					"#b9682f",
+					"#da9163",
+					"#fabb93",
+					"#ffeadd"
+				]
+			},
+			"bad": {
+				"role": "tertiary",
+				"displayName": "Alert Red",
+				"canonical": "#c0342a",
+				"oklch": "oklch(53.8% 0.178 28.6)",
+				"tonalRamp": [
+					"#200000",
+					"#490504",
+					"#7a0b08",
+					"#a7281f",
+					"#d24e41",
+					"#f27e6f",
+					"#fab7ad",
+					"#fee9e6"
+				]
+			},
+			"idle": {
+				"role": "tertiary",
+				"displayName": "Idle Slate",
+				"canonical": "#53627a",
+				"oklch": "oklch(49.3% 0.043 259.7)",
+				"tonalRamp": [
+					"#060b15",
+					"#1c2432",
+					"#354052",
+					"#515e74",
+					"#728199",
+					"#98a5bb",
+					"#c0cbde",
+					"#e6effd"
+				]
+			},
+			"ocean": {
+				"role": "neutral",
+				"displayName": "Map Ocean",
+				"canonical": "#cadff2",
+				"oklch": "oklch(89.4% 0.035 245.5)",
+				"tonalRamp": [
+					"#050c13",
+					"#1b252f",
+					"#34414e",
+					"#4f606f",
+					"#718393",
+					"#97a7b5",
+					"#becdd9",
+					"#e4f0fb"
+				]
+			},
+			"land": {
+				"role": "neutral",
+				"displayName": "Map Land",
+				"canonical": "#f3f6fa",
+				"oklch": "oklch(97.2% 0.006 255.5)",
+				"tonalRamp": [
+					"#0a0b0d",
+					"#232426",
+					"#3e4042",
+					"#5b5e61",
+					"#7e8084",
+					"#a2a5a8",
+					"#c9cbcd",
+					"#edeff1"
+				]
+			},
+			"route-ahead-dash": {
+				"role": "secondary",
+				"displayName": "Track Dash",
+				"canonical": "#86c4f8",
+				"oklch": "oklch(79.8% 0.098 244.8)",
+				"tonalRamp": [
+					"#000c1c",
+					"#002642",
+					"#134366",
+					"#2b628d",
+					"#4d86b4",
+					"#7aaad3",
+					"#a7d0f4",
+					"#e2f1fe"
+				]
+			}
+		},
+		"typographyMeta": {
+			"display": {
+				"displayName": "Band Title",
+				"purpose": "Page name in the navy title band; 24px under 900px."
+			},
+			"headline": {
+				"displayName": "Airport Code",
+				"purpose": "Route-block codes; the largest type on any page. 28px under 640px."
+			},
+			"title": {
+				"displayName": "Status Word",
+				"purpose": "State word in the status band; search dock label."
+			},
+			"title-panel": {
+				"displayName": "Panel Title",
+				"purpose": "Panel header bars, navy."
+			},
+			"reading": {
+				"displayName": "Key Time",
+				"purpose": "The two times that matter in the dock."
+			},
+			"body": {
+				"displayName": "Body",
+				"purpose": "Running text; prose at 14.5px/1.6, max 70ch."
+			},
+			"body-table": {
+				"displayName": "Grid Cell",
+				"purpose": "Data-grid cells, tabular."
+			},
+			"label": {
+				"displayName": "Label",
+				"purpose": "Muted labels, grid headers (600 on navy), zone suffixes."
+			}
+		},
+		"shadows": [
+			{
+				"name": "dock-float",
+				"value": "0 10px 30px rgb(16 31 51 / 0.22), 0 1px 3px rgb(16 31 51 / 0.16)",
+				"purpose": "The flight dock over the map; removed under 900px."
+			},
+			{
+				"name": "map-control",
+				"value": "0 1px 4px rgb(16 31 51 / 0.2)",
+				"purpose": "Mapbox zoom controls."
+			},
+			{
+				"name": "marker-halo",
+				"value": "drop-shadow(0 0 1.5px #fff) drop-shadow(0 1px 2px rgb(0 47 100 / 0.4))",
+				"purpose": "Filter on plane glyphs for legibility over the basemap."
+			},
+			{
+				"name": "focus-ring",
+				"value": "outline: 2px solid #229cf8; outline-offset: 2px",
+				"purpose": "Site-wide :focus-visible; inputs inset it by 1px."
+			},
+			{
+				"name": "nav-current",
+				"value": "inset 0 -2px 0 #229cf8",
+				"purpose": "Underline on the current masthead nav item."
+			}
+		],
+		"motion": [],
+		"breakpoints": [
+			{
+				"name": "sm",
+				"value": "640px",
+				"purpose": "max-width: panels edge to edge; data grids reflow into labelled small grids; route code 28px."
+			},
+			{
+				"name": "md",
+				"value": "900px",
+				"purpose": "max-width 899px: masthead wraps, map becomes a 320px block, dock drops below it."
+			},
+			{
+				"name": "lg",
+				"value": "1000px",
+				"purpose": "min-width: main column plus 340px side column."
+			}
+		],
+		"layout": {
+			"wrap": "1240px",
+			"gutter": "20px (16px under 900px)",
+			"stageMinHeight": "560px",
+			"dockWidth": "360px (search 400px)",
+			"sideColumn": "340px",
+			"mobileMap": "320px"
+		},
+		"map": {
+			"basemap": "mapbox://styles/mapbox/light-v11, repainted on style.load",
+			"paint": {
+				"land": "#f3f6fa",
+				"water": "#cadff2",
+				"park": "#e4eee6",
+				"aeroway": "#dde5ef",
+				"runway": "#c3cfdd",
+				"countryBorder": "#9fb2c8",
+				"fog": "#f1f4f8 / high #d9e8f6"
+			},
+			"layers": [
+				{
+					"name": "route-flown",
+					"value": "line #0065ad, 3.2px, round caps"
+				},
+				{
+					"name": "route-ahead",
+					"value": "line #229cf8, 3px, dasharray [0.6, 1.8]"
+				},
+				{
+					"name": "range-ring",
+					"value": "line #0065ad, 1.2px, opacity 0.6, dasharray [3, 3]"
+				},
+				{
+					"name": "traffic-net",
+					"value": "line #0065ad, width 1 to 3 and opacity 0.3 to 0.9 by traffic weight"
+				},
+				{
+					"name": "airport-pin",
+					"value": "navy ring around a white dot sized by traffic; main: sky dot, 2px white stroke; labels navy, white halo 1.6, 11.5/13px"
+				},
+				{
+					"name": "subject-airport",
+					"value": "navy ring r10, sky dot r6, 2.5px white stroke; 15px label, never yields"
+				},
+				{
+					"name": "plane",
+					"value": "navy glyph, 1.6px white edge, rotated to heading; subject 30px, traffic 22px"
+				}
+			]
+		}
+	},
+	"components": [
+		{
+			"name": "App Button",
+			"kind": "button",
+			"refersTo": "button-app",
+			"description": "Sky with navy text and a deep-sky edge; the WingView 3D call to action in the masthead and dock.",
+			"html": "<a class=\"ds-btn ds-btn-app\" href=\"#\">Open WingView 3D</a>",
+			"css": ".ds-btn{--navy:#002f64;--navy-deep:#00244d;--sky:#229cf8;--sky-hover:#58b5fc;--sky-edge:#0065ad;--link:#0065ad;--link-hover:#004d87;--paper:#f1f4f8;--ink:#17305a;--muted:#53627a;--surface:#fff;--head:#e7eef6;--zebra:#f6f8fb;--hover:#eaf3fd;--line:#d6dde7;--line-soft:#e6ebf2;--line-strong:#b7c5d6;--ok:#13794a;--late:#a24f00;--bad:#c0342a;--idle:#53627a;font-family:Inter,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;display:inline-flex;align-items:center;justify-content:center;height:38px;padding:0 16px;border:1px solid transparent;border-radius:4px;font-size:14px;font-weight:600;line-height:1;text-decoration:none;cursor:pointer}.ds-btn-app{background:var(--sky);border-color:var(--sky-edge);color:var(--navy)}.ds-btn-app:hover{background:var(--sky-hover)}.ds-btn:focus-visible{outline:2px solid var(--sky);outline-offset:2px}"
+		},
+		{
+			"name": "Primary Button",
+			"kind": "button",
+			"refersTo": "button-primary",
+			"description": "Navy with white text; search submit.",
+			"html": "<button class=\"ds-btn-primary\">Search</button>",
+			"css": ".ds-btn-primary{--navy:#002f64;--navy-deep:#00244d;--sky:#229cf8;--sky-hover:#58b5fc;--sky-edge:#0065ad;--link:#0065ad;--link-hover:#004d87;--paper:#f1f4f8;--ink:#17305a;--muted:#53627a;--surface:#fff;--head:#e7eef6;--zebra:#f6f8fb;--hover:#eaf3fd;--line:#d6dde7;--line-soft:#e6ebf2;--line-strong:#b7c5d6;--ok:#13794a;--late:#a24f00;--bad:#c0342a;--idle:#53627a;font-family:Inter,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;display:inline-flex;align-items:center;height:44px;padding:0 20px;border:1px solid transparent;border-radius:4px;background:var(--navy);color:#fff;font-size:14px;font-weight:600;line-height:1;cursor:pointer}.ds-btn-primary:hover{background:#0a3d7a}.ds-btn-primary:focus-visible{outline:2px solid var(--sky);outline-offset:2px}"
+		},
+		{
+			"name": "Search Field",
+			"kind": "input",
+			"refersTo": "input-search",
+			"description": "Masthead search: white, strong rule, sky focus ring, icon button inside.",
+			"html": "<form class=\"ds-find\"><input placeholder=\"Flight, tail number or airport\" aria-label=\"Search\"><button type=\"button\" aria-label=\"Search\"><svg viewBox=\"0 0 20 20\" width=\"17\" height=\"17\" aria-hidden=\"true\"><circle cx=\"8.5\" cy=\"8.5\" r=\"5.75\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"/><path d=\"m13 13 4.5 4.5\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg></button></form>",
+			"css": ".ds-find{--navy:#002f64;--navy-deep:#00244d;--sky:#229cf8;--sky-hover:#58b5fc;--sky-edge:#0065ad;--link:#0065ad;--link-hover:#004d87;--paper:#f1f4f8;--ink:#17305a;--muted:#53627a;--surface:#fff;--head:#e7eef6;--zebra:#f6f8fb;--hover:#eaf3fd;--line:#d6dde7;--line-soft:#e6ebf2;--line-strong:#b7c5d6;--ok:#13794a;--late:#a24f00;--bad:#c0342a;--idle:#53627a;font-family:Inter,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;position:relative;max-width:460px}.ds-find input{width:100%;box-sizing:border-box;height:40px;padding:0 42px 0 12px;border:1px solid var(--line-strong);border-radius:4px;background:#fff;font:inherit;font-size:14px;color:var(--ink)}.ds-find input::placeholder{color:#637287}.ds-find input:focus{outline:2px solid var(--sky);outline-offset:-1px;border-color:var(--sky-edge)}.ds-find button{position:absolute;top:0;right:0;width:42px;height:40px;display:grid;place-items:center;border:0;background:none;color:var(--navy);cursor:pointer}"
+		},
+		{
+			"name": "Masthead and Title Band",
+			"kind": "nav",
+			"refersTo": "masthead",
+			"description": "White masthead over the navy title band with its status label.",
+			"html": "<div class=\"ds-shell\"><header class=\"ds-mast\"><strong class=\"ds-logo\">WingView</strong><nav><a href=\"#\" aria-current=\"page\">Flight tracker</a><a class=\"ds-app\" href=\"#\">Open WingView 3D</a></nav></header><div class=\"ds-band\"><div><h1>DL1863</h1><p><a href=\"#\">Delta Air Lines</a><span>Callsign DAL1863</span><span>Mon 16 Nov</span></p></div><p class=\"ds-meta\"><span class=\"ds-state\">Arrived</span> Updated <time>7:04 PM UTC</time></p></div></div>",
+			"css": ".ds-shell{--navy:#002f64;--navy-deep:#00244d;--sky:#229cf8;--sky-hover:#58b5fc;--sky-edge:#0065ad;--link:#0065ad;--link-hover:#004d87;--paper:#f1f4f8;--ink:#17305a;--muted:#53627a;--surface:#fff;--head:#e7eef6;--zebra:#f6f8fb;--hover:#eaf3fd;--line:#d6dde7;--line-soft:#e6ebf2;--line-strong:#b7c5d6;--ok:#13794a;--late:#a24f00;--bad:#c0342a;--idle:#53627a;font-family:Inter,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;}.ds-mast{display:flex;align-items:center;gap:24px;height:64px;padding:0 20px;background:#fff;border-bottom:1px solid var(--line)}.ds-logo{color:var(--navy);font-size:20px;font-weight:800}.ds-mast nav{margin-left:auto;display:flex;align-items:center;gap:22px;font-size:14px;font-weight:600}.ds-mast nav a{color:var(--navy);text-decoration:none}.ds-mast nav a[aria-current]{box-shadow:inset 0 -2px 0 var(--sky);padding-block:6px}.ds-mast .ds-app{display:inline-flex;align-items:center;height:38px;padding:0 16px;border:1px solid var(--sky-edge);border-radius:4px;background:var(--sky)}.ds-band{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px;padding:18px 20px 16px;background:var(--navy);color:#fff}.ds-band h1{margin:0;font-size:28px;font-weight:700;line-height:1.15;letter-spacing:-.015em}.ds-band p{margin:6px 0 0;display:flex;gap:2px 18px;font-size:14px;color:#b9cce4}.ds-band p a{color:#fff;font-weight:600;text-decoration:none}.ds-band .ds-meta{display:block;font-size:13px;color:#9db4d1}.ds-meta time{color:#dbe7f5}.ds-state{display:inline-block;margin-right:14px;padding:3px 9px;border-radius:3px;background:var(--ok);font-size:13px;font-weight:700;color:#fff}"
+		},
+		{
+			"name": "Flight Dock with Status Band",
+			"kind": "card",
+			"refersTo": "dock",
+			"description": "The signature: a 360px panel floating over the map, a solid state band welded to its top, the route block and times below.",
+			"html": "<div class=\"ds-stage\"><div class=\"ds-dock\"><p class=\"ds-status ds-s-late\"><strong>En route</strong> <span>Departed 42m late</span></p><div class=\"ds-dock-body\"><div class=\"ds-route\"><div class=\"ds-end\"><a class=\"ds-code\" href=\"#\">SDQ</a><span class=\"ds-city\">Santo Domingo</span></div><div class=\"ds-track\"><span class=\"ds-done\" style=\"width:58%\"></span><span class=\"ds-plane\" style=\"left:58%\"><svg viewBox=\"0 0 24 24\" width=\"100%\" height=\"100%\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M12 1.6c.9 0 1.5 1 1.5 2.3v5.3l8 4.6v2.1l-8-2.4v4.6l2.4 1.8v1.7L12 20.6l-3.9 1v-1.7l2.4-1.8v-4.6l-8 2.4v-2.1l8-4.6V3.9c0-1.3.6-2.3 1.5-2.3Z\"/></svg></span></div><div class=\"ds-end ds-arr\"><a class=\"ds-code\" href=\"#\">JFK</a><span class=\"ds-city\">New York</span></div></div><div class=\"ds-times\"><div><span class=\"ds-label\">Left the gate</span><time>12:51 AM<small> AST</small></time><span class=\"ds-delta ds-late\">42m late</span></div><div class=\"ds-arr\"><span class=\"ds-label\">Arriving</span><time>3:21 AM<small> EST</small></time><span class=\"ds-delta ds-ok\">On time</span></div></div><p class=\"ds-note\">902 mi flown, 652 mi to go</p></div></div></div>",
+			"css": ".ds-stage{--navy:#002f64;--navy-deep:#00244d;--sky:#229cf8;--sky-hover:#58b5fc;--sky-edge:#0065ad;--link:#0065ad;--link-hover:#004d87;--paper:#f1f4f8;--ink:#17305a;--muted:#53627a;--surface:#fff;--head:#e7eef6;--zebra:#f6f8fb;--hover:#eaf3fd;--line:#d6dde7;--line-soft:#e6ebf2;--line-strong:#b7c5d6;--ok:#13794a;--late:#a24f00;--bad:#c0342a;--idle:#53627a;font-family:Inter,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;padding:20px;background:#cadff2;color:var(--ink)}.ds-dock{width:360px;max-width:100%;background:#fff;border-radius:4px;overflow:hidden;box-shadow:0 10px 30px rgb(16 31 51 / .22),0 1px 3px rgb(16 31 51 / .16)}.ds-status{margin:0;display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px;padding:11px 16px;color:#fff;font-size:14px}.ds-status strong{font-size:17px;font-weight:700;letter-spacing:-.005em}.ds-status span{font-weight:600}.ds-s-ok{background:var(--ok)}.ds-s-late{background:var(--late)}.ds-s-bad{background:var(--bad)}.ds-s-live{background:var(--link)}.ds-s-idle{background:var(--idle)}.ds-dock-body{padding:16px}.ds-route{display:grid;grid-template-columns:auto minmax(48px,1fr) auto;align-items:start;gap:14px}.ds-end{display:flex;flex-direction:column}.ds-arr{align-items:flex-end;text-align:right}.ds-code{font-size:32px;font-weight:700;line-height:1;letter-spacing:-.02em;color:var(--navy);text-decoration:none}.ds-code:hover{color:var(--link)}.ds-city{margin-top:5px;font-size:13px;color:var(--muted)}.ds-track{position:relative;height:2px;margin-top:15px;background:repeating-linear-gradient(90deg,#86c4f8 0 5px,transparent 5px 10px)}.ds-done{position:absolute;inset:0 auto 0 0;background:var(--link)}.ds-plane{position:absolute;top:50%;width:24px;height:24px;margin:-12px 0 0 -12px;padding:2px;box-sizing:border-box;color:var(--navy);background:#fff;border-radius:50%;transform:rotate(90deg)}.ds-times{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;padding-top:12px;border-top:1px solid var(--line-soft)}.ds-times>div{display:flex;flex-direction:column;gap:1px}.ds-label{font-size:12px;color:var(--muted)}.ds-times time{font-size:19px;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums}.ds-times small{font-size:12px;font-weight:600;color:var(--muted)}.ds-delta{font-size:13px;font-weight:600}.ds-late{color:var(--late)}.ds-ok{color:var(--ok)}.ds-note{margin:12px 0 0;font-size:13px;color:var(--muted);text-align:center}"
+		},
+		{
+			"name": "Status Band States",
+			"kind": "chip",
+			"refersTo": "status-ok",
+			"description": "The five states: ok, late, bad, live, idle.",
+			"html": "<div class=\"ds-states\"><p class=\"ds-sb ds-ok\"><strong>Arrived</strong><span>4m early</span></p><p class=\"ds-sb ds-late\"><strong>Landed</strong><span>38m late</span></p><p class=\"ds-sb ds-bad\"><strong>Diverted</strong><span>Now going to Boston</span></p><p class=\"ds-sb ds-live\"><strong>En route</strong><span>Arriving in 1h 12m</span></p><p class=\"ds-sb ds-idle\"><strong>Scheduled</strong><span>Departs 6:10 PM</span></p></div>",
+			"css": ".ds-states{--navy:#002f64;--navy-deep:#00244d;--sky:#229cf8;--sky-hover:#58b5fc;--sky-edge:#0065ad;--link:#0065ad;--link-hover:#004d87;--paper:#f1f4f8;--ink:#17305a;--muted:#53627a;--surface:#fff;--head:#e7eef6;--zebra:#f6f8fb;--hover:#eaf3fd;--line:#d6dde7;--line-soft:#e6ebf2;--line-strong:#b7c5d6;--ok:#13794a;--late:#a24f00;--bad:#c0342a;--idle:#53627a;font-family:Inter,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;display:grid;gap:6px;max-width:360px}.ds-sb{margin:0;display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:11px 16px;color:#fff;font-size:14px}.ds-sb strong{font-size:17px;font-weight:700}.ds-sb span{font-weight:600}.ds-ok{background:var(--ok)}.ds-late{background:var(--late)}.ds-bad{background:var(--bad)}.ds-live{background:var(--link)}.ds-idle{background:var(--idle)}"
+		},
+		{
+			"name": "Telemetry Rows",
+			"kind": "custom",
+			"refersTo": "dock",
+			"description": "Live readings in a 2 x 2 ruled grid, tabular values, en dash for missing.",
+			"html": "<div class=\"ds-tel-wrap\"><dl class=\"ds-tel\"><div><dt>Altitude</dt><dd>36,000 ft</dd></div><div><dt>Ground speed</dt><dd>482 mph</dd></div><div><dt>Heading</dt><dd>352°</dd></div><div><dt>Squawk</dt><dd>–</dd></div></dl><p class=\"ds-age\">Position reported 12s ago</p></div>",
+			"css": ".ds-tel-wrap{--navy:#002f64;--navy-deep:#00244d;--sky:#229cf8;--sky-hover:#58b5fc;--sky-edge:#0065ad;--link:#0065ad;--link-hover:#004d87;--paper:#f1f4f8;--ink:#17305a;--muted:#53627a;--surface:#fff;--head:#e7eef6;--zebra:#f6f8fb;--hover:#eaf3fd;--line:#d6dde7;--line-soft:#e6ebf2;--line-strong:#b7c5d6;--ok:#13794a;--late:#a24f00;--bad:#c0342a;--idle:#53627a;font-family:Inter,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;max-width:328px;color:var(--ink)}.ds-tel{display:grid;grid-template-columns:1fr 1fr;column-gap:20px;margin:0}.ds-tel>div{padding:7px 0;border-top:1px solid var(--line-soft)}.ds-tel dt{font-size:12px;color:var(--muted)}.ds-tel dd{margin:0;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}.ds-age{margin:4px 0 0;font-size:12px;color:var(--muted);text-align:right}"
+		},
+		{
+			"name": "Panel with Data Grid",
+			"kind": "card",
+			"refersTo": "panel",
+			"description": "White panel, pale header bar with count, navy column headers, zebra rows, coloured status tags.",
+			"html": "<section class=\"ds-panel\"><h2>DL1863 flight history <span>29 flights, last 30 days</span></h2><table class=\"ds-grid\"><thead><tr><th>Date</th><th>Aircraft</th><th>From</th><th>To</th><th class=\"n\">Arrived</th><th>Status</th></tr></thead><tbody><tr><td>Sat 14 Nov</td><td><a href=\"#\">N533DT</a> A21N</td><td><a href=\"#\">SDQ</a></td><td><a href=\"#\">JFK</a></td><td class=\"n\">1:39 AM<small> EST</small></td><td><span class=\"ds-tag ok\">Arrived</span></td></tr><tr><td>Fri 13 Nov</td><td><a href=\"#\">N510DE</a> A21N</td><td><a href=\"#\">SDQ</a></td><td><a href=\"#\">JFK</a></td><td class=\"n\">–</td><td><span class=\"ds-tag bad\">Cancelled</span></td></tr><tr><td>Thu 12 Nov</td><td><a href=\"#\">N520DE</a> A21N</td><td><a href=\"#\">SDQ</a></td><td><a href=\"#\">JFK</a></td><td class=\"n\">–</td><td><span class=\"ds-tag air\">En route</span></td></tr></tbody></table></section>",
+			"css": ".ds-panel{--navy:#002f64;--navy-deep:#00244d;--sky:#229cf8;--sky-hover:#58b5fc;--sky-edge:#0065ad;--link:#0065ad;--link-hover:#004d87;--paper:#f1f4f8;--ink:#17305a;--muted:#53627a;--surface:#fff;--head:#e7eef6;--zebra:#f6f8fb;--hover:#eaf3fd;--line:#d6dde7;--line-soft:#e6ebf2;--line-strong:#b7c5d6;--ok:#13794a;--late:#a24f00;--bad:#c0342a;--idle:#53627a;font-family:Inter,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;background:#fff;border:1px solid var(--line);border-radius:4px;overflow:hidden;color:var(--ink)}.ds-panel h2{margin:0;display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px;padding:10px 14px;background:var(--head);border-bottom:1px solid var(--line);font-size:15px;font-weight:700;color:var(--navy)}.ds-panel h2 span{font-size:12.5px;font-weight:500;color:var(--muted)}.ds-grid{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}.ds-grid th,.ds-grid td{padding:8px 14px;text-align:left;border-bottom:1px solid var(--line-soft)}.ds-grid thead th{padding-block:7px;background:var(--navy);font-size:12px;font-weight:600;color:#dce8f6}.ds-grid tbody tr:nth-child(even){background:var(--zebra)}.ds-grid tbody tr:hover{background:var(--hover)}.ds-grid tbody tr:last-child td{border-bottom:0}.ds-grid a{color:var(--link);font-weight:600;text-decoration:none}.ds-grid a:hover{color:var(--link-hover);text-decoration:underline}.ds-grid .n{text-align:right;white-space:nowrap}.ds-grid small{font-size:11.5px;font-weight:500;color:var(--muted)}.ds-tag{font-size:12.5px;font-weight:600;color:var(--muted)}.ds-tag.ok{color:var(--ok)}.ds-tag.bad{color:var(--bad)}.ds-tag.air{color:var(--link)}"
+		}
+	],
+	"narrative": {
+		"northStar": "The Tracker Desk",
+		"overview": "The pages play the flight-tracker category straight, in the convention FlightAware and Flightradar24 set: a live map leads, a white panel docked over it answers status at a glance, and dense ruled tables carry the depth underneath. Nothing is staged for effect. The page is an instrument a traveler reads in five seconds on a phone and an enthusiast reads for five minutes on a desktop, and both read the same surfaces.\n\nThe identity is WingView's own, bound by the brand: the window-and-wing logo, navy (#002f64) as the structural colour (title band, table headers, codes and times), sky (#229cf8) as the live and forward colour (route ahead, the subject airport, the app button), and Inter at UI sizes with tabular numerals. The ground is a cool paper grey; panels are white with hairline rules and small 4px corners. State is carried by solid, saturated status bands, never by decoration.\n\nDensity is high and deliberate. Type stays between 12px and 32px; the largest thing on a page is a three-letter airport code. The map is the only image, and it is tinted into the palette rather than left in Mapbox's defaults.",
+		"keyCharacteristics": [
+			"White masthead, navy title band, full-bleed map stage, paper ground below.",
+			"One docked flight panel with a status band welded to its top edge.",
+			"Panels with pale header bars; data grids with navy column headers and zebra rows.",
+			"Every number tabular; every time carries its local zone in small muted type.",
+			"Flat surfaces; the single real shadow is the dock floating over the map."
+		],
+		"rules": [
+			{
+				"name": "The Two Blues Rule",
+				"body": "Navy is structure, sky is motion. Navy never marks the live route or the subject airport; sky never fills a header or carries body text. Text-weight blue is always `link`, because sky on white is too light to read.",
+				"section": "colors"
+			},
+			{
+				"name": "The Solid State Rule",
+				"body": "Status is a filled band or a coloured word, in exactly the five state colours. A green band never sits beside a late delay: a late departure outranks an on-time arrival estimate.",
+				"section": "colors"
+			},
+			{
+				"name": "The Tabular Rule",
+				"body": "Every time, count, distance, altitude and speed is set with tabular numerals and right-aligned in grids, so columns of figures line up.",
+				"section": "typography"
+			},
+			{
+				"name": "The Small Zone Rule",
+				"body": "A clock time is followed by its airport-local zone in smaller, muted type (`8:55 PM AST`). Times are never shown without their zone.",
+				"section": "typography"
+			},
+			{
+				"name": "The One Float Rule",
+				"body": "Only the dock casts a shadow. Panels below the stage are flat with a 1px `line` border.",
+				"section": "elevation"
+			}
+		],
+		"dos": [
+			"Do keep navy for structure (band, column headers, codes) and sky for what is live or ahead.",
+			"Do answer state with a solid status band in one of the five state colours, welded to the top of the flight panel.",
+			"Do give every panel a `head` header bar and every data grid a navy column header.",
+			"Do set every figure in tabular numerals and follow every clock time with its local zone in smaller muted type.",
+			"Do show missing data as a muted en dash and estimates labelled \"estimated\".",
+			"Do dock the panel over the map at 900px and up, and below a 320px map under it.",
+			"Do keep app-button text navy on sky, with the `sky-edge` border."
+		],
+		"donts": [
+			"Don't use rounded-card SaaS styling: no radii above 4px on panels, buttons or inputs, and no shadows on panels below the stage.",
+			"Don't use poster-scale display type; the largest type on a page is a 32px airport code.",
+			"Don't set body or link text in sky; use `link`.",
+			"Don't show a green status beside a late departure.",
+			"Don't introduce a second typeface or new state colours."
+		]
+	}
+}
