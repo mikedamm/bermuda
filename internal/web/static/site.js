@@ -52,13 +52,20 @@
 		map.addControl(new ml.NavigationControl({ showCompass: false }), "top-right");
 		foldCredit(map, el);
 
-		// the camera keeps clear of the docked panel when it sits over the map
+		// the camera frames the route between the docked panel and the right
+		// edge of the content column, not the window: on a wide screen the
+		// map runs edge to edge but the route stays where the page's content is
 		const padding = () => {
 			const dock = el.closest(".stage")?.querySelector(".dock");
 			const over = dock && matchMedia("(min-width: 900px)").matches;
 			if (!over) return { top: 52, bottom: 52, left: 52, right: 52 }; // dock sits below: even margins
-			const left = Math.min(dock.getBoundingClientRect().right - el.getBoundingClientRect().left + 48, el.clientWidth * 0.62);
-			return { top: 56, bottom: 56, left, right: 64 };
+			const box = el.getBoundingClientRect();
+			const left = Math.min(dock.getBoundingClientRect().right - box.left + 48, el.clientWidth * 0.62);
+			const col = dock.parentElement; // .stage-wrap, the content column
+			const end = col.getBoundingClientRect().right - parseFloat(getComputedStyle(col).paddingRight);
+			// 64 px inside the column leaves room for a pin's label, which sits to its right
+			const right = Math.max(64, Math.min(box.right - end + 64, el.clientWidth - left - 240));
+			return { top: 56, bottom: 56, left, right };
 		};
 		const bounds = (pts) => pts.reduce((b, c) => b.extend(c), new ml.LngLatBounds(pts[0], pts[0]));
 		const coords = [];
