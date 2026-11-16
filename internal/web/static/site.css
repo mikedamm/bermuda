@@ -288,7 +288,7 @@ a.code:hover { color: var(--accent); }
 .bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--line-soft); position: relative; overflow: hidden; }
 .bar::before { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--accent); border-radius: inherit; }
 
-.notice { margin: 0 0 24px; padding: 14px 16px; border-left: 3px solid var(--warn); background: var(--warn-bg); color: #4d3410; border-radius: 0 8px 8px 0; max-width: none; }
+.notice { margin: 0 0 24px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); background: var(--warn-bg); color: #4d3410; border-radius: 10px; max-width: none; }
 .empty { color: var(--muted); padding: 16px 0; border-top: 1px solid var(--line); }
 
 /* ---------- home ---------- */
