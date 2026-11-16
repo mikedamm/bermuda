@@ -81,13 +81,32 @@
 			t = setTimeout(frame, 150);
 		});
 
-		if (data.plane) {
-			const plane = document.createElement("span");
-			plane.className = "mk-plane";
-			plane.innerHTML = PLANE;
-			new ml.Marker({ element: plane, rotation: data.plane.h, rotationAlignment: "map", pitchAlignment: "map" })
-				.setLngLat(data.plane.p).addTo(map);
-		}
+		// the page's own aircraft: an HTML marker the live refresh moves
+		let marker = null;
+		const placePlane = (p) => {
+			if (!p) {
+				marker?.remove();
+				marker = null;
+				return;
+			}
+			if (!marker) {
+				const plane = document.createElement("span");
+				plane.className = "mk-plane";
+				plane.innerHTML = PLANE;
+				marker = new ml.Marker({ element: plane, rotationAlignment: "map", pitchAlignment: "map" }).setLngLat(p.p).addTo(map);
+			}
+			marker.setLngLat(p.p).setRotation(p.h);
+		};
+		placePlane(data.plane);
+
+		// live.js sends the flight's new position and route split; the
+		// camera stays where the reader left it
+		el.addEventListener("wv:live", (e) => {
+			data.lines = e.detail.lines;
+			data.plane = e.detail.plane;
+			placePlane(data.plane);
+			if (drawn) map.getSource("wv")?.setData(routes(data));
+		});
 
 		// Overlays need only the style, not every basemap tile: draw them as
 		// soon as it is ready, so a cold tile cache never hides the flight.
@@ -95,13 +114,7 @@
 		const overlays = () => {
 			if (drawn) return;
 			drawn = true;
-			const features = (data.lines || []).map((l) => ({
-				type: "Feature", properties: { k: l.k, w: l.w ?? 1 }, geometry: { type: "LineString", coordinates: l.c },
-			}));
-			for (const r of data.rings || []) {
-				features.push({ type: "Feature", properties: { k: "ring", w: 1 }, geometry: { type: "LineString", coordinates: circle(r.c, r.r) } });
-			}
-			map.addSource("wv", { type: "geojson", data: { type: "FeatureCollection", features } });
+			map.addSource("wv", { type: "geojson", data: routes(data) });
 			const before = map.getStyle().layers.find((l) => l.type === "symbol")?.id;
 			const line = (id, k, paint) => map.addLayer({
 				id, type: "line", source: "wv", filter: ["==", ["get", "k"], k],
@@ -191,6 +204,17 @@
 		};
 		if (map.isStyleLoaded()) overlays();
 		else map.once("style.load", overlays);
+	}
+
+	// the map's lines: routes and range rings
+	function routes(data) {
+		const features = (data.lines || []).map((l) => ({
+			type: "Feature", properties: { k: l.k, w: l.w ?? 1 }, geometry: { type: "LineString", coordinates: l.c },
+		}));
+		for (const r of data.rings || []) {
+			features.push({ type: "Feature", properties: { k: "ring", w: 1 }, geometry: { type: "LineString", coordinates: circle(r.c, r.r) } });
+		}
+		return { type: "FeatureCollection", features };
 	}
 
 	// a ring of `mi` statute miles around [lon, lat]

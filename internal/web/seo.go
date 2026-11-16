@@ -23,7 +23,7 @@ func (s *Server) robots(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "User-agent: *\nDisallow: /\n")
 		return
 	}
-	fmt.Fprintf(w, "User-agent: *\nAllow: /\nDisallow: %s/search\n\nSitemap: %s%s/sitemap.xml\n", Prefix, s.cfg.SiteURL, Prefix)
+	fmt.Fprintf(w, "User-agent: *\nAllow: /\nDisallow: %s/search\nDisallow: %s/live/\n\nSitemap: %s%s/sitemap.xml\n", Prefix, Prefix, s.cfg.SiteURL, Prefix)
 }
 
 type urlset struct {

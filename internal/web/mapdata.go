@@ -75,12 +75,28 @@ func encodeMap(d mapData) template.JS {
 // legMapV draws one leg: the route split at the live position, both
 // airports, and the aircraft.
 func (s *Server) legMapV(l LegV, label string) *MapV {
+	d, ok := legMapData(l)
+	if !ok {
+		return nil
+	}
+	m := &MapV{Label: label}
+	if s.cfg.MapTiles == "" {
+		m.SVG = legMap(l, 960, 420)
+		return m
+	}
+	m.JSON = encodeMap(d)
+	return m
+}
+
+// legMapData is what the interactive map draws for one leg; the live
+// refresh sends it again as the aircraft moves.
+func legMapData(l LegV) (mapData, bool) {
 	arr := l.Arr
 	if l.DivertedTo != nil && l.DivertedTo.LL.Valid() {
 		arr = *l.DivertedTo
 	}
 	if !l.Dep.LL.Valid() && !arr.LL.Valid() && !l.HasPos {
-		return nil
+		return mapData{}, false
 	}
 	var d mapData
 	for _, a := range []AirportV{l.Dep, arr} {
@@ -102,13 +118,7 @@ func (s *Server) legMapV(l LegV, label string) *MapV {
 	if l.HasPos && l.Phase != "arrived" && l.Phase != "landed" {
 		d.Plane = &mapPlane{P: pt(l.Pos), H: math.Round(l.Hdg)}
 	}
-	m := &MapV{Label: label}
-	if s.cfg.MapTiles == "" {
-		m.SVG = legMap(l, 960, 420)
-		return m
-	}
-	m.JSON = encodeMap(d)
-	return m
+	return d, true
 }
 
 // networkMapV draws a set of routes (an aircraft's month, an airline's week)

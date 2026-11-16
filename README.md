@@ -46,6 +46,17 @@ One Go binary, standard library only.
   shared by every instance and kept across restarts. Reads get 300 ms and
   fall back to the API; writes happen in the background; expired rows are
   pruned every 10 minutes. `/statusz` reports its hits and misses.
+- **Live refresh.** A flight page whose flight is under way polls
+  `/tracker/live/{flight id}/{signature}` every 30 s (`static/live.js`) and
+  swaps in its status band, dock and times, rendered by the page's own
+  templates, plus the aircraft's new position on the map. The URL is
+  HMAC-signed, bound to one flight, valid for 6 hours and renewed by each
+  answer, so it only works from that flight's page: there is no key to
+  enumerate. One render per flight answers every poller for 5 s and the
+  CDN reuses it for 10 s. No CORS, `Cross-Origin-Resource-Policy:
+  same-origin`, `noindex`, and robots.txt disallows it. Polling pauses in
+  hidden tabs, backs off on errors and stops when the flight arrives. The
+  signing key is derived from `WV_API_TOKEN`, so every instance agrees.
 - **Upstream protection.** At most 24 concurrent API calls, a 10 s timeout,
   one retry on 5xx, and short TTL caches per endpoint. Not-found answers are
   cached too, because bots probe a lot of nonsense.

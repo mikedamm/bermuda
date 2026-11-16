@@ -65,6 +65,19 @@ func fakeAPI(t *testing.T) *httptest.Server {
 			write(w, map[string]any{"results": []any{}})
 		}
 	})
+	mux.HandleFunc("GET /flights/{id}/live", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("id") != "f-live" {
+			w.WriteHeader(404)
+			write(w, map[string]any{"error": "no such live flight"})
+			return
+		}
+		moved := map[string]any{}
+		for k, v := range live {
+			moved[k] = v
+		}
+		moved["lat"], moved["lon"], moved["alt"] = 41.5, -121.0, 37000
+		write(w, map[string]any{"key": "f-live", "kind": "flight_id", "live": true, "flight": moved})
+	})
 	mux.HandleFunc("GET /aircraft/{key}/flights", func(w http.ResponseWriter, r *http.Request) {
 		write(w, map[string]any{"key": r.PathValue("key"), "flights": []any{hist}})
 	})
@@ -106,14 +119,16 @@ func fakeAPI(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func testServer(t *testing.T) http.Handler {
+func testServer(t *testing.T) http.Handler { return newTestServer(t).Handler() }
+
+func newTestServer(t *testing.T) *Server {
 	up := fakeAPI(t)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	s, err := New(api.New(up.URL, "test-token", 4, log), store.NewIndex(), Config{SiteURL: "https://www.wingview.com", AppURL: "https://app.wingview.com"}, log)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return s.Handler()
+	return s
 }
 
 func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
@@ -294,5 +309,86 @@ func TestStaticAssets(t *testing.T) {
 	}
 	if rec := get(t, h, "/tracker/search?q=AS14"); rec.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("search redirect is cacheable: %q", rec.Header().Get("Cache-Control"))
+	}
+}
+
+// The flight page hands out a signed refresh URL; only that URL answers,
+// with the page's changing parts and the moved aircraft.
+func TestLiveRefresh(t *testing.T) {
+	s := newTestServer(t)
+	h := s.Handler()
+	page := get(t, h, "/flight/ASA14")
+	m := regexp.MustCompile(`data-live="(/tracker/live/f-live/[^"]+)"`).FindStringSubmatch(page.Body.String())
+	if m == nil {
+		t.Fatal("live flight page carries no refresh URL")
+	}
+	if !strings.Contains(page.Body.String(), "/live.js") {
+		t.Error("live flight page does not load live.js")
+	}
+	for _, part := range []string{`data-part="meta"`, `data-part="dock"`, `data-part="times"`} {
+		if !strings.Contains(page.Body.String(), part) {
+			t.Errorf("page lacks %s", part)
+		}
+	}
+
+	rec := get(t, h, m[1])
+	if rec.Code != 200 {
+		t.Fatalf("refresh: status %d %s", rec.Code, rec.Body)
+	}
+	for k, want := range map[string]string{"Content-Type": "application/json", "Cache-Control": "public, max-age=10", "X-Robots-Tag": "noindex", "Cross-Origin-Resource-Policy": "same-origin"} {
+		if got := rec.Header().Get(k); got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+	if rec.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Error("refresh must not be readable cross-origin")
+	}
+	var a struct {
+		Parts map[string]string
+		Map   struct{ Plane struct{ P [2]float64 } }
+		Next  string
+		Done  bool
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+		t.Fatal(err)
+	}
+	if a.Done || !strings.HasPrefix(a.Next, "/tracker/live/f-live/") {
+		t.Errorf("done=%v next=%q", a.Done, a.Next)
+	}
+	if !strings.Contains(a.Parts["dock"], "37,000 ft") || !strings.Contains(a.Parts["dock"], "N527AS") {
+		t.Errorf("dock part lacks the new altitude or the registration:\n%s", a.Parts["dock"])
+	}
+	if !strings.Contains(a.Parts["times"], "Flight times") || !strings.Contains(a.Parts["meta"], "Updated") {
+		t.Error("times or meta part missing")
+	}
+	if a.Map.Plane.P != [2]float64{-121, 41.5} {
+		t.Errorf("map plane at %v, want the moved position", a.Map.Plane.P)
+	}
+
+	tok := strings.TrimPrefix(m[1], "/tracker/live/f-live/")
+	bad := map[string]string{
+		"tampered":       m[1][:len(m[1])-1] + map[bool]string{true: "A", false: "B"}[!strings.HasSuffix(m[1], "A")],
+		"another flight": "/tracker/live/f-other/" + tok,
+		"expired":        s.liveURL("f-live", time.Now().Add(-7*time.Hour)),
+		"no signature":   "/tracker/live/f-live/zzzz",
+	}
+	for name, u := range bad {
+		if rec := get(t, h, u); rec.Code != 403 || rec.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("%s: status %d, cache %q", name, rec.Code, rec.Header().Get("Cache-Control"))
+		}
+	}
+
+	// a flight that has closed and left the gateway: stop polling
+	rec = get(t, h, s.liveURL("f-gone", time.Now()))
+	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"done":true}` {
+		t.Errorf("closed flight: %d %s", rec.Code, rec.Body)
+	}
+
+	req := httptest.NewRequest("GET", "/robots.txt", nil)
+	req.Host = "www.wingview.com"
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if !strings.Contains(rr.Body.String(), "Disallow: /tracker/live/") {
+		t.Errorf("robots.txt does not keep crawlers off the refresh:\n%s", rr.Body)
 	}
 }

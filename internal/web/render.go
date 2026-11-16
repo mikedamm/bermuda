@@ -33,6 +33,7 @@ type Page struct {
 	OGImage     string
 	Map         *MapAssets // set when interactive maps are on
 	Updated     TimeCell   // when the data on this page was read
+	Live        string     // signed refresh URL while the page's flight is under way
 }
 
 // MapAssets is what the page's script needs to draw maps.

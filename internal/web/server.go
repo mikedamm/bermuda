@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
@@ -49,6 +50,9 @@ type Config struct {
 	// basemap); the browser reads it with HTTP range requests, so its host
 	// must send CORS headers. Empty means maps are drawn server-side as SVG.
 	MapTiles string
+	// LiveKey signs the flight pages' live-refresh URLs. Every instance
+	// needs the same key; empty means a random one (a single instance).
+	LiveKey []byte
 }
 
 // Vendored map libraries, served from versioned folders under static/vendor.
@@ -83,6 +87,10 @@ func New(a *api.Client, idx *store.Index, cfg Config, log *slog.Logger) (*Server
 	u, err := url.Parse(cfg.SiteURL)
 	if err != nil || u.Host == "" {
 		return nil, fmt.Errorf("bad SITE_URL %q", cfg.SiteURL)
+	}
+	if len(cfg.LiveKey) == 0 {
+		cfg.LiveKey = make([]byte, 32)
+		rand.Read(cfg.LiveKey)
 	}
 	s := &Server{api: a, index: idx, cfg: cfg, log: log, pages: cache.New(5000), host: u.Host}
 	if cfg.MapTiles != "" {
@@ -216,6 +224,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET "+Prefix+"/sitemap.xml", s.page(s.sitemapIndex))
 	mux.HandleFunc("GET "+Prefix+"/sitemaps/{name}", s.page(s.sitemapFile))
 	mux.HandleFunc("GET "+Prefix+"/search", s.page(s.searchPage))
+	mux.HandleFunc("GET "+Prefix+"/live/{id}/{token}", s.liveFlight)
 	mux.HandleFunc("GET "+Prefix+"/{$}", s.page(s.homePage))
 	mux.HandleFunc("GET "+Prefix, redirectTo(func(r *http.Request) string { return Prefix + "/" }))
 
@@ -255,6 +264,7 @@ type resp struct {
 	body     []byte
 	ctype    string
 	maxAge   time.Duration // CDN and browser freshness; 0 means no-store
+	cache    string        // Cache-Control as given, instead of the one maxAge builds
 	redirect string
 }
 
@@ -306,7 +316,9 @@ func (s *Server) failure(err error) resp {
 
 func (s *Server) write(w http.ResponseWriter, r *http.Request, o resp) {
 	h := w.Header()
-	if o.maxAge > 0 {
+	if o.cache != "" {
+		h.Set("Cache-Control", o.cache)
+	} else if o.maxAge > 0 {
 		sec := int(o.maxAge.Seconds())
 		// stale-while-revalidate keeps the CDN serving instantly while it refreshes;
 		// stale-if-error rides out an API outage on the last good page.

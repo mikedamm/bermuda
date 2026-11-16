@@ -24,8 +24,9 @@
 <meta name="twitter:card" content="summary_large_image">
 {{range .JSONLD}}<script type="application/ld+json">{{jsonld .}}</script>
 {{end}}{{if .Map}}<script src="{{static "site.js"}}" defer></script>
+{{end}}{{if .Live}}<script src="{{static "live.js"}}" defer></script>
 {{end}}</head>
-<body{{with .Map}} data-map-tiles="{{.Tiles}}" data-map-style="{{.Style}}" data-map-lib="{{.Lib}}" data-map-css="{{.CSS}}" data-map-pmtiles="{{.PMTiles}}" data-map-glyphs="{{.Glyphs}}"{{end}}>
+<body{{with .Map}} data-map-tiles="{{.Tiles}}" data-map-style="{{.Style}}" data-map-lib="{{.Lib}}" data-map-css="{{.CSS}}" data-map-pmtiles="{{.PMTiles}}" data-map-glyphs="{{.Glyphs}}"{{end}}{{with .Live}} data-live="{{.}}"{{end}}>
 <a class="skip" href="#main">Skip to content</a>
 <header class="masthead">
 	<div class="wrap masthead-in">

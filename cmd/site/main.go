@@ -17,6 +17,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -130,7 +131,7 @@ func run(log *slog.Logger) error {
 	if tiles == "off" {
 		tiles = ""
 	}
-	srv, err := web.New(client, idx, web.Config{SiteURL: site, AppURL: env("APP_URL", "https://app.wingview.com"), Version: version, MapTiles: tiles}, log)
+	srv, err := web.New(client, idx, web.Config{SiteURL: site, AppURL: env("APP_URL", "https://app.wingview.com"), Version: version, MapTiles: tiles, LiveKey: liveKey(token)}, log)
 	if err != nil {
 		return err
 	}
@@ -161,4 +162,12 @@ func run(log *slog.Logger) error {
 		}
 	}
 	return err
+}
+
+// liveKey signs the flight pages' live-refresh URLs. It is derived from the
+// API token, which every instance already shares, so a URL one instance
+// signs verifies on any other; the token cannot be recovered from it.
+func liveKey(apiToken string) []byte {
+	k := sha256.Sum256([]byte("wingview live-refresh v1\x00" + apiToken))
+	return k[:]
 }

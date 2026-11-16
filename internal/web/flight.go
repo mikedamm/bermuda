@@ -29,6 +29,7 @@ type FlightPageV struct {
 	Facts       []Fact
 	SameRoute   []FlightLink
 	AppURL      string
+	Updated     TimeCell // when the live parts were read
 }
 
 type Fact struct{ Label, Value, URL string }
@@ -157,7 +158,7 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 
 	v := FlightPageV{
 		Ident: canon, Number: featured.Number, Airline: featured.Airline, AirlineURL: featured.AirlineURL,
-		Featured: featured, History: legs, Days: flightHistoryDays,
+		Featured: featured, History: legs, Days: flightHistoryDays, Updated: timeCell(now, "UTC", ""),
 	}
 	if al, _, ok := store.AirlineCallsign(canon); ok {
 		v.AirlineICAO = al
@@ -190,6 +191,9 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 	p.Query = v.Number
 	if v.AppURL != "" {
 		p.AppURL, p.AppLabel = v.AppURL, "Follow this flight live"
+	}
+	if live != nil && featured.Phase != "arrived" && featured.Phase != "cancelled" {
+		p.Live = s.liveURL(live.FlightID, now)
 	}
 	p.Crumbs = []Crumb{{"Home", "/"}}
 	if v.AirlineURL != "" {

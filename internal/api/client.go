@@ -100,6 +100,22 @@ func (c *Client) AirportTraffic(ctx context.Context, code string, radiusMi int) 
 	return get[AirportTraffic](ctx, c, "/airports/"+url.PathEscape(code)+"/aircraft", v, ttlAirport)
 }
 
+// FlightLive is one flight's real-time state, read from the gateway's
+// memory in milliseconds. It is not cached here (the caller shares what it
+// renders from it) and never written to the shared store: it is stale in
+// seconds. A closed flight is ErrNotFound.
+func (c *Client) FlightLive(ctx context.Context, flightID string) (*LiveAnswer, error) {
+	body, err := c.fetch(ctx, "/flights/"+url.PathEscape(flightID)+"/live")
+	if err != nil {
+		return nil, err
+	}
+	var out LiveAnswer
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("%w: decode: %v", ErrUpstream, err)
+	}
+	return &out, nil
+}
+
 // FreshAirportTraffic bypasses both caches (the crawler wants a new sweep).
 func (c *Client) FreshAirportTraffic(ctx context.Context, code string, radiusMi int) (*AirportTraffic, error) {
 	v := url.Values{"radius_mi": {strconv.Itoa(radiusMi)}}

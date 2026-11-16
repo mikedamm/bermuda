@@ -304,3 +304,14 @@ type AirportTraffic struct {
 	Count    int              `json:"count"`
 	Aircraft []NearbyAircraft `json:"aircraft"`
 }
+
+// LiveAnswer is GET /flights/{id}/live: the flight block is the flight
+// summary, read from the gateway's memory. A key with no live flight has
+// Live false and Flight nil.
+type LiveAnswer struct {
+	Key    string         `json:"key"`
+	Kind   string         `json:"kind"`
+	At     time.Time      `json:"at"`
+	Live   bool           `json:"live"`
+	Flight *FlightSummary `json:"flight"`
+}
