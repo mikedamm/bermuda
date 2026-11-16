@@ -29,7 +29,8 @@ One Go binary, standard library only.
   learns, plus everything pages render, goes into an index that feeds the
   sitemaps, airline pages and internal links. The index is snapshotted to
   `DATA_DIR` (a persistent volume) every 5 minutes and on shutdown.
-- **Maps** are interactive MapLibre GL JS maps over WingView's own
+- **Maps** are fixed MapLibre GL JS maps (no pan, zoom or controls; pins
+  and aircraft link to their pages) over WingView's own
   Protomaps basemap, a PMTiles archive the browser reads by HTTP range
   requests (`MAP_TILES`, default `https://i.wvcdn.com/v4.pmtiles`). MapLibre,
   the pmtiles protocol and the label glyphs are self-hosted under

@@ -1,4 +1,4 @@
-// WingView flight pages: draws each page's interactive map from the data the
+// WingView flight pages: draws each page's map from the data the
 // server embedded next to it, with MapLibre GL JS over WingView's Protomaps
 // basemap (a PMTiles archive read by HTTP range requests). Everything else
 // on the page works without this script.
@@ -42,14 +42,17 @@
 		const map = new ml.Map({
 			container: el.querySelector(".map-canvas"),
 			style,
-			cooperativeGestures: true,
+			// fixed: the server frames each map, so it does not pan or zoom
+			// (and never catches the page's scroll on a phone); pins and
+			// aircraft still take clicks, they link to their pages
+			dragPan: false, scrollZoom: false, boxZoom: false, doubleClickZoom: false,
+			touchZoomRotate: false, dragRotate: false, touchPitch: false, keyboard: false,
 			fadeDuration: 0,
 			maxZoom: 14,
 			attributionControl: { compact: true },
 			center: data.focus || [-40, 30],
 			zoom: data.focus ? data.zoom || 7 : 1.5,
 		});
-		map.addControl(new ml.NavigationControl({ showCompass: false }), "top-right");
 		foldCredit(map, el);
 
 		// the camera frames the route between the docked panel and the right
@@ -65,7 +68,10 @@
 			const end = col.getBoundingClientRect().right - parseFloat(getComputedStyle(col).paddingRight);
 			// 64 px inside the column leaves room for a pin's label, which sits to its right
 			const right = Math.max(64, Math.min(box.right - end + 64, el.clientWidth - left - 240));
-			return { top: 56, bottom: 56, left, right };
+			// the panels below rise over the map's faded foot: keep the route above it
+			const below = el.closest(".stage").nextElementSibling;
+			const rise = below ? Math.max(0, box.bottom - below.getBoundingClientRect().top) : 0;
+			return { top: 56, bottom: rise + 80, left, right };
 		};
 		const bounds = (pts) => pts.reduce((b, c) => b.extend(c), new ml.LngLatBounds(pts[0], pts[0]));
 		const coords = [];

@@ -245,8 +245,8 @@ A two-blue brand on cool neutrals, with three solid state colours that do all th
 A single content column, max 1240px with a 20px gutter (16px under 900px), set between full-bleed bands.
 
 - **Shell, top to bottom:** white masthead (64px: logo at 140px, search up to 460px, nav and the app button pushed right), navy title band (name, airline or owner line, codes; status label and update time aligned to the bottom right), map stage, paper content area, white breadcrumb bar, deep-navy footer.
-- **Stage:** the map fills the stage absolutely (min 560px); the dock sits in normal flow inside the content column, 20px from the top, so the stage grows with the dock and nothing in it is ever clipped or scrolled. 360px wide for flights, 400px for search.
-- **Below the stage:** a main column plus a 340px side column at 1000px and up; 20px gaps between panels; 24px above, 48px below.
+- **Stage:** the map fills the stage absolutely (min 560px); the dock sits in normal flow inside the content column, 20px from the top, so the stage grows with the dock and nothing in it is ever clipped or scrolled. 360px wide for flights, 400px for search. The map is fixed: no pan, zoom or controls, framed by the server between the dock and the right edge of the content column; pins and aircraft link to their pages. At 900px and up the panels below rise 56px into the stage, and the map's last 176px fade into the paper behind them (no hairline under the stage); the map credit sits above the overlap.
+- **Below the stage:** a main column plus a 340px side column at 1000px and up; 20px gaps between panels; 24px above (at 900px and up, 56px into the stage's fade instead), 48px below.
 - **Under 900px:** the masthead wraps and the search takes a full row; secondary nav links hide, the app button stays (34px). The map becomes a 320px block in flow and the dock drops below it, full width, square-cornered, no shadow, divided by a bottom rule.
 - **Under 640px:** panels go edge to edge (no side borders, no radius). Data grids drop their header row and reflow each row into a small labelled grid: four columns, or three for five-field rows; only times, durations, altitude, distance and last-seen get an 11px muted caption, since date, aircraft, route and status read on their own. The scheduled-versus-actual table keeps its table form at 12.5px.
 - **Rhythm:** 8px row padding, 14px cell and panel insets, 16px dock inset, 20px gutters and gaps, 24px section breaks.
@@ -257,7 +257,6 @@ Flat by default, ruled with hairlines. Depth appears only where something genuin
 
 ### Shadow Vocabulary
 - **Dock float** (`box-shadow: 0 10px 30px rgb(16 31 51 / 0.22), 0 1px 3px rgb(16 31 51 / 0.16)`): the flight panel over the map. Removed when the dock moves below the map.
-- **Map control** (`box-shadow: 0 1px 4px rgb(16 31 51 / 0.2)`): MapLibre zoom controls.
 - **Marker halo** (`drop-shadow(0 0 1.5px #fff) drop-shadow(0 1px 2px rgb(0 47 100 / 0.4))`): plane glyphs over the basemap, for legibility only.
 
 ### Named Rules

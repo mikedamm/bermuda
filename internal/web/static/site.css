@@ -157,6 +157,32 @@ time, .num { font-variant-numeric: tabular-nums; }
 .dock-note, .dock-flight { margin-bottom: 12px; font-size: 14px; }
 .dock-flight a { font-weight: 700; }
 
+/* on wide screens the panels below rise into the map, whose last stretch
+   fades into the paper behind them. The stage grows by the overlap, so
+   nothing below moves and the dock keeps its gap to the panels. */
+@media (min-width: 900px) {
+	:root { --tuck: 56px; } /* how far the panels rise into the map; the stage and the panels both read it */
+	.stage:not(.stage-bare) { isolation: isolate; min-height: calc(var(--stage) + var(--tuck)); border-bottom: 0; }
+	.stage:not(.stage-bare) .stage-wrap { padding-bottom: calc(44px + var(--tuck)); }
+	/* positioned, so the panels paint over the stage (also positioned) they overlap */
+	.stage:not(.stage-bare) + .cols { position: relative; margin-top: calc(-1 * var(--tuck)); padding-top: 0; }
+	/* above the map, below its controls (z-index 2) and the dock */
+	.stage-map::after {
+		content: ""; position: absolute; inset: auto 0 0; z-index: 1;
+		height: calc(var(--tuck) + 120px); pointer-events: none;
+		background: linear-gradient(to bottom,
+			color-mix(in srgb, var(--paper) 0%, transparent),
+			color-mix(in srgb, var(--paper) 6%, transparent) 20%,
+			color-mix(in srgb, var(--paper) 20%, transparent) 40%,
+			color-mix(in srgb, var(--paper) 45%, transparent) 60%,
+			color-mix(in srgb, var(--paper) 72%, transparent) 76%,
+			color-mix(in srgb, var(--paper) 92%, transparent) 90%,
+			var(--paper));
+	}
+	/* the credit stays above the panels, where it can be read and reopened */
+	.stage .maplibregl-ctrl-bottom-right, .stage .maplibregl-ctrl-bottom-left { bottom: var(--tuck); }
+}
+
 .stage-bare { min-height: 0; background: none; border: 0; }
 .stage-bare .stage-wrap { padding-bottom: 0; }
 .stage-bare .dock { width: auto; max-width: 560px; box-shadow: none; border: 1px solid var(--line); }
@@ -313,7 +339,8 @@ a.mk-pin:hover b { color: var(--link); text-decoration: underline; }
 .mk-plane-sm { display: block; width: 22px; height: 22px; color: var(--navy); z-index: 1; filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 1px 2px rgb(0 47 100 / 0.35)); }
 .mk-plane-sm .i { width: 100%; height: 100%; }
 a.mk-plane-sm:hover { color: var(--link); }
-.maplibregl-ctrl-group { border-radius: 4px !important; box-shadow: 0 1px 4px rgb(16 31 51 / 0.2) !important; }
+/* the map is fixed: no grab hand (site.js sets a pointer over links) */
+.map .maplibregl-canvas-container.maplibregl-interactive { cursor: default; }
 /* The map credit: quiet, and legible until it has been on screen for five
    seconds (OSM's attribution guideline); then site.js fades it over two
    seconds and folds it to the (i) button, which opens it again.
