@@ -7,7 +7,6 @@
 #   WV_API_TOKEN      internal API token (key `web` of the gateway-internal secret)
 #   WV_API_BASE       internal API base URL, ending in /internal/v1
 #   IMAGE_TAG         image tag to start from on first create (a commit SHA CI pushed)
-#   MAPBOX_TOKEN      Mapbox public token (pk.); optional, maps fall back to SVG
 #
 # Optional: APP_NAME (wingview-seo), REGION (SIL, next to the API in Fremont),
 # SITE_URL (https://www.wingview.com), REGISTRY_ID (Bunny registry holding
@@ -36,9 +35,9 @@ call() {
 # send METHOD PATH JSON: the body goes over stdin
 send() { printf '%s' "$3" | call "$1" "$2" --data-binary @-; }
 
-export WV_API_TOKEN MAPBOX_TOKEN=${MAPBOX_TOKEN:-}
+export WV_API_TOKEN
 env_obj=$(jq -n --arg base "$WV_API_BASE" --arg site "$SITE_URL" '{
-	WV_API_BASE: $base, WV_API_TOKEN: $ENV.WV_API_TOKEN, SITE_URL: $site, MAPBOX_TOKEN: $ENV.MAPBOX_TOKEN,
+	WV_API_BASE: $base, WV_API_TOKEN: $ENV.WV_API_TOKEN, SITE_URL: $site,
 	APP_URL: "https://app.wingview.com", DATA_DIR: "/data", GOMAXPROCS: "2", LOG_LEVEL: "info"
 }')
 
@@ -74,9 +73,16 @@ if [[ -z $id ]]; then
 	call POST "/apps/$id/deploy" >/dev/null
 	echo "deploy requested" >&2
 else
-	cid=$(call GET "/apps/$id" | jq -r '.containerTemplates[] | select(.name == "web") | .id')
-	send PUT "/apps/$id/containers/$cid/env" "$env_obj" >/dev/null
-	echo "updated environment of app $id" >&2
+	app=$(call GET "/apps/$id")
+	cid=$(printf '%s' "$app" | jq -r '.containerTemplates[] | select(.name == "web") | .id')
+	# The env endpoint replaces everything, and Bunny adds variables of its own
+	# (BUNNY_DATABASE_* for an attached database). Keep every variable this
+	# script does not own, drop retired ones, then apply ours. Both documents
+	# travel over stdin: they hold secrets.
+	merged=$( { printf '%s' "$app" | jq -c '[.containerTemplates[] | select(.name == "web") | .environmentVariables[]? | {(.name): .value}] | add // {}'; printf '\n%s' "$env_obj"; } |
+		jq -sc '(.[0] | del(.MAPBOX_TOKEN)) + .[1]')
+	send PUT "/apps/$id/containers/$cid/env" "$merged" >/dev/null
+	echo "updated environment of app $id (kept: $(printf '%s' "$merged" | jq -r --argjson ours "$(printf '%s' "$env_obj" | jq -c 'keys')" 'keys - $ours | join(", ")'))" >&2
 fi
 
 # The endpoint's pull zone ships with defaults that defeat this site: it drops

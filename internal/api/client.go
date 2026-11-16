@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/mikedamm/bermuda/internal/cache"
@@ -32,6 +33,31 @@ type Client struct {
 	sem   chan struct{}
 	cache *cache.Cache
 	log   *slog.Logger
+	l2    Store         // shared second tier (Bunny Database); nil when not configured
+	l2w   chan struct{} // bounds background writes to it
+	stats struct{ hits, misses, errors, writes, writeErrors atomic.Int64 }
+}
+
+// Store is a shared cache under the in-memory one: answers kept by key with
+// the upstream status (200, 404 or 400) until they expire.
+type Store interface {
+	Get(ctx context.Context, key string) (status int, body []byte, expires time.Time, ok bool, err error)
+	Put(ctx context.Context, key string, status int, body []byte, expires time.Time) error
+}
+
+// UseStore adds the shared cache tier.
+func (c *Client) UseStore(s Store) {
+	c.l2 = s
+	c.l2w = make(chan struct{}, 8)
+}
+
+// Stats reports the shared tier's hit rate since start.
+func (c *Client) Stats() map[string]int64 {
+	if c.l2 == nil {
+		return nil
+	}
+	return map[string]int64{"hits": c.stats.hits.Load(), "misses": c.stats.misses.Load(), "errors": c.stats.errors.Load(),
+		"writes": c.stats.writes.Load(), "write_errors": c.stats.writeErrors.Load()}
 }
 
 func New(base, token string, maxConcurrent int, log *slog.Logger) *Client {
@@ -74,12 +100,16 @@ func (c *Client) AirportTraffic(ctx context.Context, code string, radiusMi int) 
 	return get[AirportTraffic](ctx, c, "/airports/"+url.PathEscape(code)+"/aircraft", v, ttlAirport)
 }
 
-// FreshAirportTraffic bypasses the cache (the crawler wants a new sweep).
+// FreshAirportTraffic bypasses both caches (the crawler wants a new sweep).
 func (c *Client) FreshAirportTraffic(ctx context.Context, code string, radiusMi int) (*AirportTraffic, error) {
-	var out AirportTraffic
 	v := url.Values{"radius_mi": {strconv.Itoa(radiusMi)}}
-	if err := c.fetch(ctx, "/airports/"+url.PathEscape(code)+"/aircraft?"+v.Encode(), &out); err != nil {
+	body, err := c.fetch(ctx, "/airports/"+url.PathEscape(code)+"/aircraft?"+v.Encode())
+	if err != nil {
 		return nil, err
+	}
+	var out AirportTraffic
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("%w: decode: %v", ErrUpstream, err)
 	}
 	return &out, nil
 }
@@ -91,24 +121,104 @@ func get[T any](ctx context.Context, c *Client, path string, q url.Values, ttl t
 		// must not cancel it for the rest.
 		lctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
 		defer cancel()
-		var out T
-		err := c.fetch(lctx, key, &out)
+
+		// second tier: an answer another instance (or this one before a
+		// restart) already fetched
+		if out, left, hit, err := fromStore[T](lctx, c, key, ttl); hit {
+			return out, left, err
+		}
+
+		body, err := c.fetch(lctx, key)
 		switch {
-		case errors.Is(err, ErrNotFound), errors.Is(err, ErrBadRequest):
+		case errors.Is(err, ErrNotFound):
+			c.store(key, http.StatusNotFound, nil, ttlMissing)
 			return nil, ttlMissing, err // remember misses, they are common bot traffic
+		case errors.Is(err, ErrBadRequest):
+			c.store(key, http.StatusBadRequest, nil, ttlMissing)
+			return nil, ttlMissing, err
 		case err != nil:
 			return nil, 0, err
 		}
+		var out T
+		if err := json.Unmarshal(body, &out); err != nil {
+			return nil, 0, fmt.Errorf("%w: decode: %v", ErrUpstream, err)
+		}
+		c.store(key, http.StatusOK, body, ttl)
 		return &out, ttl, nil
 	})
 }
 
-func (c *Client) fetch(ctx context.Context, pathAndQuery string, out any) error {
+// fromStore reads the shared tier within a short budget: a slow or failing
+// database is a miss, never a slow page.
+// A hit returns the stored answer, or the stored ErrNotFound/ErrBadRequest.
+func fromStore[T any](ctx context.Context, c *Client, key string, ttl time.Duration) (out *T, left time.Duration, hit bool, err error) {
+	if c.l2 == nil {
+		return nil, 0, false, nil
+	}
+	dctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	status, body, expires, ok, rerr := c.l2.Get(dctx, key)
+	switch {
+	case rerr != nil:
+		c.stats.errors.Add(1)
+		c.log.Debug("cache read failed", "key", key, "err", rerr)
+		return nil, 0, false, nil
+	case !ok:
+		c.stats.misses.Add(1)
+		return nil, 0, false, nil
+	}
+	left = time.Until(expires)
+	switch status {
+	case http.StatusOK:
+		var v T
+		if json.Unmarshal(body, &v) != nil {
+			c.stats.errors.Add(1)
+			return nil, 0, false, nil
+		}
+		c.stats.hits.Add(1)
+		return &v, min(left, ttl), true, nil
+	case http.StatusNotFound:
+		c.stats.hits.Add(1)
+		return nil, min(left, ttlMissing), true, ErrNotFound
+	case http.StatusBadRequest:
+		c.stats.hits.Add(1)
+		return nil, min(left, ttlMissing), true, ErrBadRequest
+	}
+	return nil, 0, false, nil
+}
+
+// store writes an answer to the shared tier in the background; when writes
+// back up, new ones are dropped rather than queued.
+func (c *Client) store(key string, status int, body []byte, ttl time.Duration) {
+	if c.l2 == nil {
+		return
+	}
+	select {
+	case c.l2w <- struct{}{}:
+	default:
+		return
+	}
+	go func() {
+		defer func() { <-c.l2w }()
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := c.l2.Put(ctx, key, status, body, time.Now().Add(ttl)); err != nil {
+			c.stats.writeErrors.Add(1)
+			c.log.Debug("cache write failed", "key", key, "err", err)
+			return
+		}
+		c.stats.writes.Add(1)
+	}()
+}
+
+// fetch returns the upstream body of a 200, or ErrNotFound, ErrBadRequest
+// or ErrUpstream (after one retry).
+func (c *Client) fetch(ctx context.Context, pathAndQuery string) ([]byte, error) {
 	select {
 	case c.sem <- struct{}{}:
 		defer func() { <-c.sem }()
 	case <-ctx.Done():
-		return fmt.Errorf("%w: %v", ErrUpstream, ctx.Err())
+		return nil, fmt.Errorf("%w: %v", ErrUpstream, ctx.Err())
 	}
 	var lastErr error
 	for attempt := range 2 {
@@ -116,48 +226,45 @@ func (c *Client) fetch(ctx context.Context, pathAndQuery string, out any) error 
 			select {
 			case <-time.After(400 * time.Millisecond):
 			case <-ctx.Done():
-				return fmt.Errorf("%w: %v", ErrUpstream, ctx.Err())
+				return nil, fmt.Errorf("%w: %v", ErrUpstream, ctx.Err())
 			}
 		}
 		start := time.Now()
-		err := c.once(ctx, pathAndQuery, out)
+		body, err := c.once(ctx, pathAndQuery)
 		c.log.Debug("api", "path", pathAndQuery, "ms", time.Since(start).Milliseconds(), "err", err)
 		if err == nil || errors.Is(err, ErrNotFound) || errors.Is(err, ErrBadRequest) {
-			return err
+			return body, err
 		}
 		lastErr = err
 	}
 	c.log.Warn("api failed", "path", pathAndQuery, "err", lastErr)
-	return lastErr
+	return nil, lastErr
 }
 
-func (c *Client) once(ctx context.Context, pathAndQuery string, out any) error {
+func (c *Client) once(ctx context.Context, pathAndQuery string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+pathAndQuery, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "wingview-seo/1")
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUpstream, err)
+		return nil, fmt.Errorf("%w: %v", ErrUpstream, err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUpstream, err)
+		return nil, fmt.Errorf("%w: %v", ErrUpstream, err)
 	}
 	switch {
 	case resp.StatusCode == http.StatusNotFound:
-		return ErrNotFound
+		return nil, ErrNotFound
 	case resp.StatusCode == http.StatusBadRequest:
-		return ErrBadRequest
+		return nil, ErrBadRequest
 	case resp.StatusCode != http.StatusOK:
-		return fmt.Errorf("%w: status %d", ErrUpstream, resp.StatusCode)
+		return nil, fmt.Errorf("%w: status %d", ErrUpstream, resp.StatusCode)
 	}
-	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("%w: decode: %v", ErrUpstream, err)
-	}
-	return nil
+	return body, nil
 }

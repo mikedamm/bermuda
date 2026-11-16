@@ -37,20 +37,30 @@ on port 8080, and 1 instance. One instance keeps one index, so sitemaps stay
 consistent; the CDN serves stale pages through restarts.
 
 ```sh
-BUNNYNET_API_KEY=… WV_API_TOKEN=… WV_API_BASE=https://…/internal/v1 MAPBOX_TOKEN=pk.… \
+BUNNYNET_API_KEY=… WV_API_TOKEN=… WV_API_BASE=https://…/internal/v1 \
 IMAGE_TAG=<sha CI pushed> ./deploy/provision.sh
 # → BUNNY_APP_ID=…  BUNNY_HOST=…   (set both as repository variables)
 ```
 
 Rotating the internal API token: update it in the gateway (INTERNAL-API.md),
 then rerun `provision.sh` with the new `WV_API_TOKEN`. It replaces the
-container's whole environment (so pass `MAPBOX_TOKEN` too) and the app restarts.
+container's environment and the app restarts. The script merges: variables
+it does not own, such as the `BUNNY_DATABASE_*` ones Bunny adds for the
+attached database, are kept.
 
-The Mapbox token is public by design (every browser receives it). It is
-restricted by URL in the Mapbox account to www.wingview.com, app.wingview.com
-and the container hostname; requests from anywhere else, localhost included,
-get 403 for tiles. Mapbox bills per map load: the script skips crawlers, and
-each page view of a flight, aircraft, airport or airline page is one load.
+## Maps and the shared cache
+
+- **Basemap:** `https://i.wvcdn.com/v4.pmtiles` (Protomaps v4, on the `adsb`
+  pull zone, id 5676314). Browsers read it cross-origin by range requests, so
+  that zone's CORS extension list must include `pmtiles` (added 2026-11-16).
+  Remove it and every map goes blank while the pages keep working. Override
+  the archive with `MAP_TILES`.
+- **Shared API cache:** the Bunny Database `wv-seo-cache` is attached to the
+  app; Bunny injects `BUNNY_DATABASE_URL` and `BUNNY_DATABASE_AUTH_TOKEN`.
+  Table `api_cache` holds gzip-compressed API answers until they expire;
+  the app creates it on start and prunes expired rows every 10 minutes.
+  Losing the database costs only speed: reads fall back to the API.
+  `/statusz` shows `api_cache` hits, misses and errors.
 
 ## Serving from www.wingview.com
 

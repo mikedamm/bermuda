@@ -10,7 +10,9 @@
 //	DATA_DIR      where the discovery index is snapshotted         (optional; a persistent volume)
 //	CRAWL         "0" disables the background crawler              (default on)
 //	LOG_LEVEL     debug, info, warn                                (default info)
-//	MAPBOX_TOKEN  Mapbox public token for interactive maps          (optional; SVG maps without it)
+//	BUNNY_DATABASE_URL, BUNNY_DATABASE_AUTH_TOKEN
+//	              shared cache for API answers (set by Bunny on the app; optional)
+//	MAP_TILES     PMTiles basemap for the interactive maps           (default https://i.wvcdn.com/v4.pmtiles; "off" draws SVG maps)
 package main
 
 import (
@@ -26,6 +28,7 @@ import (
 	_ "time/tzdata" // airport local times in a scratch image
 
 	"github.com/mikedamm/bermuda/internal/api"
+	"github.com/mikedamm/bermuda/internal/dbcache"
 	"github.com/mikedamm/bermuda/internal/store"
 	"github.com/mikedamm/bermuda/internal/web"
 )
@@ -41,6 +44,40 @@ func main() {
 		log.Error("fatal", "err", err)
 		os.Exit(1)
 	}
+}
+
+// openCache connects the Bunny Database tier, creates its table, and prunes
+// expired answers every ten minutes for as long as ctx lives.
+func openCache(ctx context.Context, url, token string, log *slog.Logger) (*dbcache.DB, error) {
+	db, err := dbcache.Open(url, token)
+	if err != nil {
+		return nil, err
+	}
+	ictx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := db.Init(ictx); err != nil {
+		return nil, err
+	}
+	go func() {
+		t := time.NewTicker(10 * time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				pctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				n, err := db.Prune(pctx, 5000)
+				cancel()
+				if err != nil {
+					log.Warn("cache prune failed", "err", err)
+				} else if n > 0 {
+					log.Info("cache pruned", "rows", n)
+				}
+			}
+		}
+	}()
+	return db, nil
 }
 
 func env(k, def string) string {
@@ -59,6 +96,14 @@ func run(log *slog.Logger) error {
 	defer stop()
 
 	client := api.New(base, token, 24, log)
+	if dbURL, dbToken := os.Getenv("BUNNY_DATABASE_URL"), os.Getenv("BUNNY_DATABASE_AUTH_TOKEN"); dbURL != "" && dbToken != "" {
+		if db, err := openCache(ctx, dbURL, dbToken, log); err != nil {
+			log.Warn("shared API cache unavailable; using memory only", "err", err)
+		} else {
+			client.UseStore(db)
+			log.Info("shared API cache on")
+		}
+	}
 	idx := store.NewIndex()
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir != "" {
@@ -81,7 +126,11 @@ func run(log *slog.Logger) error {
 		cr.Run(ctx)
 	}
 
-	srv, err := web.New(client, idx, web.Config{SiteURL: site, AppURL: env("APP_URL", "https://app.wingview.com"), Version: version, MapboxToken: os.Getenv("MAPBOX_TOKEN")}, log)
+	tiles := env("MAP_TILES", "https://i.wvcdn.com/v4.pmtiles")
+	if tiles == "off" {
+		tiles = ""
+	}
+	srv, err := web.New(client, idx, web.Config{SiteURL: site, AppURL: env("APP_URL", "https://app.wingview.com"), Version: version, MapTiles: tiles}, log)
 	if err != nil {
 		return err
 	}

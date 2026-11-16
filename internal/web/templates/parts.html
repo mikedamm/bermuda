@@ -3,8 +3,8 @@
 {{/* a top-down airliner, nose up; rotated by heading where it is used */}}
 {{define "icon-plane"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1.6c.9 0 1.5 1 1.5 2.3v5.3l8 4.6v2.1l-8-2.4v4.6l2.4 1.8v1.7L12 20.6l-3.9 1v-1.7l2.4-1.8v-4.6l-8 2.4v-2.1l8-4.6V3.9c0-1.3.6-2.3 1.5-2.3Z"/></svg>{{end}}
 
-{{/* The map: an interactive Mapbox map drawn by site.js from the embedded
-     data, or the server's SVG when no token is configured. */}}
+{{/* The map: an interactive MapLibre map drawn by site.js from the embedded
+     data, or the server's SVG when no tiles are configured. */}}
 {{define "map"}}{{with .}}{{if .JSON}}<div class="map" data-map role="region" aria-label="{{.Label}}"><div class="map-canvas"></div><script type="application/json">{{.JSON}}</script></div>{{else if .SVG}}<div class="map map-static" role="img" aria-label="{{.Label}}">{{with .SVG}}<div class="map-box" style="aspect-ratio:{{.W}}/{{.H}}">{{svg .SVG}}{{range .Markers}}{{if eq .Kind "plane"}}<span class="mk-plane" style="left:{{pct .X}};top:{{pct .Y}};--r:{{rot .Rot}}">{{template "icon-plane"}}</span>{{else}}<span class="mk-pin{{if eq .Kind "pin primary"}} mk-main{{end}} at-{{.LabelAt}}" style="left:{{pct .X}};top:{{pct .Y}}"><i></i>{{if .Label}}<b>{{.Label}}</b>{{end}}</span>{{end}}{{end}}</div>{{end}}</div>{{end}}{{end}}{{end}}
 
 {{define "band-status"}}<p class="status s-{{.Class}}"><strong>{{.Title}}</strong>{{with .Detail}} <span>{{.}}</span>{{end}}</p>{{end}}

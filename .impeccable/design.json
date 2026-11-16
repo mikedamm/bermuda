@@ -496,7 +496,7 @@
 			{
 				"name": "map-control",
 				"value": "0 1px 4px rgb(16 31 51 / 0.2)",
-				"purpose": "Mapbox zoom controls."
+				"purpose": "MapLibre zoom controls."
 			},
 			{
 				"name": "marker-halo",
@@ -541,7 +541,7 @@
 			"mobileMap": "320px"
 		},
 		"map": {
-			"basemap": "mapbox://styles/mapbox/light-v11, repainted on style.load",
+			"basemap": "Protomaps v4 PMTiles (i.wvcdn.com/v4.pmtiles) with static/map-style.json, generated from @protomaps/basemaps light in the WingView palette",
 			"paint": {
 				"land": "#f3f6fa",
 				"water": "#cadff2",
@@ -651,7 +651,7 @@
 	],
 	"narrative": {
 		"northStar": "The Tracker Desk",
-		"overview": "The pages play the flight-tracker category straight, in the convention FlightAware and Flightradar24 set: a live map leads, a white panel docked over it answers status at a glance, and dense ruled tables carry the depth underneath. Nothing is staged for effect. The page is an instrument a traveler reads in five seconds on a phone and an enthusiast reads for five minutes on a desktop, and both read the same surfaces.\n\nThe identity is WingView's own, bound by the brand: the window-and-wing logo, navy (#002f64) as the structural colour (title band, table headers, codes and times), sky (#229cf8) as the live and forward colour (route ahead, the subject airport, the app button), and Inter at UI sizes with tabular numerals. The ground is a cool paper grey; panels are white with hairline rules and small 4px corners. State is carried by solid, saturated status bands, never by decoration.\n\nDensity is high and deliberate. Type stays between 12px and 32px; the largest thing on a page is a three-letter airport code. The map is the only image, and it is tinted into the palette rather than left in Mapbox's defaults.",
+		"overview": "The pages play the flight-tracker category straight, in the convention FlightAware and Flightradar24 set: a live map leads, a white panel docked over it answers status at a glance, and dense ruled tables carry the depth underneath. Nothing is staged for effect. The page is an instrument a traveler reads in five seconds on a phone and an enthusiast reads for five minutes on a desktop, and both read the same surfaces.\n\nThe identity is WingView's own, bound by the brand: the window-and-wing logo, navy (#002f64) as the structural colour (title band, table headers, codes and times), sky (#229cf8) as the live and forward colour (route ahead, the subject airport, the app button), and Inter at UI sizes with tabular numerals. The ground is a cool paper grey; panels are white with hairline rules and small 4px corners. State is carried by solid, saturated status bands, never by decoration.\n\nDensity is high and deliberate. Type stays between 12px and 32px; the largest thing on a page is a three-letter airport code. The map is the only image, and it is tinted into the palette rather than left in the basemap's defaults.",
 		"keyCharacteristics": [
 			"White masthead, navy title band, full-bleed map stage, paper ground below.",
 			"One docked flight panel with a status band welded to its top edge.",

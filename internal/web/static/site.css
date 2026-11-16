@@ -139,7 +139,7 @@ time, .num { font-variant-numeric: tabular-nums; }
    grows with the dock and nothing in it is ever clipped or scrolled */
 .stage { position: relative; min-height: var(--stage); background: var(--ocean); border-bottom: 1px solid var(--line); }
 .stage-map, .map { position: absolute; inset: 0; }
-/* Mapbox sets its container to position: relative, so size it, don't pin it */
+/* MapLibre sets its container to position: relative, so size it, don't pin it */
 .map-canvas { width: 100%; height: 100%; }
 .map, .map-canvas { background: var(--ocean); }
 .stage-wrap { position: relative; padding-block: 20px; pointer-events: none; }
@@ -310,10 +310,10 @@ a.mk-pin:hover b { color: var(--link); text-decoration: underline; }
 .mk-plane-sm { display: block; width: 22px; height: 22px; color: var(--navy); z-index: 1; filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 1px 2px rgb(0 47 100 / 0.35)); }
 .mk-plane-sm .i { width: 100%; height: 100%; }
 a.mk-plane-sm:hover { color: var(--link); }
-.mapboxgl-ctrl-group { border-radius: 4px !important; box-shadow: 0 1px 4px rgb(16 31 51 / 0.2) !important; }
-.mapboxgl-ctrl-attrib { font-size: 11px; }
+.maplibregl-ctrl-group { border-radius: 4px !important; box-shadow: 0 1px 4px rgb(16 31 51 / 0.2) !important; }
+.maplibregl-ctrl-attrib { font-size: 11px; }
 
-/* server-drawn fallback map (no Mapbox token) */
+/* server-drawn fallback map (no tiles configured) */
 .map-static { overflow: hidden; }
 .map-static .map-box { position: absolute; inset: 0; aspect-ratio: auto !important; }
 .map-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }

@@ -29,13 +29,23 @@ One Go binary, standard library only.
   learns, plus everything pages render, goes into an index that feeds the
   sitemaps, airline pages and internal links. The index is snapshotted to
   `DATA_DIR` (a persistent volume) every 5 minutes and on shutdown.
-- **Maps** are interactive Mapbox GL JS maps (light basemap tinted to the
-  brand). The server computes everything they draw (great-circle routes split
-  at the live position, airport pins, range rings, the aircraft and its
-  heading) and embeds it as JSON; `static/site.js` only renders it, loading
-  Mapbox after the page content and never for crawlers. Without
-  `MAPBOX_TOKEN` the server draws the same maps as SVG from embedded Natural
-  Earth data (local development, tests).
+- **Maps** are interactive MapLibre GL JS maps over WingView's own
+  Protomaps basemap, a PMTiles archive the browser reads by HTTP range
+  requests (`MAP_TILES`, default `https://i.wvcdn.com/v4.pmtiles`). MapLibre,
+  the pmtiles protocol and the label glyphs are self-hosted under
+  `static/vendor/`; the style (`static/map-style.json`) is generated from
+  `@protomaps/basemaps` in the WingView palette. The server computes
+  everything the maps draw (great-circle routes split at the live position,
+  airport pins, range rings, live aircraft and their headings) and embeds it
+  as JSON; `static/site.js` only renders it, after the page content and never
+  for crawlers. With `MAP_TILES=off` the server draws SVG maps from embedded
+  Natural Earth data instead (tests).
+- **Shared API cache.** When the app has a Bunny Database attached
+  (`BUNNY_DATABASE_URL`, `BUNNY_DATABASE_AUTH_TOKEN`, set by Bunny), API
+  answers are kept there too, gzip-compressed, under the in-memory cache:
+  shared by every instance and kept across restarts. Reads get 300 ms and
+  fall back to the API; writes happen in the background; expired rows are
+  pruned every 10 minutes. `/statusz` reports its hits and misses.
 - **Upstream protection.** At most 24 concurrent API calls, a 10 s timeout,
   one retry on 5xx, and short TTL caches per endpoint. Not-found answers are
   cached too, because bots probe a lot of nonsense.
@@ -44,6 +54,7 @@ One Go binary, standard library only.
 cmd/site            main: env config, crawler, HTTP server
 internal/api        typed internal-API client + caching
 internal/cache      bounded TTL cache with request coalescing
+internal/dbcache    shared API cache in a Bunny Database (libSQL over HTTP)
 internal/store      discovery index, crawler, snapshots
 internal/geo        embedded airports/basemap, projection, SVG maps
 internal/web        handlers, view models, templates, CSS, map script, sitemaps
@@ -64,7 +75,8 @@ go test ./...
 | `WV_API_BASE`, `WV_API_TOKEN` | internal API (required) |
 | `SITE_URL` | canonical origin used in canonical tags, JSON-LD and sitemaps (required) |
 | `APP_URL` | the app, for "open live" deep links (default `https://app.wingview.com`) |
-| `MAPBOX_TOKEN` | Mapbox public (`pk.`) token for interactive maps; optional, SVG maps without it |
+| `MAP_TILES` | PMTiles basemap for the maps (default `https://i.wvcdn.com/v4.pmtiles`; `off` draws SVG maps) |
+| `BUNNY_DATABASE_URL`, `BUNNY_DATABASE_AUTH_TOKEN` | shared API cache (Bunny Database, libSQL); optional |
 | `DATA_DIR` | snapshot directory for the discovery index (optional) |
 | `CRAWL=0` | disable the crawler; `CRAWL_GAP_MS` (1200) and `RESOLVE_GAP_MS` (2500) set its pace |
 | `PORT`, `LOG_LEVEL` | 8080, info |
@@ -93,7 +105,10 @@ Embedded under `internal/geo/data`, rebuilt by `go run ./tools/gendata -raw DIR`
 airports from [OurAirports](https://ourairports.com/data/) (public domain)
 with time zones from [mwgg/Airports](https://github.com/mwgg/Airports) (MIT),
 and the basemap from [Natural Earth](https://www.naturalearthdata.com/) 1:50m
-(public domain). Inter is under the SIL Open Font License.
+(public domain). Inter is under the SIL Open Font License. Map libraries,
+glyphs and the generated style are listed with their licenses in
+`internal/web/static/vendor/NOTICE.md`; map data is © OpenStreetMap
+contributors via Protomaps, attributed on every map.
 
 ## Share image
 

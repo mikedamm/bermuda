@@ -194,29 +194,51 @@ func TestLADDAircraftShowsNoFlights(t *testing.T) {
 	}
 }
 
-// With a Mapbox token the page embeds map data for site.js and loads it;
-// without one it draws the SVG map and ships no script.
-func TestMapboxMaps(t *testing.T) {
+// With a tiles archive configured the page embeds map data and the
+// self-hosted MapLibre assets for site.js; without one it draws the SVG map
+// and ships no script.
+func TestMapLibreMaps(t *testing.T) {
 	up := fakeAPI(t)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	s, err := New(api.New(up.URL, "test-token", 4, log), store.NewIndex(),
-		Config{SiteURL: "https://www.wingview.com", AppURL: "https://app.wingview.com", MapboxToken: "pk.test"}, log)
+		Config{SiteURL: "https://www.wingview.com", AppURL: "https://app.wingview.com", MapTiles: "https://i.wvcdn.com/v4.pmtiles"}, log)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec := get(t, s.Handler(), "/flight/ASA14")
+	h := s.Handler()
+	rec := get(t, h, "/flight/ASA14")
 	body := rec.Body.String()
-	for _, want := range []string{`data-mapbox="pk.test"`, `data-map role="region"`, `"k":"flown"`, `"k":"ahead"`, `"plane":`, "/site.js"} {
+	for _, want := range []string{`data-map-tiles="https://i.wvcdn.com/v4.pmtiles"`, `data-map-lib="/tracker/static/vendor/maplibre-gl-6.16.0/maplibre-gl.mjs`,
+		`data-map role="region"`, `"k":"flown"`, `"k":"ahead"`, `"plane":`, "/site.js", `<link rel="preconnect" href="https://i.wvcdn.com"`} {
 		if !strings.Contains(body, want) {
-			t.Errorf("mapbox page lacks %q", want)
+			t.Errorf("map page lacks %q", want)
 		}
 	}
-	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "https://api.mapbox.com") || !strings.Contains(csp, "worker-src blob:") {
-		t.Errorf("CSP does not allow Mapbox: %q", csp)
+	csp := rec.Header().Get("Content-Security-Policy")
+	for _, want := range []string{"connect-src 'self' https://i.wvcdn.com", "worker-src 'self' blob:", "script-src 'self';"} {
+		if !strings.Contains(csp, want) {
+			t.Errorf("CSP lacks %q: %q", want, csp)
+		}
+	}
+	if strings.Contains(csp, "mapbox") {
+		t.Errorf("CSP still allows Mapbox: %q", csp)
+	}
+	// vendored libraries are served as JavaScript modules and cached for good
+	lib := get(t, h, "/tracker/static/vendor/maplibre-gl-6.16.0/maplibre-gl-worker.mjs")
+	if lib.Code != 200 || !strings.Contains(lib.Header().Get("Content-Type"), "javascript") || !strings.Contains(lib.Header().Get("Cache-Control"), "immutable") {
+		t.Errorf("worker module: %d %q %q", lib.Code, lib.Header().Get("Content-Type"), lib.Header().Get("Cache-Control"))
+	}
+	glyph := get(t, h, "/tracker/static/vendor/glyphs/Noto%20Sans%20Medium/0-255.pbf")
+	if glyph.Code != 200 || glyph.Body.Len() < 1000 {
+		t.Errorf("glyphs: %d, %d bytes", glyph.Code, glyph.Body.Len())
+	}
+	style := get(t, h, "/tracker/static/map-style.json")
+	if style.Code != 200 || !strings.Contains(style.Body.String(), `"pmtiles://TILES"`) {
+		t.Errorf("style: %d", style.Code)
 	}
 	plain := get(t, testServer(t), "/flight/ASA14").Body.String()
 	if strings.Contains(plain, "site.js") || !strings.Contains(plain, "map-svg") {
-		t.Error("without a token the page must draw the SVG map and load no script")
+		t.Error("without tiles the page must draw the SVG map and load no script")
 	}
 }
 

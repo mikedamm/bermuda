@@ -31,9 +31,24 @@ type Page struct {
 	Site        string
 	Year        int
 	OGImage     string
-	MapToken    string
-	MapboxGL    string
-	Updated     TimeCell // when the data on this page was read
+	Map         *MapAssets // set when interactive maps are on
+	Updated     TimeCell   // when the data on this page was read
+}
+
+// MapAssets is what the page's script needs to draw maps.
+type MapAssets struct {
+	Tiles, TilesOrigin, Style, Lib, CSS, PMTiles, Glyphs string
+}
+
+func (s *Server) mapAssets() *MapAssets {
+	if s.cfg.MapTiles == "" {
+		return nil
+	}
+	return &MapAssets{
+		Tiles: s.cfg.MapTiles, TilesOrigin: s.tilesOrigin,
+		Style: s.staticURL("map-style.json"), Lib: s.staticURL(mapLibreJS), CSS: s.staticURL(mapLibreCSS),
+		PMTiles: s.staticURL(pmtilesJS), Glyphs: Prefix + "/static/" + glyphsPath,
+	}
 }
 
 type Crumb struct {
@@ -45,8 +60,8 @@ func (s *Server) basePage(status int, title, desc, canonicalPath string) Page {
 		Status: status, Title: title, Description: desc,
 		AppURL: s.cfg.AppURL, AppLabel: "Open WingView 3D",
 		Site: s.cfg.SiteURL, Year: time.Now().Year(),
-		OGImage:  s.cfg.SiteURL + s.staticURL("og-default.jpg"),
-		MapToken: s.cfg.MapboxToken, MapboxGL: MapboxGL,
+		OGImage: s.cfg.SiteURL + s.staticURL("og-default.jpg"),
+		Map:     s.mapAssets(),
 		Updated: timeCell(time.Now(), "UTC", ""),
 	}
 	if canonicalPath != "" {

@@ -45,24 +45,30 @@ type Config struct {
 	SiteURL string // canonical origin, no trailing slash
 	AppURL  string // the WingView app, for deep links
 	Version string // build commit, reported by /healthz
-	// MapboxToken is a public (pk.) token. It reaches every browser by design;
-	// restrict it to the site's URLs in the Mapbox account. Empty means maps
-	// are drawn server-side as SVG instead.
-	MapboxToken string
+	// MapTiles is the PMTiles archive the maps draw (a Protomaps v4
+	// basemap); the browser reads it with HTTP range requests, so its host
+	// must send CORS headers. Empty means maps are drawn server-side as SVG.
+	MapTiles string
 }
 
-// MapboxGL is the pinned Mapbox GL JS release the pages load.
-const MapboxGL = "3.34.1"
+// Vendored map libraries, served from versioned folders under static/vendor.
+const (
+	mapLibreJS  = "vendor/maplibre-gl-6.16.0/maplibre-gl.mjs"
+	mapLibreCSS = "vendor/maplibre-gl-6.16.0/maplibre-gl.css"
+	pmtilesJS   = "vendor/pmtiles-4.5.0/pmtiles.js"
+	glyphsPath  = "vendor/glyphs/{fontstack}/{range}.pbf"
+)
 
 type Server struct {
-	api    *api.Client
-	index  *store.Index
-	cfg    Config
-	log    *slog.Logger
-	tpl    map[string]*template.Template
-	pages  *cache.Cache
-	assets map[string]asset // path under /static/ → content
-	host   string           // canonical host
+	api         *api.Client
+	index       *store.Index
+	cfg         Config
+	log         *slog.Logger
+	tpl         map[string]*template.Template
+	pages       *cache.Cache
+	assets      map[string]asset // path under /static/ → content
+	host        string           // canonical host
+	tilesOrigin string           // scheme://host of MapTiles, for the CSP
 }
 
 type asset struct {
@@ -79,6 +85,13 @@ func New(a *api.Client, idx *store.Index, cfg Config, log *slog.Logger) (*Server
 		return nil, fmt.Errorf("bad SITE_URL %q", cfg.SiteURL)
 	}
 	s := &Server{api: a, index: idx, cfg: cfg, log: log, pages: cache.New(5000), host: u.Host}
+	if cfg.MapTiles != "" {
+		t, err := url.Parse(cfg.MapTiles)
+		if err != nil || t.Host == "" {
+			return nil, fmt.Errorf("bad MAP_TILES %q", cfg.MapTiles)
+		}
+		s.tilesOrigin = t.Scheme + "://" + t.Host
+	}
 	if err := s.loadAssets(); err != nil {
 		return nil, err
 	}
@@ -150,6 +163,11 @@ func (s *Server) walkAssets() error {
 // is a path segment, not a query string: CDNs that drop query strings from
 // the cache key (a common default) would otherwise pin old CSS for a year.
 func (s *Server) staticURL(name string) string {
+	if strings.HasPrefix(name, "vendor/") {
+		// versioned by folder name; modules there import their siblings by
+		// relative path, so they must not sit under a per-file hash
+		return Prefix + "/static/" + name
+	}
 	if a, ok := s.assets[name]; ok {
 		return Prefix + "/static/" + a.hash + "/" + name
 	}
@@ -182,6 +200,9 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		st := s.index.Status()
 		st["version"] = s.cfg.Version
+		if c := s.api.Stats(); c != nil {
+			st["api_cache"] = c
+		}
 		json.NewEncoder(w).Encode(st)
 	})
 	// Everything that is not an entity page lives under one prefix, so the
@@ -328,6 +349,9 @@ func (s *Server) canonicalHost(r *http.Request) bool {
 
 func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 	name, cacheFor := r.PathValue("path"), "public, max-age=300"
+	if strings.HasPrefix(name, "vendor/") { // versioned by folder name
+		cacheFor = "public, max-age=31536000, immutable"
+	}
 	if hash, rest, ok := strings.Cut(name, "/"); ok && len(hash) == 10 {
 		if a, ok := s.assets[rest]; ok {
 			name = rest
@@ -360,11 +384,11 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		// Mapbox GL JS needs its script and stylesheet, tile and event
-		// endpoints, and blob: workers (docs.mapbox.com, "CSP directives").
-		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' https://i.wvcdn.com https://api.mapbox.com data: blob:; "+
-			"style-src 'self' 'unsafe-inline' https://api.mapbox.com; script-src 'self' https://api.mapbox.com; font-src 'self'; "+
-			"connect-src 'self' https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com; worker-src blob:; child-src blob:; "+
+		// MapLibre runs from our own origin (module scripts, a blob: module
+		// worker) and reads tiles from the PMTiles host by range requests.
+		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' https://i.wvcdn.com data: blob:; "+
+			"style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; "+
+			"connect-src 'self' "+s.tilesOrigin+"; worker-src 'self' blob:; child-src blob:; "+
 			"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		rec := &statusRecorder{ResponseWriter: w, status: 200}

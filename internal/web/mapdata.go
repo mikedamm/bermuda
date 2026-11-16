@@ -9,9 +9,8 @@ import (
 	"github.com/mikedamm/bermuda/internal/geo"
 )
 
-// MapV is a map as a page embeds it: the data the browser's Mapbox map
-// draws, and, when no Mapbox token is configured (local development, tests),
-// a server-drawn SVG instead.
+// MapV is a map as a page embeds it: the data the browser's MapLibre map
+// draws, and, when no tiles are configured (tests), a server-drawn SVG instead.
 type MapV struct {
 	JSON  template.JS
 	Label string // accessible description of what the map shows
@@ -104,7 +103,7 @@ func (s *Server) legMapV(l LegV, label string) *MapV {
 		d.Plane = &mapPlane{P: pt(l.Pos), H: math.Round(l.Hdg)}
 	}
 	m := &MapV{Label: label}
-	if s.cfg.MapboxToken == "" {
+	if s.cfg.MapTiles == "" {
 		m.SVG = legMap(l, 960, 420)
 		return m
 	}
@@ -119,7 +118,7 @@ func (s *Server) networkMapV(routes []routeCount, plane *mapPlane, label string,
 		return nil
 	}
 	m := &MapV{Label: label}
-	if s.cfg.MapboxToken == "" {
+	if s.cfg.MapTiles == "" {
 		m.SVG = svg()
 		return m
 	}
@@ -170,7 +169,7 @@ type routeCount struct {
 // placeMapV centres on one place with range rings and nearby airports.
 func (s *Server) placeMapV(center geo.LL, code, url string, ringsMi []float64, nearby []AirportV, planes []mapPlane, label string, svg func() *geo.Map) *MapV {
 	m := &MapV{Label: label}
-	if s.cfg.MapboxToken == "" {
+	if s.cfg.MapTiles == "" {
 		m.SVG = svg()
 		return m
 	}
@@ -193,7 +192,7 @@ func (s *Server) pointsMapV(pins []mapPin, planes []mapPlane, label string, svg 
 		return nil
 	}
 	m := &MapV{Label: label}
-	if s.cfg.MapboxToken == "" {
+	if s.cfg.MapTiles == "" {
 		m.SVG = svg()
 		return m
 	}

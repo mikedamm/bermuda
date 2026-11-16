@@ -1,58 +1,65 @@
-// WingView flight pages: draws each page's interactive Mapbox map from the
-// data the server embedded next to it. Everything else on the page works
-// without this script.
+// WingView flight pages: draws each page's interactive map from the data the
+// server embedded next to it, with MapLibre GL JS over WingView's Protomaps
+// basemap (a PMTiles archive read by HTTP range requests). Everything else
+// on the page works without this script.
 (() => {
 	"use strict";
-	const body = document.body;
-	const token = body.dataset.mapbox;
+	const cfg = document.body.dataset;
 	const maps = [...document.querySelectorAll("[data-map]")];
-	if (!token || !maps.length) return;
-	// crawlers read the page without costing a billed map load
+	if (!cfg.mapTiles || !maps.length) return;
+	// crawlers read the page; the map is for people
 	if (/bot|crawl|spider|slurp|facebookexternalhit|embedly|whatsapp|preview/i.test(navigator.userAgent)) return;
 
-	const C = {
-		land: "#f3f6fa", ocean: "#cadff2", park: "#e4eee6", aeroway: "#dde5ef", runway: "#c3cfdd", border: "#9fb2c8",
-		flown: "#0065ad", ahead: "#229cf8", net: "#0065ad", ring: "#0065ad", paper: "#f1f4f8", navy: "#002f64",
-	};
+	const C = { flown: "#0065ad", ahead: "#229cf8", net: "#0065ad", ring: "#0065ad", navy: "#002f64" };
+	const FONT = ["Noto Sans Medium"];
 	const PLANE = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1.6c.9 0 1.5 1 1.5 2.3v5.3l8 4.6v2.1l-8-2.4v4.6l2.4 1.8v1.7L12 20.6l-3.9 1v-1.7l2.4-1.8v-4.6l-8 2.4v-2.1l8-4.6V3.9c0-1.3.6-2.3 1.5-2.3Z"/></svg>';
-
 	// the same airliner as an icon for the map's own symbol layer: navy with a white edge
 	const PLANE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><path fill="#002f64" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round" paint-order="stroke" d="M12 1.6c.9 0 1.5 1 1.5 2.3v5.3l8 4.6v2.1l-8-2.4v4.6l2.4 1.8v1.7L12 20.6l-3.9 1v-1.7l2.4-1.8v-4.6l-8 2.4v-2.1l8-4.6V3.9c0-1.3.6-2.3 1.5-2.3Z"/></svg>';
 
-	const base = `https://api.mapbox.com/mapbox-gl-js/v${body.dataset.mapboxGl}/`;
 	const css = document.createElement("link");
 	css.rel = "stylesheet";
-	css.href = base + "mapbox-gl.css";
+	css.href = cfg.mapCss;
 	document.head.append(css);
-	const lib = document.createElement("script");
-	lib.src = base + "mapbox-gl.js";
-	lib.async = true;
-	lib.onload = () => maps.forEach(draw);
-	document.head.append(lib);
+	const script = (src) => new Promise((ok, fail) => {
+		const s = document.createElement("script");
+		s.src = src;
+		s.onload = ok;
+		s.onerror = fail;
+		document.head.append(s);
+	});
 
-	function draw(el) {
+	Promise.all([import(cfg.mapLib), script(cfg.mapPmtiles), fetch(cfg.mapStyle).then((r) => r.json())])
+		.then(([ml, , style]) => {
+			ml.addProtocol("pmtiles", new pmtiles.Protocol().tile);
+			style.sources.protomaps.url = "pmtiles://" + cfg.mapTiles;
+			style.glyphs = location.origin + cfg.mapGlyphs;
+			maps.forEach((el) => draw(ml, style, el));
+		})
+		.catch((err) => console.warn("map unavailable:", err));
+
+	function draw(ml, style, el) {
 		const data = JSON.parse(el.querySelector('script[type="application/json"]').textContent);
-		mapboxgl.accessToken = token;
-		const map = new mapboxgl.Map({
+		const map = new ml.Map({
 			container: el.querySelector(".map-canvas"),
-			style: "mapbox://styles/mapbox/light-v11",
-			projection: "mercator", // the flight-tracker convention
+			style,
 			cooperativeGestures: true,
 			fadeDuration: 0,
+			maxZoom: 14,
+			attributionControl: { compact: true },
 			center: data.focus || [-40, 30],
 			zoom: data.focus ? data.zoom || 7 : 1.5,
 		});
-		map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
+		map.addControl(new ml.NavigationControl({ showCompass: false }), "top-right");
 
 		// the camera keeps clear of the docked panel when it sits over the map
 		const padding = () => {
 			const dock = el.closest(".stage")?.querySelector(".dock");
 			const over = dock && matchMedia("(min-width: 900px)").matches;
-			const w = el.clientWidth;
 			if (!over) return { top: 52, bottom: 52, left: 52, right: 52 }; // dock sits below: even margins
-			const left = Math.min(dock.getBoundingClientRect().right - el.getBoundingClientRect().left + 48, w * 0.62);
+			const left = Math.min(dock.getBoundingClientRect().right - el.getBoundingClientRect().left + 48, el.clientWidth * 0.62);
 			return { top: 56, bottom: 56, left, right: 64 };
 		};
+		const bounds = (pts) => pts.reduce((b, c) => b.extend(c), new ml.LngLatBounds(pts[0], pts[0]));
 		const coords = [];
 		(data.lines || []).forEach((l) => coords.push(...l.c));
 		(data.pins || []).forEach((p) => coords.push(p.p));
@@ -60,13 +67,11 @@
 		if (data.plane) coords.push(data.plane.p);
 		const frame = () => {
 			if (data.fit?.length) {
-				const bounds = data.fit.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(data.fit[0], data.fit[0]));
-				map.fitBounds(bounds, { padding: padding(), duration: 0, maxZoom: 6 });
+				map.fitBounds(bounds(data.fit), { padding: padding(), duration: 0, maxZoom: 6 });
 			} else if (data.focus) {
 				map.jumpTo({ center: data.focus, zoom: data.zoom || 7, padding: padding() });
 			} else if (coords.length) {
-				const bounds = coords.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(coords[0], coords[0]));
-				map.fitBounds(bounds, { padding: padding(), duration: 0, maxZoom: 8.5 });
+				map.fitBounds(bounds(coords), { padding: padding(), duration: 0, maxZoom: 8.5 });
 			}
 		};
 		frame();
@@ -80,21 +85,11 @@
 			const plane = document.createElement("span");
 			plane.className = "mk-plane";
 			plane.innerHTML = PLANE;
-			new mapboxgl.Marker({ element: plane, rotation: data.plane.h, rotationAlignment: "map", pitchAlignment: "map" })
+			new ml.Marker({ element: plane, rotation: data.plane.h, rotationAlignment: "map", pitchAlignment: "map" })
 				.setLngLat(data.plane.p).addTo(map);
 		}
 
-		map.on("style.load", () => {
-			const set = (id, prop, v) => map.getLayer(id) && map.setPaintProperty(id, prop, v);
-			set("land", "background-color", C.land);
-			set("water", "fill-color", C.ocean);
-			set("national-park", "fill-color", C.park);
-			set("landuse", "fill-opacity", 0.45);
-			set("aeroway-polygon", "fill-color", C.aeroway);
-			set("aeroway-line", "line-color", C.runway);
-			set("admin-0-boundary", "line-color", C.border);
-			map.setFog({ color: C.paper, "high-color": "#d9e8f6", "space-color": C.paper, "horizon-blend": 0.06, "star-intensity": 0 });
-
+		map.on("load", () => {
 			const features = (data.lines || []).map((l) => ({
 				type: "Feature", properties: { k: l.k, w: l.w ?? 1 }, geometry: { type: "LineString", coordinates: l.c },
 			}));
@@ -142,7 +137,7 @@
 			} });
 			map.addLayer({ id: "wv-pin-label", type: "symbol", source: "wv-pins", filter: others, layout: {
 				"text-field": ["get", "l"],
-				"text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
+				"text-font": FONT,
 				"text-size": ["case", main, 13, 11.5],
 				"text-variable-anchor": ["left", "right", "top", "bottom"],
 				"text-radial-offset": 0.95,
@@ -155,9 +150,16 @@
 				"circle-radius": 6, "circle-color": C.ahead, "circle-stroke-width": 2.5, "circle-stroke-color": "#ffffff",
 			} });
 			map.addLayer({ id: "wv-subject-label", type: "symbol", source: "wv-pins", filter: subject, layout: {
-				"text-field": ["get", "l"], "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"], "text-size": 15,
+				"text-field": ["get", "l"], "text-font": FONT, "text-size": 15,
 				"text-anchor": "left", "text-offset": [1.1, 0], "text-allow-overlap": true, "text-ignore-placement": true,
 			}, paint: { "text-color": C.navy, "text-halo-color": "#ffffff", "text-halo-width": 2 } });
+
+			const link = (id) => {
+				map.on("click", id, (e) => { const u = e.features[0]?.properties.u; if (u) location.href = u; });
+				map.on("mouseenter", id, () => { map.getCanvas().style.cursor = "pointer"; });
+				map.on("mouseleave", id, () => { map.getCanvas().style.cursor = ""; });
+			};
+			for (const id of ["wv-pin", "wv-pin-label", "wv-subject", "wv-subject-label"]) link(id);
 
 			// other live aircraft (airport traffic, flights in the air now): a
 			// symbol layer above the labels, so labels give way to them; each
@@ -181,12 +183,6 @@
 				};
 				icon.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(PLANE_ICON);
 			}
-			const link = (id) => {
-				map.on("click", id, (e) => { const u = e.features[0]?.properties.u; if (u) location.href = u; });
-				map.on("mouseenter", id, () => { map.getCanvas().style.cursor = "pointer"; });
-				map.on("mouseleave", id, () => { map.getCanvas().style.cursor = ""; });
-			};
-			for (const id of ["wv-pin", "wv-pin-label", "wv-subject", "wv-subject-label"]) link(id);
 		});
 	}
 

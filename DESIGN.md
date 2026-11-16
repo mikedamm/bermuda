@@ -176,7 +176,7 @@ The pages play the flight-tracker category straight, in the convention FlightAwa
 
 The identity is WingView's own, bound by the brand: the window-and-wing logo, navy (#002f64) as the structural colour (title band, table headers, codes and times), sky (#229cf8) as the live and forward colour (route ahead, the subject airport, the app button), and Inter at UI sizes with tabular numerals. The ground is a cool paper grey; panels are white with hairline rules and small 4px corners. State is carried by solid, saturated status bands, never by decoration.
 
-Density is high and deliberate. Type stays between 12px and 32px; the largest thing on a page is a three-letter airport code. The map is the only image, and it is tinted into the palette rather than left in Mapbox's defaults.
+Density is high and deliberate. Type stays between 12px and 32px; the largest thing on a page is a three-letter airport code. The map is the only image, and it is tinted into the palette rather than left in the basemap's defaults.
 
 **Key Characteristics:**
 - White masthead, navy title band, full-bleed map stage, paper ground below.
@@ -210,7 +210,7 @@ A two-blue brand on cool neutrals, with three solid state colours that do all th
 - **Head** (`head`): panel header bars. **Zebra** (`zebra`): even grid rows. **Hover** (`hover`): hovered grid rows on pointer devices.
 - **Rules** (`line`, `line-soft`, `line-strong`): `line` for panel borders and header-bar bottoms, `line-soft` for row dividers inside panels, `line-strong` for input borders.
 - **On-navy text** (`band-text`, `band-meta`, `grid-head-text`): the softened whites used for secondary text on the title band, footer and grid headers.
-- **Map** (`ocean`, `land`): the basemap's water and land, set on the Mapbox light-v11 style at load and on the server-drawn fallback map.
+- **Map** (`ocean`, `land`): the basemap's water and land, set in the generated MapLibre style (`static/map-style.json`) and on the server-drawn fallback map.
 
 ### Named Rules
 **The Two Blues Rule.** Navy is structure, sky is motion. Navy never marks the live route or the subject airport; sky never fills a header or carries body text. Text-weight blue is always `link`, because sky on white is too light to read.
@@ -257,7 +257,7 @@ Flat by default, ruled with hairlines. Depth appears only where something genuin
 
 ### Shadow Vocabulary
 - **Dock float** (`box-shadow: 0 10px 30px rgb(16 31 51 / 0.22), 0 1px 3px rgb(16 31 51 / 0.16)`): the flight panel over the map. Removed when the dock moves below the map.
-- **Map control** (`box-shadow: 0 1px 4px rgb(16 31 51 / 0.2)`): Mapbox zoom controls.
+- **Map control** (`box-shadow: 0 1px 4px rgb(16 31 51 / 0.2)`): MapLibre zoom controls.
 - **Marker halo** (`drop-shadow(0 0 1.5px #fff) drop-shadow(0 1px 2px rgb(0 47 100 / 0.4))`): plane glyphs over the basemap, for legibility only.
 
 ### Named Rules
@@ -302,7 +302,7 @@ Two-column definition grid (altitude, ground speed, heading, squawk): 12px muted
 Full-width collapsed tables at 13.5px: navy header row with 12px 600 `grid-head-text`, 8px 14px cells divided by `line-soft`, zebra even rows, `hover` rows on pointer devices. Links and row headers are 600. Numeric columns right-aligned. Status words are coloured tags (12.5px 600): landed in `ok`, in the air or taxiing in `link`, alerts in `bad`, the rest muted. The scheduled-versus-actual table groups rows under white sub-headers in 13px 700 navy. Bar columns use a 6px `line-soft` track with a `link` fill.
 
 ### Map
-Mapbox GL light-v11, re-tinted on load: land `land`, water `ocean`, parks a faint green, aeroways and runways in pale blue-greys, country borders in a muted blue, fog in paper. The server draws an SVG fallback in the same palette when no token is set.
+MapLibre GL JS over WingView's Protomaps v4 basemap (`i.wvcdn.com/v4.pmtiles`), styled by `static/map-style.json`, generated from `@protomaps/basemaps` light with the WingView palette: land `land`, water `ocean`, parks a faint green, aeroways and runways in pale blue-greys, country borders in a muted blue-grey; POI icons, shields and one-way arrows are dropped. Map labels are Noto Sans (the glyphs MapLibre can render), not Inter.
 - **Route flown:** solid `link`, 3.2px. **Route ahead:** sky, 3px, short dashes.
 - **Airport pins:** a navy ring around a white dot, sized by traffic; main airports get a sky dot with a white stroke and larger 13px labels. Labels are navy with a white halo and give way to each other, busiest first.
 - **Subject airport:** navy ring, sky dot, white stroke, 15px label that never gives way, drawn above traffic.
