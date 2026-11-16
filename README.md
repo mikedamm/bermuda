@@ -91,7 +91,7 @@ go test ./...
 | `APP_URL` | the app, for "open live" deep links (default `https://app.wingview.com`) |
 | `MAP_TILES` | PMTiles basemap for the maps (default `https://i.wvcdn.com/v4.pmtiles`; `off` draws SVG maps) |
 | `BUNNY_DATABASE_URL`, `BUNNY_DATABASE_AUTH_TOKEN` | shared API cache (Bunny Database, libSQL); optional |
-| `LOGOS` | operator logos as `{LOGOS}/{ICAO}/icon.png` (default `https://i.wvcdn.com/logos`; `off` shows none). Each code is checked once in the background (HEAD), so a page never waits for the CDN or shows a missing logo; `/statusz` counts them |
+| `LOGOS` | operator logos as `{LOGOS}/{ICAO}/icon.png`, one per ICAO-assigned operator (default `https://i.wvcdn.com/logos`; `off` shows none) |
 | `DATA_DIR` | snapshot directory for the discovery index (optional) |
 | `CRAWL=0` | disable the crawler; `CRAWL_GAP_MS` (1200) and `RESOLVE_GAP_MS` (2500) set its pace |
 | `PORT`, `LOG_LEVEL` | 8080, info |

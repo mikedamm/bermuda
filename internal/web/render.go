@@ -126,7 +126,7 @@ func (s *Server) funcs() template.FuncMap {
 		"rot":     func(v float64) string { return trimFloat(v) + "deg" },
 		"svg":     func(s string) template.HTML { return template.HTML(s) }, // only for geo.RenderMap output
 		"appLink": s.appLink,
-		"logo":    s.logos.URL,
+		"logo":    s.logoURL,
 		"plural":  plural,
 		"add":     func(a, b int) int { return a + b },
 		"country": geo.CountryName,

@@ -76,8 +76,8 @@ type Server struct {
 	assets      map[string]asset // path under /static/ → content
 	host        string           // canonical host
 	tilesOrigin string           // scheme://host of MapTiles, for the CSP
-	logos       *logoSet
-	imgSrc      string // the CSP's img-src origins
+	logoBase    string           // operator logos, no trailing slash; empty means none
+	imgSrc      string           // the CSP's img-src origins
 }
 
 type asset struct {
@@ -98,7 +98,7 @@ func New(a *api.Client, idx *store.Index, cfg Config, log *slog.Logger) (*Server
 		rand.Read(cfg.LiveKey)
 	}
 	s := &Server{api: a, index: idx, cfg: cfg, log: log, pages: cache.New(5000), host: u.Host,
-		logos: newLogoSet(cfg.LogoBase, log), imgSrc: "'self' https://i.wvcdn.com"}
+		logoBase: strings.TrimRight(cfg.LogoBase, "/"), imgSrc: "'self' https://i.wvcdn.com"}
 	if cfg.LogoBase != "" {
 		l, err := url.Parse(cfg.LogoBase)
 		if err != nil || l.Host == "" {
@@ -120,11 +120,6 @@ func New(a *api.Client, idx *store.Index, cfg Config, log *slog.Logger) (*Server
 	}
 	if err := s.loadTemplates(); err != nil {
 		return nil, err
-	}
-	// check the logos of the airlines the index already knows, so the first
-	// pages rendered after a start (and cached for a while) have them
-	for _, a := range idx.TopAirlines(time.Now().Add(-7*24*time.Hour), 600) {
-		s.logos.URL(a.ICAO)
 	}
 	return s, nil
 }
@@ -234,9 +229,6 @@ func (s *Server) Handler() http.Handler {
 		st["version"] = s.cfg.Version
 		if c := s.api.Stats(); c != nil {
 			st["api_cache"] = c
-		}
-		if l := s.logos.Status(); l != nil {
-			st["logos"] = l
 		}
 		json.NewEncoder(w).Encode(st)
 	})
