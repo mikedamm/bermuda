@@ -1,0 +1,408 @@
+package web
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/mikedamm/bermuda/internal/api"
+	"github.com/mikedamm/bermuda/internal/geo"
+)
+
+type AircraftPageV struct {
+	Key          string
+	Registration string
+	Hex          string
+	Name         string // Boeing 737-890
+	Operator     string
+	OperatorURL  string
+	Owner        string
+	OwnerPlace   string
+	Status       string
+	StatusClass  string
+	StatusDetail string
+	Live         *LegV
+	LiveURL      string
+	Map          *geo.Map
+	Specs        []Fact
+	Registry     []Fact
+	Stats        []Fact
+	TopAirports  []AirportCountV
+	MaxCount     int
+	Recent       []LegV
+	Upcoming     []LegV
+	History      []api.RegistryVersion
+	LADD         bool
+	Days         int
+	Summary      []string
+}
+
+type AirportCountV struct {
+	Airport AirportV
+	Count   int
+}
+
+var aircraftKeyClean = regexp.MustCompile(`[^A-Z0-9-]`)
+
+func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error) {
+	raw := r.PathValue("key")
+	key := aircraftKeyClean.ReplaceAllString(strings.ToUpper(raw), "")
+	if key == "" || len(key) > 36 {
+		return s.notFound("That doesn't look like a registration or Mode S address.", raw), nil
+	}
+	p0, err := s.api.Aircraft(ctx, key, 30, 50)
+	if errors.Is(err, api.ErrNotFound) || errors.Is(err, api.ErrBadRequest) {
+		return s.notFound("No aircraft with registration or address "+key+" is on record.", key), nil
+	}
+	if err != nil {
+		return resp{}, err
+	}
+	canon := p0.Aircraft.Registration
+	if canon == "" {
+		canon = p0.Aircraft.Hex
+	}
+	if canon == "" {
+		canon = key
+	}
+	if canon != raw {
+		return redirect("/aircraft/" + canon), nil
+	}
+	s.index.NoteAircraftPage(p0)
+
+	now := time.Now()
+	a := p0.Aircraft
+	v := AircraftPageV{
+		Key: canon, Registration: a.Registration, Hex: a.Hex, Name: aircraftName(a),
+		LADD: p0.LADD.Listed, Days: p0.Days,
+	}
+	if v.Registration == "" {
+		v.Registration = a.Hex
+	}
+	if p0.Operator.Name != "" {
+		v.Operator = titleCase(p0.Operator.Name)
+		if p0.Operator.ICAO != "" {
+			v.OperatorURL = "/airline/" + p0.Operator.ICAO
+		}
+	}
+	if o := p0.Owner; o != nil && o.Name != "" {
+		v.Owner = titleCase(o.Name)
+		v.OwnerPlace = strings.Join(nonEmpty(titleCase(o.City), o.State, geo.CountryName(o.Country)), ", ")
+	}
+
+	rf := refs{}
+	rf.addHistory(p0.RecentFlights)
+	for _, ac := range p0.Stats.Airports {
+		rf.add(ac.Airport)
+	}
+	if p0.Status.Last != nil {
+		rf.add(p0.Status.Last.Airport)
+	}
+
+	// status line
+	st := p0.Status
+	switch {
+	case st.Flight != nil && !st.Flight.LADDRedacted:
+		l := legFromLive(*st.Flight, rf, now)
+		v.Live = &l
+		v.LiveURL = l.URL
+		v.Status, v.StatusClass = l.PhaseWord, l.StatusClass
+		if v.Status == "" {
+			v.Status = "Flying"
+		}
+		v.StatusDetail = l.Headline
+		if l.Dep.Code != "" && l.Arr.Code != "" {
+			v.StatusDetail = fmt.Sprintf("%s, %s to %s", l.Headline, l.Dep.City, l.Arr.City)
+		}
+	case st.Last != nil:
+		v.Status, v.StatusClass = "On the ground", "landed"
+		if !st.Last.OnGround {
+			v.Status, v.StatusClass = "Not tracked now", "muted"
+		}
+		at := relTime(st.Last.At, now)
+		if st.Last.Airport != nil && st.Last.OnGround {
+			ap := airportV("", st.Last.Airport)
+			v.StatusDetail = fmt.Sprintf("Last seen at %s (%s), %s", ap.Name, ap.Code, at)
+		} else {
+			v.StatusDetail = "Last position reported " + at
+		}
+	default:
+		v.Status, v.StatusClass = "No recent activity", "muted"
+		v.StatusDetail = fmt.Sprintf("No positions on record in the last %d days", p0.Days)
+	}
+
+	for _, h := range p0.RecentFlights {
+		v.Recent = append(v.Recent, legFromHistory(h, now))
+	}
+	for _, u := range st.Upcoming {
+		v.Upcoming = append(v.Upcoming, legFromLive(u, rf, now))
+	}
+	v.History = p0.RegistryHistory
+
+	// network map: every route of the window, the busiest drawn strongest
+	v.Map = aircraftMap(p0, v, rf)
+
+	// facts
+	add := func(fs *[]Fact, label, val string) {
+		if val != "" && val != "0" {
+			*fs = append(*fs, Fact{Label: label, Value: val})
+		}
+	}
+	add(&v.Specs, "Type", strings.TrimSpace(a.Manufacturer+" "+a.Model))
+	if a.ICAOType != "" {
+		desc := a.ICAOType
+		if d := typeDescription(a.TypeDescription); d != "" {
+			desc += ", " + d
+		}
+		add(&v.Specs, "ICAO type", desc)
+	}
+	add(&v.Specs, "Engines", engines(a.Engines, a.EngineType))
+	if a.Seats > 0 {
+		add(&v.Specs, "Seats", fmt.Sprint(a.Seats))
+	}
+	if a.YearBuilt > 0 {
+		age := ""
+		if a.AgeYears > 0 {
+			age = fmt.Sprintf(" (%d years old)", a.AgeYears)
+		}
+		add(&v.Specs, "Built", fmt.Sprintf("%d%s", a.YearBuilt, age))
+	}
+	add(&v.Specs, "Serial number", a.SerialNumber)
+	add(&v.Specs, "Mode S address", a.Hex)
+	add(&v.Specs, "Country of registration", a.Country.Name)
+	if a.Wake != "" {
+		add(&v.Specs, "Wake category", map[string]string{"L": "Light", "M": "Medium", "H": "Heavy", "J": "Super"}[a.Wake])
+	}
+
+	if reg := a.Registry; reg != nil {
+		add(&v.Registry, "Registered owner", v.Owner)
+		add(&v.Registry, "Owner location", v.OwnerPlace)
+		add(&v.Registry, "Registrant type", sentence(reg.RegistrantType))
+		add(&v.Registry, "Certificate issued", fmtDate(reg.Registered))
+		add(&v.Registry, "Registration status", sentence(reg.Status))
+		add(&v.Registry, "Category", sentence(reg.Category))
+		add(&v.Registry, "Engine", sentence(reg.EngineType))
+	} else if v.Owner != "" {
+		add(&v.Registry, "Registered owner", v.Owner)
+		add(&v.Registry, "Owner location", v.OwnerPlace)
+	}
+
+	stt := p0.Stats
+	if !v.LADD {
+		add(&v.Stats, "Flights", commas(stt.Flights))
+		if stt.Hours > 0 {
+			add(&v.Stats, "Hours flown", fmt.Sprintf("%.1f", stt.Hours))
+		}
+		if stt.Diverted > 0 {
+			add(&v.Stats, "Diversions", fmt.Sprint(stt.Diverted))
+		}
+		for _, ac := range stt.Airports {
+			av := airportV(ac.Code, ac.Airport)
+			v.TopAirports = append(v.TopAirports, AirportCountV{av, ac.Count})
+			v.MaxCount = max(v.MaxCount, ac.Count)
+		}
+	}
+	v.Summary = aircraftSummary(v, p0)
+
+	title := v.Registration
+	if v.Name != "" {
+		title += " " + v.Name
+	}
+	if v.Operator != "" {
+		title += ", " + v.Operator
+	}
+	title += ": flight history and owner"
+	desc := fmt.Sprintf("%s is a %s", v.Registration, firstNonEmpty(v.Name, "aircraft"))
+	if v.Operator != "" {
+		desc += " flown by " + v.Operator
+	}
+	desc += fmt.Sprintf(". Live position, the last %d days of flights, registration and ownership records.", p0.Days)
+
+	p := s.basePage(http.StatusOK, title, desc, "/aircraft/"+canon)
+	p.Section = "aircraft"
+	p.Query = v.Registration
+	p.NoIndex = v.LADD // respect the owner's request to limit tracking
+	if v.Live != nil {
+		p.AppURL, p.AppLabel = s.appLink("flight", v.Live.FlightID), "Follow this aircraft live"
+	}
+	p.Crumbs = []Crumb{{"Home", "/"}}
+	if v.OperatorURL != "" {
+		p.Crumbs = append(p.Crumbs, Crumb{v.Operator, v.OperatorURL})
+	}
+	p.Crumbs = append(p.Crumbs, Crumb{v.Registration, ""})
+	maxAge := 2 * time.Minute
+	if v.Live == nil {
+		maxAge = 5 * time.Minute
+	}
+	return s.html("aircraft", p, v, maxAge)
+}
+
+func aircraftMap(p0 *api.AircraftPage, v AircraftPageV, rf refs) *geo.Map {
+	spec := geo.MapSpec{W: 960, H: 400}
+	if v.Live != nil {
+		m := legMap(*v.Live, 960, 400)
+		return m
+	}
+	type pair struct{ a, b string }
+	counts := map[pair]int{}
+	maxN := 0
+	for _, h := range p0.RecentFlights {
+		if h.Dep == nil || h.Arr == nil || h.Dep.ICAO == h.Arr.ICAO {
+			continue
+		}
+		k := pair{h.Dep.ICAO, h.Arr.ICAO}
+		if k.b < k.a {
+			k = pair{k.b, k.a}
+		}
+		counts[k]++
+		maxN = max(maxN, counts[k])
+	}
+	uses := map[string]int{}
+	pinAt := map[string]AirportV{}
+	for k, n := range counts {
+		a, b := rf.airport(k.a), rf.airport(k.b)
+		if !a.LL.Valid() || !b.LL.Valid() {
+			continue
+		}
+		spec.Routes = append(spec.Routes, geo.MapRoute{From: a.LL, To: b.LL, Flown: true, Weight: float64(n) / float64(maxN)})
+		for _, ap := range []AirportV{a, b} {
+			uses[ap.ICAO] += n
+			pinAt[ap.ICAO] = ap
+		}
+	}
+	// busiest first, so they win label space
+	codes := make([]string, 0, len(pinAt))
+	for c := range pinAt {
+		codes = append(codes, c)
+	}
+	sort.Slice(codes, func(i, j int) bool {
+		if uses[codes[i]] != uses[codes[j]] {
+			return uses[codes[i]] > uses[codes[j]]
+		}
+		return codes[i] < codes[j]
+	})
+	for _, c := range codes {
+		spec.Pins = append(spec.Pins, geo.MapPin{At: pinAt[c].LL, Label: pinAt[c].Code})
+	}
+	// routes in a stable order so the SVG (and the CDN's copy) is deterministic
+	sort.Slice(spec.Routes, func(i, j int) bool {
+		a, b := spec.Routes[i], spec.Routes[j]
+		if a.From.Lat != b.From.Lat {
+			return a.From.Lat < b.From.Lat
+		}
+		return a.To.Lat < b.To.Lat
+	})
+	if last := p0.Status.Last; last != nil {
+		pos := geo.LL{Lat: last.Lat, Lon: last.Lon}
+		if pos.Valid() {
+			spec.Plane, spec.PlaneHdg = &pos, last.Hdg
+		}
+	}
+	if len(spec.Routes) == 0 && spec.Plane == nil {
+		return nil
+	}
+	if len(spec.Routes) == 0 {
+		spec.Center, spec.RadiusMi = spec.Plane, 60
+	}
+	m := geo.RenderMap(spec)
+	return &m
+}
+
+func aircraftName(a api.Aircraft) string {
+	if a.Name != "" {
+		return a.Name
+	}
+	return strings.TrimSpace(a.Manufacturer + " " + a.Model)
+}
+
+func typeDescription(code string) string {
+	if len(code) != 3 {
+		return ""
+	}
+	kind := map[byte]string{'L': "landplane", 'S': "seaplane", 'A': "amphibian", 'H': "helicopter", 'G': "gyrocopter", 'T': "tiltrotor"}[code[0]]
+	eng := map[byte]string{'J': "jet", 'T': "turboprop", 'P': "piston", 'E': "electric"}[code[2]]
+	n := code[1:2]
+	if kind == "" {
+		return ""
+	}
+	words := map[string]string{"1": "single", "2": "twin", "3": "three", "4": "four", "6": "six", "8": "eight"}
+	if w, ok := words[n]; ok && eng != "" {
+		if w == "single" || w == "twin" {
+			return fmt.Sprintf("%s-engine %s %s", w, eng, kind)
+		}
+		return fmt.Sprintf("%s-engine %s %s", w, eng, kind)
+	}
+	return kind
+}
+
+func engines(n int, typ string) string {
+	if n <= 0 {
+		return sentence(typ)
+	}
+	if typ == "" {
+		return fmt.Sprint(n)
+	}
+	return fmt.Sprintf("%d %s", n, typ)
+}
+
+func sentence(s string) string {
+	s = strings.TrimSpace(strings.ReplaceAll(s, "_", " "))
+	if s == "" {
+		return ""
+	}
+	s = strings.ToLower(s)
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+func nonEmpty(ss ...string) []string {
+	var out []string
+	for _, s := range ss {
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func firstNonEmpty(ss ...string) string {
+	for _, s := range ss {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func aircraftSummary(v AircraftPageV, p0 *api.AircraftPage) []string {
+	var out []string
+	s := v.Registration + " is a " + firstNonEmpty(v.Name, "aircraft")
+	if a := p0.Aircraft; a.YearBuilt > 0 {
+		s += fmt.Sprintf(" built in %d", a.YearBuilt)
+	}
+	if v.Operator != "" {
+		s += ", flown by " + v.Operator
+	}
+	if v.Owner != "" && !strings.EqualFold(v.Owner, v.Operator) && !strings.HasPrefix(strings.ToLower(v.Owner), strings.ToLower(v.Operator)) {
+		s += " and registered to " + v.Owner
+	}
+	out = append(out, s+".")
+	if v.LADD {
+		out = append(out, "Its owner has asked the FAA to limit public tracking of this aircraft (the LADD program), so flight details are not shown.")
+		return out
+	}
+	if st := p0.Stats; st.Flights > 0 {
+		s := fmt.Sprintf("In the last %d days it made %s", st.Days, plural(st.Flights, "flight", "flights"))
+		if st.Hours > 0 {
+			s += fmt.Sprintf(" totalling %.0f hours in the air", st.Hours)
+		}
+		if len(v.TopAirports) > 0 {
+			s += ", most often at " + v.TopAirports[0].Airport.Name
+		}
+		out = append(out, s+".")
+	}
+	return out
+}

@@ -1,0 +1,8 @@
+.git
+.github
+.env
+.playwright-mcp
+bin
+tools
+deploy
+*.md

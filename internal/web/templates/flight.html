@@ -1,0 +1,107 @@
+{{define "content"}}{{$v := .Body}}{{$f := $v.Featured}}
+<article class="wrap page-flight">
+	<header class="head">
+		<div class="head-id">
+			<h1 class="ident">{{$v.Number}}</h1>
+			<p class="head-sub">
+				{{if $v.AirlineURL}}<a href="{{$v.AirlineURL}}">{{$v.Airline}}</a>{{else if $v.Airline}}{{$v.Airline}}{{end}}
+				{{if ne $v.Number $v.Ident}}<span class="callsign">Callsign {{$v.Ident}}</span>{{end}}
+			</p>
+		</div>
+		<p class="head-status status-{{$f.StatusClass}}"><span class="dot" aria-hidden="true"></span>{{$f.Headline}}</p>
+	</header>
+
+	<section class="window" aria-label="Route and position">
+		<div class="strip">
+			{{$d := $f.DepMoment}}{{$a := $f.ArrMoment}}
+			<div class="end">
+				{{if $f.Dep.URL}}<a class="code" href="{{$f.Dep.URL}}">{{$f.Dep.Code}}</a>{{else}}<span class="code">{{or $f.Dep.Code "?"}}</span>{{end}}
+				<span class="city">{{$f.Dep.City}}</span>
+				{{if $d.Label}}<span class="moment">{{$d.Label}} {{template "time" $d.T}}</span>{{end}}
+			</div>
+			<div class="track">
+				<div class="track-line" role="img" aria-label="{{if $f.FlownMi}}{{$f.Progress}}% of the way, {{$f.LeftMi}} to go{{else}}{{$f.Headline}}{{end}}">
+					<span class="track-done" style="width:{{$f.Progress}}%"></span>
+					<span class="track-plane" style="left:{{$f.Progress}}%">{{template "icon-plane"}}</span>
+				</div>
+				<p class="track-note">{{if $f.FlownMi}}{{$f.FlownMi}} flown, {{$f.LeftMi}} to go{{else if $f.Dist}}{{$f.Dist}}{{if $f.Duration}}, {{$f.Duration}} in the air{{end}}{{end}}</p>
+			</div>
+			<div class="end end-arr">
+				{{if $f.DivertedTo}}{{with $f.DivertedTo}}{{if .URL}}<a class="code" href="{{.URL}}">{{.Code}}</a>{{else}}<span class="code">{{.Code}}</span>{{end}}<span class="city">{{.City}}, diverted from {{$f.Arr.Code}}</span>{{end}}
+				{{else}}{{if $f.Arr.URL}}<a class="code" href="{{$f.Arr.URL}}">{{$f.Arr.Code}}</a>{{else}}<span class="code">{{or $f.Arr.Code "?"}}</span>{{end}}
+				<span class="city">{{$f.Arr.City}}</span>{{end}}
+				{{if $a.Label}}<span class="moment">{{$a.Label}} {{template "time" $a.T}}</span>{{end}}
+			</div>
+		</div>
+		{{template "map" $v.Map}}
+	</section>
+
+	<div class="split">
+		<section class="times" aria-labelledby="times-h">
+			<h2 id="times-h">Departure and arrival</h2>
+			<div class="times-grid">
+				<div class="times-col">
+					<h3>{{$f.Dep.Name}}</h3>
+					<dl>
+						<div><dt>Scheduled</dt><dd>{{template "time" $f.DepPlanned}}</dd></div>
+						<div><dt>Left the gate</dt><dd>{{template "time" $f.DepOut}}</dd></div>
+						<div><dt>Took off</dt><dd>{{template "time" $f.DepOff}}</dd></div>
+						{{if $f.DepDelay}}<div><dt>Departure</dt><dd class="delay delay-{{$f.DepDelayClass}}">{{$f.DepDelay}}</dd></div>{{end}}
+					</dl>
+				</div>
+				<div class="times-col">
+					<h3>{{if $f.DivertedTo}}{{$f.DivertedTo.Name}}{{else}}{{$f.Arr.Name}}{{end}}</h3>
+					<dl>
+						<div><dt>Scheduled</dt><dd>{{template "time" $f.ArrPlanned}}</dd></div>
+						{{if and $f.ArrEst.Set (not $f.ArrOn.Set)}}<div><dt>Estimated</dt><dd>{{template "time" $f.ArrEst}}</dd></div>{{end}}
+						<div><dt>Landed</dt><dd>{{template "time" $f.ArrOn}}</dd></div>
+						<div><dt>Reached the gate</dt><dd>{{template "time" $f.ArrIn}}</dd></div>
+						{{if $f.ArrDelay}}<div><dt>Arrival</dt><dd class="delay delay-{{$f.ArrDelayClass}}">{{$f.ArrDelay}}</dd></div>{{end}}
+					</dl>
+				</div>
+			</div>
+			{{if $f.Date}}<p class="note">Flight date {{$f.Date}}. All times are local to each airport.</p>{{end}}
+		</section>
+
+		<aside class="side" aria-labelledby="ac-h">
+			<h2 id="ac-h">Aircraft</h2>
+			<dl class="facts facts-tight">
+				{{if $f.Reg}}<div><dt>Registration</dt><dd>{{if $f.RegURL}}<a href="{{$f.RegURL}}">{{$f.Reg}}</a>{{else}}{{$f.Reg}}{{end}}</dd></div>{{end}}
+				{{if or $f.Model $f.Type}}<div><dt>Type</dt><dd>{{or $f.Model $f.Type}}{{if and $f.Model $f.Type}} <span class="dim">({{$f.Type}})</span>{{end}}</dd></div>{{end}}
+				{{if $f.Runway}}<div><dt>Runway</dt><dd>{{$f.Runway}}</dd></div>{{end}}
+			</dl>
+			{{if and $f.Live $f.HasPos}}
+			<h2 class="side-h2">Position {{if $f.PosAge}}<small>{{$f.PosAge}}</small>{{end}}</h2>
+			<dl class="facts facts-tight">
+				{{if $f.Alt}}<div><dt>Altitude</dt><dd>{{$f.Alt}}</dd></div>{{end}}
+				{{if $f.Speed}}<div><dt>Ground speed</dt><dd>{{$f.Speed}}</dd></div>{{end}}
+				{{if $f.Heading}}<div><dt>Heading</dt><dd>{{$f.Heading}}</dd></div>{{end}}
+				{{if $f.Squawk}}<div><dt>Squawk</dt><dd>{{$f.Squawk}}</dd></div>{{end}}
+			</dl>
+			{{end}}
+			{{if $v.AppURL}}<a class="button" href="{{$v.AppURL}}">Follow {{$v.Number}} on the live map</a>{{end}}
+		</aside>
+	</div>
+
+	<section class="about" aria-labelledby="about-h">
+		<h2 id="about-h">About {{$v.Number}}</h2>
+		{{range $v.Summary}}<p>{{.}}</p>{{end}}
+		{{template "facts" $v.Facts}}
+	</section>
+
+	{{if $v.History}}
+	<section aria-labelledby="hist-h">
+		<h2 id="hist-h">{{$v.Number}} flight history</h2>
+		<p class="lede">Every {{$v.Number}} flight we tracked in the last {{$v.Days}} days, newest first.</p>
+		{{template "legs" (legTable $v.History false)}}
+	</section>
+	{{end}}
+
+	{{if $v.SameRoute}}
+	<section aria-labelledby="route-h">
+		<h2 id="route-h">Other flights from {{$f.Dep.Code}} to {{$f.Arr.Code}}</h2>
+		<ul class="chips">{{range $v.SameRoute}}<li><a href="{{.URL}}">{{.Number}}</a></li>{{end}}</ul>
+	</section>
+	{{end}}
+</article>
+{{end}}

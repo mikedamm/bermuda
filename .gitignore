@@ -1,0 +1,7 @@
+# local env and secrets — never commit
+.env
+*.local
+/bin/
+/tmp/
+.playwright-mcp/
+/data-snapshot/

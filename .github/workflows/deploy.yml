@@ -1,0 +1,90 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: bermuda
+  REGISTRY: ghcr.io/mikedamm
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27"
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - run: go test ./...
+
+  image:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build (buildah)
+        id: build
+        uses: redhat-actions/buildah-build@719e3c40d8af9790c23eca13f7daa339f2867034 # v3.1.0
+        with:
+          image: ${{ env.IMAGE }}
+          tags: ${{ github.sha }} latest
+          containerfiles: ./Containerfile
+          platforms: linux/amd64
+          build-args: VERSION=${{ github.sha }}
+          oci: true
+      - name: Push to GHCR
+        uses: redhat-actions/push-to-registry@94ade333c38ecc0e60e94785125d9a52ca423b37 # v3.0.0
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    needs: image
+    # BUNNY_APP_ID is a repository variable set once the app exists (deploy/provision.sh)
+    if: github.event_name != 'pull_request' && vars.BUNNY_APP_ID != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Roll Magic Containers onto the new image
+        uses: BunnyWay/actions/container-update-image@931a74b9c45ea9f9f01435fbbf1649830e67d3b3 # main, 2026-11
+        with:
+          app_id: ${{ vars.BUNNY_APP_ID }}
+          api_key: ${{ secrets.BUNNYNET_API_KEY }}
+          container: web
+          image_tag: ${{ github.sha }}
+      - name: Wait for the new version to serve
+        if: vars.BUNNY_HOST != ''
+        env:
+          HOST: ${{ vars.BUNNY_HOST }}
+          SHA: ${{ github.sha }}
+        run: |
+          for i in $(seq 1 60); do
+            got=$(curl -fsS -m 10 "https://$HOST/healthz" || true)
+            echo "attempt $i: ${got:-no answer}"
+            if [ "$got" = "ok $SHA" ]; then
+              curl -fsS -m 30 -o /dev/null -w "airport page %{http_code} in %{time_total}s\n" "https://$HOST/airport/KSEA"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "new version did not come up within 10 minutes" >&2
+          exit 1

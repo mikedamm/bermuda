@@ -1,0 +1,88 @@
+{{define "content"}}{{$v := .Body}}
+<article class="wrap page-aircraft">
+	<header class="head">
+		<div class="head-id">
+			<h1 class="ident">{{$v.Registration}}</h1>
+			<p class="head-sub">
+				{{if $v.Name}}<span>{{$v.Name}}</span>{{end}}
+				{{if $v.OperatorURL}}<a href="{{$v.OperatorURL}}">{{$v.Operator}}</a>{{else if $v.Operator}}<span>{{$v.Operator}}</span>{{end}}
+			</p>
+		</div>
+		<p class="head-status status-{{$v.StatusClass}}"><span class="dot" aria-hidden="true"></span>{{$v.StatusDetail}}</p>
+	</header>
+
+	{{if $v.LADD}}<p class="notice">The owner of {{$v.Registration}} has asked the FAA to limit public tracking of this aircraft through the Limiting Aircraft Data Displayed (LADD) program. Its identity and registration are public record; its flights are not shown.</p>{{end}}
+
+	{{if or $v.Map $v.Live}}
+	<section class="window" aria-label="{{if $v.Live}}Current flight{{else}}Routes flown in the last {{$v.Days}} days{{end}}">
+		{{with $v.Live}}
+		<div class="strip strip-compact">
+			<div class="end">{{if .Dep.URL}}<a class="code" href="{{.Dep.URL}}">{{.Dep.Code}}</a>{{else}}<span class="code">{{or .Dep.Code "?"}}</span>{{end}}<span class="city">{{.Dep.City}}</span></div>
+			<div class="track">
+				<div class="track-line" role="img" aria-label="{{.Progress}}% of the way"><span class="track-done" style="width:{{.Progress}}%"></span><span class="track-plane" style="left:{{.Progress}}%">{{template "icon-plane"}}</span></div>
+				<p class="track-note">{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}{{if .FlownMi}}, {{.LeftMi}} to go{{end}}</p>
+			</div>
+			<div class="end end-arr">{{if .Arr.URL}}<a class="code" href="{{.Arr.URL}}">{{.Arr.Code}}</a>{{else}}<span class="code">{{or .Arr.Code "?"}}</span>{{end}}<span class="city">{{.Arr.City}}</span></div>
+		</div>
+		{{else}}
+		<p class="window-cap">Routes flown in the last {{$v.Days}} days{{if $v.Map}}; the plane marks the last reported position{{end}}.</p>
+		{{end}}
+		{{template "map" $v.Map}}
+	</section>
+	{{end}}
+
+	<div class="split">
+		<section aria-labelledby="about-h">
+			<h2 id="about-h">About {{$v.Registration}}</h2>
+			{{range $v.Summary}}<p>{{.}}</p>{{end}}
+			{{template "facts" $v.Specs}}
+		</section>
+		<aside class="side">
+			{{if $v.Stats}}
+			<h2>Last {{$v.Days}} days</h2>
+			<dl class="stats">{{range $v.Stats}}<div><dt>{{.Label}}</dt><dd>{{.Value}}</dd></div>{{end}}</dl>
+			{{end}}
+			{{if $v.TopAirports}}
+			<h3 class="side-h3">Busiest airports</h3>
+			<ol class="bars">
+				{{range $v.TopAirports}}<li>
+					<span class="bar-label">{{template "airport-inline" .Airport}} <span class="dim">{{.Airport.City}}</span></span>
+					<span class="bar-n">{{.Count}}</span>
+					<span class="bar" style="--w:{{barWidth .Count $v.MaxCount}}" aria-hidden="true"></span>
+				</li>{{end}}
+			</ol>
+			{{end}}
+		</aside>
+	</div>
+
+	{{if $v.Upcoming}}
+	<section aria-labelledby="up-h">
+		<h2 id="up-h">Planned flights</h2>
+		<ul class="plain-list">{{range $v.Upcoming}}<li>{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}
+			{{template "airport-inline" .Dep}} to {{template "airport-inline" .Arr}}{{with .DepPlanned}}{{if .Set}}, {{.Day}} {{.Clock}} {{.Zone}}{{end}}{{end}}</li>{{end}}</ul>
+	</section>
+	{{end}}
+
+	{{if $v.Recent}}
+	<section aria-labelledby="hist-h">
+		<h2 id="hist-h">Recent flights</h2>
+		<p class="lede">The last {{len $v.Recent}} flights of {{$v.Registration}}, newest first.</p>
+		{{template "legs" (legTable $v.Recent true)}}
+	</section>
+	{{end}}
+
+	{{if $v.Registry}}
+	<section aria-labelledby="reg-h">
+		<h2 id="reg-h">Registration</h2>
+		{{template "facts" $v.Registry}}
+		{{if gt (len $v.History) 1}}
+		<h3>Register history</h3>
+		<div class="table-scroll"><table class="legs">
+			<thead><tr><th scope="col">Registration</th><th scope="col">Owner</th><th scope="col">From</th><th scope="col">To</th><th scope="col">Status</th></tr></thead>
+			<tbody>{{range $v.History}}<tr><td>{{.Registration}}</td><td>{{title .OwnerName}}</td><td class="nowrap">{{date .ValidFrom}}</td><td class="nowrap">{{if .ValidTo}}{{date .ValidTo}}{{else}}Current{{end}}</td><td>{{.Status}}</td></tr>{{end}}</tbody>
+		</table></div>
+		{{end}}
+	</section>
+	{{end}}
+</article>
+{{end}}

@@ -1,0 +1,46 @@
+{{define "icon-search"}}<svg class="i" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.75" fill="none" stroke="currentColor" stroke-width="2"/><path d="m13 13 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>{{end}}
+
+{{/* a top-down airliner, nose up; rotated by heading where it is used */}}
+{{define "icon-plane"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1.6c.9 0 1.5 1 1.5 2.3v5.3l8 4.6v2.1l-8-2.4v4.6l2.4 1.8v1.7L12 20.6l-3.9 1v-1.7l2.4-1.8v-4.6l-8 2.4v-2.1l8-4.6V3.9c0-1.3.6-2.3 1.5-2.3Z"/></svg>{{end}}
+
+{{define "map"}}{{with .}}<div class="map-box" style="aspect-ratio:{{.W}}/{{.H}}">{{svg .SVG}}{{range .Markers}}{{if eq .Kind "plane"}}<span class="mk-plane" style="left:{{pct .X}};top:{{pct .Y}};--r:{{rot .Rot}}">{{template "icon-plane"}}</span>{{else}}<span class="mk-pin{{if eq .Kind "pin primary"}} is-primary{{end}} at-{{.LabelAt}}" style="left:{{pct .X}};top:{{pct .Y}}"><i></i>{{if .Label}}<b>{{.Label}}</b>{{end}}</span>{{end}}{{end}}</div>{{end}}{{end}}
+
+{{define "status"}}<span class="pill pill-{{.StatusClass}}">{{if .PhaseWord}}{{.PhaseWord}}{{else}}Unknown{{end}}</span>{{end}}
+
+{{define "airport-inline"}}{{if .URL}}<a href="{{.URL}}" title="{{.Name}}">{{.Code}}</a>{{else if .Code}}<span title="{{.Name}}">{{.Code}}</span>{{else}}<span class="dim">Unknown</span>{{end}}{{end}}
+
+{{define "time"}}{{if .Set}}<time datetime="{{.ISO}}">{{.Clock}} <small>{{.Zone}}</small></time>{{else}}<span class="dim">&ndash;</span>{{end}}{{end}}
+
+{{define "facts"}}{{if .}}<dl class="facts">{{range .}}<div><dt>{{.Label}}</dt><dd>{{if .URL}}<a href="{{.URL}}">{{.Value}}</a>{{else}}{{.Value}}{{end}}</dd></div>{{end}}</dl>{{end}}{{end}}
+
+{{/* legs: a list of LegV. showFlight adds a flight number column (aircraft page);
+     otherwise an aircraft column (flight page). */}}
+{{define "legs"}}
+<div class="table-scroll">
+<table class="legs">
+	<thead><tr>
+		<th scope="col">Date</th>
+		{{if .ShowFlight}}<th scope="col">Flight</th>{{else}}<th scope="col">Aircraft</th>{{end}}
+		<th scope="col">From</th>
+		<th scope="col">To</th>
+		<th scope="col" class="num">Departed</th>
+		<th scope="col" class="num">Arrived</th>
+		<th scope="col" class="num">Duration</th>
+		<th scope="col">Status</th>
+	</tr></thead>
+	<tbody>
+	{{range .Legs}}<tr>
+		<td class="nowrap" data-label="Date">{{.Date}}</td>
+		{{if $.ShowFlight}}<td data-label="Flight">{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}</td>
+		{{else}}<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{else}}{{.Reg}}{{end}} <span class="dim">{{.Type}}</span></td>{{end}}
+		<td data-label="From">{{template "airport-inline" .Dep}}</td>
+		<td data-label="To">{{if .DivertedTo}}{{template "airport-inline" .DivertedTo}} <span class="dim">(planned {{.Arr.Code}})</span>{{else}}{{template "airport-inline" .Arr}}{{end}}</td>
+		<td class="num" data-label="Departed">{{if .DepOff.Set}}{{template "time" .DepOff}}{{else}}{{template "time" .DepOut}}{{end}}</td>
+		<td class="num" data-label="Arrived">{{if .ArrOn.Set}}{{template "time" .ArrOn}}{{else}}{{template "time" .ArrIn}}{{end}}</td>
+		<td class="num" data-label="Duration">{{if .Duration}}{{.Duration}}{{else}}<span class="dim">&ndash;</span>{{end}}</td>
+		<td data-label="Status">{{template "status" .}}</td>
+	</tr>
+	{{end}}</tbody>
+</table>
+</div>
+{{end}}

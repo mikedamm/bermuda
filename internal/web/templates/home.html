@@ -1,0 +1,44 @@
+{{define "content"}}{{$v := .Body}}
+<div class="wrap page-home">
+	<section class="hero">
+		<h1>Where is that flight right now?</h1>
+		<p class="hero-lede">Look up any flight number, tail number or airport. WingView shows where it is, when it lands and what it has flown before.</p>
+		<form class="find find-big" action="/tracker/search" method="get" role="search">
+			<label class="vh" for="q2">Flight number, tail number or airport</label>
+			<input id="q2" name="q" type="search" placeholder="UA1275, N527AS or SEA" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="search">
+			<button type="submit">Track</button>
+		</form>
+		{{if $v.Examples}}<p class="examples">In the air now: {{range $i, $e := $v.Examples}}{{if $i}}, {{end}}<a href="{{$e.URL}}">{{$e.Number}}</a> <span class="dim">{{$e.Route}}</span>{{end}}</p>{{end}}
+	</section>
+
+	{{if $v.Map}}
+	<section class="window" aria-label="Busiest airports right now">
+		{{template "map" $v.Map}}
+	</section>
+	{{end}}
+
+	<div class="split">
+		{{if $v.Airports}}
+		<section aria-labelledby="ap-h">
+			<h2 id="ap-h">Busiest airports right now</h2>
+			<p class="lede">Flights arriving and departing within 40 miles, from our most recent look at each airport.</p>
+			<ol class="bars bars-wide">{{range $v.Airports}}<li>
+				<span class="bar-label"><a href="{{.URL}}">{{.Code}}</a> {{.Name}}</span>
+				<span class="bar-n">{{add .Inbound .Outbound}}</span>
+				<span class="bar" style="--w:{{barWidth (add .Inbound .Outbound) $v.MaxTraffic}}" aria-hidden="true"></span>
+			</li>{{end}}</ol>
+		</section>
+		{{end}}
+		{{if $v.Airlines}}
+		<aside class="side">
+			<h2>Airlines in the last day</h2>
+			<ul class="plain-list">{{range $v.Airlines}}<li><a href="{{.URL}}">{{.Name}}</a> <span class="dim">{{plural .Count "flight" "flights"}}</span></li>{{end}}</ul>
+		</aside>
+		{{end}}
+	</div>
+
+	{{if $v.Totals.Flights24h}}
+	<p class="note">In the last 24 hours WingView tracked {{commas $v.Totals.Flights24h}} airline flights and {{commas $v.Totals.Aircraft24h}} aircraft.</p>
+	{{end}}
+</div>
+{{end}}

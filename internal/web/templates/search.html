@@ -1,0 +1,11 @@
+{{define "content"}}{{$v := .Body}}
+<div class="wrap page-search">
+	{{if $v.Query}}
+	<h1>Results for {{$v.Query}}</h1>
+	<ul class="results">{{range $v.Results}}<li><a href="{{.URL}}">{{.Title}}</a> <span class="dim">{{.Detail}}</span></li>{{end}}</ul>
+	{{else}}
+	<h1>Search</h1>
+	<p>Type a flight number (UA1275), a tail number (N527AS) or an airport code (SEA) in the search box above.</p>
+	{{end}}
+</div>
+{{end}}

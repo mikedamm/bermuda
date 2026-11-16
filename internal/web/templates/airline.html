@@ -1,0 +1,47 @@
+{{define "content"}}{{$v := .Body}}
+<article class="wrap page-airline">
+	<header class="head">
+		<div class="head-id">
+			<h1 class="ident ident-airport">{{if $v.IATA}}<span class="code-big">{{$v.IATA}}</span> {{end}}<span class="ident-name">{{$v.Name}}</span></h1>
+			<p class="head-sub"><span>ICAO {{$v.ICAO}}</span></p>
+		</div>
+	</header>
+
+	<section class="about" aria-labelledby="about-h">
+		<h2 id="about-h" class="vh">About {{$v.Name}}</h2>
+		{{range $v.Summary}}<p>{{.}}</p>{{end}}
+	</section>
+
+	<div class="split">
+		<section aria-labelledby="fl-h">
+			<h2 id="fl-h">{{$v.Name}} flights this week</h2>
+			<div class="table-scroll">
+			<table class="legs">
+				<thead><tr><th scope="col">Flight</th><th scope="col">From</th><th scope="col">To</th><th scope="col">Aircraft</th><th scope="col">Last seen</th></tr></thead>
+				<tbody>{{range $v.Flights}}<tr>
+					<td data-label="Flight"><a href="{{.URL}}">{{.Number}}</a>{{if .Live}} <span class="pill pill-air">Live</span>{{end}}</td>
+					<td data-label="From">{{template "airport-inline" .Dep}}</td>
+					<td data-label="To">{{template "airport-inline" .Arr}}</td>
+					<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{else}}<span class="dim">–</span>{{end}}</td>
+					<td class="nowrap dim" data-label="Last seen">{{.Seen}}</td>
+				</tr>{{end}}</tbody>
+			</table>
+			</div>
+		</section>
+		<aside class="side">
+			{{if $v.FleetTypes}}
+			<h2>Fleet seen</h2>
+			<ol class="bars">{{range $v.FleetTypes}}<li><span class="bar-label">{{.Type}}</span><span class="bar-n">{{.Count}}</span><span class="bar" style="--w:{{barWidth .Count (index $v.FleetTypes 0).Count}}" aria-hidden="true"></span></li>{{end}}</ol>
+			{{end}}
+		</aside>
+	</div>
+
+	{{if $v.Fleet}}
+	<section aria-labelledby="fleet-h">
+		<h2 id="fleet-h">{{$v.Name}} aircraft</h2>
+		<p class="lede">Aircraft we have seen flying for {{$v.Name}} in the last 30 days.</p>
+		<ul class="chips">{{range $v.Fleet}}<li><a href="{{.URL}}" title="{{.Type}}">{{.Reg}}</a></li>{{end}}</ul>
+	</section>
+	{{end}}
+</article>
+{{end}}
