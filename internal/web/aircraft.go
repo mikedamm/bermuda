@@ -94,8 +94,11 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 		v.OwnerPlace = strings.Join(nonEmpty(titleCase(o.City), o.State, geo.CountryName(o.Country)), ", ")
 	}
 
+	// Redaction is decided once: everything below reads these filtered lists,
+	// never the raw answer.
+	recent, upcoming := visibleFlights(p0)
 	rf := refs{}
-	rf.addHistory(p0.RecentFlights)
+	rf.addHistory(recent)
 	for _, ac := range p0.Stats.Airports {
 		rf.add(ac.Airport)
 	}
@@ -122,6 +125,9 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 		if l.Dep.Code != "" && l.Arr.Code != "" {
 			v.StatusDetail = fmt.Sprintf("%s, %s to %s", l.Headline, l.Dep.City, l.Arr.City)
 		}
+	case st.Last != nil && st.Flight != nil && st.Flight.LADDRedacted:
+		v.Status, v.StatusClass = "Tracking limited", "muted"
+		v.StatusDetail = "Position withheld at the owner's request"
 	case st.Last != nil:
 		v.Status, v.StatusClass = "On the ground", "landed"
 		if !st.Last.OnGround {
@@ -140,19 +146,15 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 	}
 
 	v.History = p0.RegistryHistory
+	for _, h := range recent {
+		v.Recent = append(v.Recent, legFromHistory(h, now))
+	}
+	for _, u := range upcoming {
+		v.Upcoming = append(v.Upcoming, legFromLive(u, rf, now))
+	}
 	if !v.LADD {
-		for _, h := range p0.RecentFlights {
-			if !h.LADDRedacted {
-				v.Recent = append(v.Recent, legFromHistory(h, now))
-			}
-		}
-		for _, u := range st.Upcoming {
-			if !u.LADDRedacted {
-				v.Upcoming = append(v.Upcoming, legFromLive(u, rf, now))
-			}
-		}
 		// network map: every route of the window, the busiest drawn strongest
-		v.Map = aircraftMap(p0, v, rf)
+		v.Map = aircraftMap(p0, recent, v, rf)
 	}
 
 	// facts
@@ -250,7 +252,26 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 	return s.html("aircraft", p, v, maxAge)
 }
 
-func aircraftMap(p0 *api.AircraftPage, v AircraftPageV, rf refs) *geo.Map {
+// visibleFlights drops everything LADD withholds: all of it for a listed
+// aircraft, and any individually redacted row otherwise.
+func visibleFlights(p0 *api.AircraftPage) (recent []api.HistoryEntry, upcoming []api.FlightSummary) {
+	if p0.LADD.Listed {
+		return nil, nil
+	}
+	for _, h := range p0.RecentFlights {
+		if !h.LADDRedacted {
+			recent = append(recent, h)
+		}
+	}
+	for _, u := range p0.Status.Upcoming {
+		if !u.LADDRedacted {
+			upcoming = append(upcoming, u)
+		}
+	}
+	return recent, upcoming
+}
+
+func aircraftMap(p0 *api.AircraftPage, recent []api.HistoryEntry, v AircraftPageV, rf refs) *geo.Map {
 	spec := geo.MapSpec{W: 960, H: 400}
 	if v.Live != nil {
 		m := legMap(*v.Live, 960, 400)
@@ -259,7 +280,7 @@ func aircraftMap(p0 *api.AircraftPage, v AircraftPageV, rf refs) *geo.Map {
 	type pair struct{ a, b string }
 	counts := map[pair]int{}
 	maxN := 0
-	for _, h := range p0.RecentFlights {
+	for _, h := range recent {
 		if h.Dep == nil || h.Arr == nil || h.Dep.ICAO == h.Arr.ICAO {
 			continue
 		}
@@ -305,7 +326,7 @@ func aircraftMap(p0 *api.AircraftPage, v AircraftPageV, rf refs) *geo.Map {
 		}
 		return a.To.Lat < b.To.Lat
 	})
-	if last := p0.Status.Last; last != nil {
+	if last := p0.Status.Last; last != nil && (p0.Status.Flight == nil || !p0.Status.Flight.LADDRedacted) {
 		pos := geo.LL{Lat: last.Lat, Lon: last.Lon}
 		if pos.Valid() {
 			spec.Plane, spec.PlaneHdg = &pos, last.Hdg

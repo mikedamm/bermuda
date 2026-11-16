@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -203,11 +204,30 @@ func TestRobotsOnContainerHost(t *testing.T) {
 func TestStaticAssets(t *testing.T) {
 	h := testServer(t)
 	rec := get(t, h, "/tracker/static/site.css")
-	if rec.Code != 200 || !strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {
-		t.Fatalf("site.css: %d %q", rec.Code, rec.Header().Get("Cache-Control"))
+	if rec.Code != 200 || strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {
+		t.Fatalf("unversioned site.css: %d %q (only hashed URLs may be immutable)", rec.Code, rec.Header().Get("Cache-Control"))
 	}
-	// fonts referenced from CSS carry the same hash as the preload link
-	if !strings.Contains(rec.Body.String(), "fonts/inter-latin.woff2?v=") {
-		t.Fatal("css font url is not hashed")
+	// versioned URLs carry the hash in the path, and CSS points at the same
+	// font URL the preload link uses
+	page := get(t, h, "/tracker/").Body.String()
+	pre := regexp.MustCompile(`href="(/tracker/static/[0-9a-f]{10}/fonts/inter-latin\.woff2)"`).FindStringSubmatch(page)
+	if pre == nil {
+		t.Fatal("no hashed font preload on the page")
+	}
+	if !strings.Contains(rec.Body.String(), "url("+pre[1]+")") {
+		t.Fatalf("css does not reference %s", pre[1])
+	}
+	css := regexp.MustCompile(`href="(/tracker/static/[0-9a-f]{10}/site\.css)"`).FindStringSubmatch(page)
+	if css == nil {
+		t.Fatal("no hashed stylesheet link")
+	}
+	if rec := get(t, h, css[1]); rec.Code != 200 || !strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {
+		t.Fatalf("hashed css: %d %q", rec.Code, rec.Header().Get("Cache-Control"))
+	}
+	if rec := get(t, h, "/tracker/static/0000000000/site.css"); rec.Code != 200 || strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {
+		t.Fatalf("stale hash must not be cached forever: %d %q", rec.Code, rec.Header().Get("Cache-Control"))
+	}
+	if rec := get(t, h, "/tracker/search?q=AS14"); rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("search redirect is cacheable: %q", rec.Header().Get("Cache-Control"))
 	}
 }

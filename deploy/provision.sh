@@ -78,6 +78,17 @@ else
 	echo "updated environment of app $id" >&2
 fi
 
+# The endpoint's pull zone ships with defaults that defeat this site: it drops
+# query strings from the cache key and its smart cache won't store HTML.
+# Make it follow the origin's Cache-Control and serve stale while refreshing.
+pz=$(call GET "/apps/$id/endpoints" | jq -r '[.items[]? // .[]? | select(.type == "cdn") | .pullZoneId][0] // empty')
+if [[ -n $pz ]]; then
+	printf '%s' '{"IgnoreQueryStrings":false,"EnableSmartCache":false,"UseStaleWhileUpdating":true,"UseStaleWhileOffline":true,"CacheControlMaxAgeOverride":-1,"CacheControlPublicMaxAgeOverride":-1}' |
+		curl -sS --fail-with-body -K <(printf 'header = "AccessKey: %s"\n' "$BUNNYNET_API_KEY") \
+			-H 'Content-Type: application/json' -X POST --data-binary @- "https://api.bunny.net/pullzone/$pz" >/dev/null
+	echo "pull zone $pz: origin cache headers, query strings in key, stale serving on" >&2
+fi
+
 host=$(call GET "/apps/$id" | jq -r '.displayEndpoint.address // empty')
 echo "BUNNY_APP_ID=$id"
 echo "BUNNY_HOST=$host"

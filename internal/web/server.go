@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -96,9 +97,9 @@ func (s *Server) loadAssets() error {
 		}
 		dir := path.Dir(name)
 		css := cssURL.ReplaceAllStringFunc(string(a.body), func(m string) string {
-			ref := cssURL.FindStringSubmatch(m)[1]
-			if t, ok := s.assets[path.Join(dir, ref)]; ok {
-				return "url(" + ref + "?v=" + t.hash + ")"
+			ref := path.Join(dir, cssURL.FindStringSubmatch(m)[1])
+			if _, ok := s.assets[ref]; ok {
+				return "url(" + s.staticURL(ref) + ")"
 			}
 			return m
 		})
@@ -138,10 +139,12 @@ func (s *Server) walkAssets() error {
 	})
 }
 
-// staticURL returns a cache-busted URL for an embedded asset.
+// staticURL returns the versioned URL of an embedded asset. The content hash
+// is a path segment, not a query string: CDNs that drop query strings from
+// the cache key (a common default) would otherwise pin old CSS for a year.
 func (s *Server) staticURL(name string) string {
 	if a, ok := s.assets[name]; ok {
-		return Prefix + "/static/" + name + "?v=" + a.hash
+		return Prefix + "/static/" + a.hash + "/" + name
 	}
 	return Prefix + "/static/" + name
 }
@@ -165,6 +168,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		io.WriteString(w, "ok "+s.cfg.Version+"\n")
+	})
+	// operational detail for the container hostname only (not routed from www)
+	mux.HandleFunc("GET /statusz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "application/json")
+		st := s.index.Status()
+		st["version"] = s.cfg.Version
+		json.NewEncoder(w).Encode(st)
 	})
 	// Everything that is not an entity page lives under one prefix, so the
 	// main site needs only a handful of routing rules (see DEPLOYMENT.md):
@@ -309,14 +320,23 @@ func (s *Server) canonicalHost(r *http.Request) bool {
 }
 
 func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.assets[r.PathValue("path")]
+	name, cacheFor := r.PathValue("path"), "public, max-age=300"
+	if hash, rest, ok := strings.Cut(name, "/"); ok && len(hash) == 10 {
+		if a, ok := s.assets[rest]; ok {
+			name = rest
+			if a.hash == hash { // exact version: cache forever
+				cacheFor = "public, max-age=31536000, immutable"
+			} // an old hash after a deploy gets today's file, briefly cached
+		}
+	}
+	a, ok := s.assets[name]
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
 	h := w.Header()
 	h.Set("Content-Type", a.ctype)
-	h.Set("Cache-Control", "public, max-age=31536000, immutable")
+	h.Set("Cache-Control", cacheFor)
 	h.Set("Vary", "Accept-Encoding")
 	body := a.body
 	if a.gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {

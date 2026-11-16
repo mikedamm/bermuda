@@ -65,9 +65,18 @@ without it. Then:
   disallows everything, so its hostname never gets indexed
 
 Responses carry `Cache-Control: public, max-age=60…300,
-stale-while-revalidate=…, stale-if-error=86400`. Let the www pull zone follow
-origin cache headers, and keep query strings in the cache key (search and
-asset versions use them).
+stale-while-revalidate=…, stale-if-error=86400`; search answers are
+`no-store`; static assets are versioned by path (`/tracker/static/<hash>/…`)
+and immutable. For the www pull zone, match what `provision.sh` sets on the
+app's own zone:
+
+| setting | value | why |
+|---|---|---|
+| Cache expiration time | respect origin Cache-Control | pages set their own freshness (60 s live, 5 min archive) |
+| Browser cache expiration | match server | |
+| Ignore query strings | off | `/tracker/search?q=` must not share one cache entry |
+| Smart cache | off | it skips HTML, which is most of what this site serves |
+| Stale cache: while updating, while origin offline | on | instant pages during refresh, last good page during an API outage |
 
 ## Operating it
 

@@ -65,6 +65,7 @@ type Index struct {
 	airlines map[string]*Airline
 	airports map[string]*AirportActivity
 	dirty    bool
+	saved    time.Time // last successful snapshot
 }
 
 func NewIndex() *Index {
@@ -630,7 +631,24 @@ func (x *Index) Save(dir string) (err error) {
 		os.Remove(tmp.Name())
 		return err
 	}
-	return os.Rename(tmp.Name(), filepath.Join(dir, "index.json.gz"))
+	if err := os.Rename(tmp.Name(), filepath.Join(dir, "index.json.gz")); err != nil {
+		return err
+	}
+	x.mu.Lock()
+	x.saved = time.Now()
+	x.mu.Unlock()
+	return nil
+}
+
+// Status reports the index size and when it was last written to disk.
+func (x *Index) Status() map[string]any {
+	x.mu.RLock()
+	defer x.mu.RUnlock()
+	st := map[string]any{"flights": len(x.flights), "aircraft": len(x.aircraft), "airlines": len(x.airlines), "airports": len(x.airports)}
+	if !x.saved.IsZero() {
+		st["saved"] = x.saved.UTC().Format(time.RFC3339)
+	}
+	return st
 }
 
 // Load restores a snapshot; a missing file is not an error.

@@ -206,6 +206,7 @@ func (s *Server) searchPage(ctx context.Context, r *http.Request) (resp, error) 
 	if q == "" {
 		return s.html("search", p, SearchV{}, time.Minute)
 	}
+	// results below depend on the query string: never let a shared cache keep them
 	// airport codes first: three letters (IATA) or four (ICAO) that we know
 	if a, ok := geo.LookupAirport(q); ok && (len(q) == 3 || (len(q) == 4 && a.ICAO == q)) {
 		res, err := s.api.Search(ctx, q, 5)
@@ -241,12 +242,14 @@ func (s *Server) searchPage(ctx context.Context, r *http.Request) (resp, error) 
 			return redirect302("/airline/" + al.ICAO), nil
 		}
 		nf := s.notFound("Nothing matched "+q+". Try a flight number like UA1275, a registration like N527AS, or an airport code like SEA.", q)
-		nf.maxAge = time.Minute
+		nf.maxAge = 0
 		return nf, nil
 	}
-	return s.html("search", p, SearchV{Query: q, Results: rows}, time.Minute)
+	return s.html("search", p, SearchV{Query: q, Results: rows}, 0)
 }
 
+// redirect302 answers a search. It is never stored by a shared cache: a CDN
+// keying without the query string would send every search to the first answer.
 func redirect302(to string) resp {
-	return resp{status: http.StatusFound, redirect: to, maxAge: time.Minute}
+	return resp{status: http.StatusFound, redirect: to}
 }
