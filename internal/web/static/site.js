@@ -89,7 +89,12 @@
 				.setLngLat(data.plane.p).addTo(map);
 		}
 
-		map.on("load", () => {
+		// Overlays need only the style, not every basemap tile: draw them as
+		// soon as it is ready, so a cold tile cache never hides the flight.
+		let drawn = false;
+		const overlays = () => {
+			if (drawn) return;
+			drawn = true;
 			const features = (data.lines || []).map((l) => ({
 				type: "Feature", properties: { k: l.k, w: l.w ?? 1 }, geometry: { type: "LineString", coordinates: l.c },
 			}));
@@ -183,7 +188,9 @@
 				};
 				icon.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(PLANE_ICON);
 			}
-		});
+		};
+		if (map.isStyleLoaded()) overlays();
+		else map.once("style.load", overlays);
 	}
 
 	// a ring of `mi` statute miles around [lon, lat]

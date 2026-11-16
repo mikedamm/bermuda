@@ -14,8 +14,10 @@ never locally (podman/docker are disabled on the dev box). On every push to
 2. `image`: buildah builds the `Containerfile` for linux/amd64 and pushes
    `ghcr.io/mikedamm/bermuda:{sha,latest}`
 3. `deploy`: `BunnyWay/actions/container-update-image` rolls container `web`
-   onto `:{sha}`, then waits until `https://$BUNNY_HOST/healthz` answers
-   `ok {sha}`
+   onto `:{sha}`, waits until `https://$BUNNY_HOST/healthz` answers
+   `ok {sha}`, then purges the app's pull zone so no page built by the old
+   version outlives it (the www pull zone keeps its own copies until they
+   expire: at most 5 minutes plus its stale window)
 
 Pull requests run `test` only.
 
@@ -24,6 +26,7 @@ Pull requests run `test` only.
 | `BUNNYNET_API_KEY` | secret | bunny.net account API key |
 | `BUNNY_APP_ID` | variable | Magic Containers app id (deploy is skipped while unset) |
 | `BUNNY_HOST` | variable | the app's CDN hostname, for the post-deploy check |
+| `BUNNY_PULLZONE_ID` | variable | the app's pull zone (7022417), purged after each deploy |
 
 The GHCR package is private. Bunny pulls it through the registry entry
 `airlock-ghcr` (id 8623), which holds GitHub credentials for `mikedamm`.
