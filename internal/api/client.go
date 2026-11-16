@@ -78,6 +78,9 @@ const (
 	ttlFlights  = 8 * time.Minute
 	ttlAirport  = 45 * time.Second
 	ttlMissing  = 5 * time.Minute
+	ttlPlan     = 2 * time.Minute  // a live flight's route, amendments included
+	ttlTrail    = 10 * time.Second // a live flight's trail, memory only
+	ttlArchive  = 6 * time.Hour    // a closed flight's plan or track never changes
 )
 
 func (c *Client) Aircraft(ctx context.Context, key string, days, limit int) (*AircraftPage, error) {
@@ -116,6 +119,42 @@ func (c *Client) FlightLive(ctx context.Context, flightID string) (*LiveAnswer, 
 	return &out, nil
 }
 
+// FlightPlan is the route in force for one flight, resolved to positions.
+// Plans change rarely, so they are shared through the store too.
+func (c *Client) FlightPlan(ctx context.Context, flightID string) (*PlanAnswer, error) {
+	return getFor(ctx, c, "/flights/"+url.PathEscape(flightID)+"/plan", nil, func(p *PlanAnswer) time.Duration {
+		if p.Live {
+			return ttlPlan
+		}
+		return ttlArchive
+	})
+}
+
+// FlightTrack is one flight's flown trail. A live trail is stale in seconds,
+// so it is kept in memory briefly and never written to the store.
+func (c *Client) FlightTrack(ctx context.Context, flightID string) (*TrackAnswer, error) {
+	path := "/flights/" + url.PathEscape(flightID) + "/track?res=line"
+	return cache.Do(c.cache, path, func() (*TrackAnswer, time.Duration, error) {
+		lctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		body, err := c.fetch(lctx, path)
+		switch {
+		case errors.Is(err, ErrNotFound), errors.Is(err, ErrBadRequest):
+			return nil, time.Minute, err
+		case err != nil:
+			return nil, 0, err
+		}
+		var out TrackAnswer
+		if err := json.Unmarshal(body, &out); err != nil {
+			return nil, 0, fmt.Errorf("%w: decode: %v", ErrUpstream, err)
+		}
+		if out.Live {
+			return &out, ttlTrail, nil
+		}
+		return &out, ttlArchive, nil
+	})
+}
+
 // FreshAirportTraffic bypasses both caches (the crawler wants a new sweep).
 func (c *Client) FreshAirportTraffic(ctx context.Context, code string, radiusMi int) (*AirportTraffic, error) {
 	v := url.Values{"radius_mi": {strconv.Itoa(radiusMi)}}
@@ -131,6 +170,12 @@ func (c *Client) FreshAirportTraffic(ctx context.Context, code string, radiusMi 
 }
 
 func get[T any](ctx context.Context, c *Client, path string, q url.Values, ttl time.Duration) (*T, error) {
+	return getFor(ctx, c, path, q, func(*T) time.Duration { return ttl })
+}
+
+// getFor is get with a lifetime that depends on the answer (a live flight's
+// plan changes, an archived one's never does).
+func getFor[T any](ctx context.Context, c *Client, path string, q url.Values, ttlOf func(*T) time.Duration) (*T, error) {
 	key := path + "?" + q.Encode()
 	return cache.Do(c.cache, key, func() (*T, time.Duration, error) {
 		// The load is shared by every waiting caller, so one client hanging up
@@ -140,7 +185,7 @@ func get[T any](ctx context.Context, c *Client, path string, q url.Values, ttl t
 
 		// second tier: an answer another instance (or this one before a
 		// restart) already fetched
-		if out, left, hit, err := fromStore[T](lctx, c, key, ttl); hit {
+		if out, left, hit, err := fromStore(lctx, c, key, ttlOf); hit {
 			return out, left, err
 		}
 
@@ -159,6 +204,7 @@ func get[T any](ctx context.Context, c *Client, path string, q url.Values, ttl t
 		if err := json.Unmarshal(body, &out); err != nil {
 			return nil, 0, fmt.Errorf("%w: decode: %v", ErrUpstream, err)
 		}
+		ttl := ttlOf(&out)
 		c.store(key, http.StatusOK, body, ttl)
 		return &out, ttl, nil
 	})
@@ -167,7 +213,7 @@ func get[T any](ctx context.Context, c *Client, path string, q url.Values, ttl t
 // fromStore reads the shared tier within a short budget: a slow or failing
 // database is a miss, never a slow page.
 // A hit returns the stored answer, or the stored ErrNotFound/ErrBadRequest.
-func fromStore[T any](ctx context.Context, c *Client, key string, ttl time.Duration) (out *T, left time.Duration, hit bool, err error) {
+func fromStore[T any](ctx context.Context, c *Client, key string, ttlOf func(*T) time.Duration) (out *T, left time.Duration, hit bool, err error) {
 	if c.l2 == nil {
 		return nil, 0, false, nil
 	}
@@ -192,7 +238,7 @@ func fromStore[T any](ctx context.Context, c *Client, key string, ttl time.Durat
 			return nil, 0, false, nil
 		}
 		c.stats.hits.Add(1)
-		return &v, min(left, ttl), true, nil
+		return &v, min(left, ttlOf(&v)), true, nil
 	case http.StatusNotFound:
 		c.stats.hits.Add(1)
 		return nil, min(left, ttlMissing), true, ErrNotFound

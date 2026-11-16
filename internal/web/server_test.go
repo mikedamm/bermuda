@@ -65,6 +65,35 @@ func fakeAPI(t *testing.T) *httptest.Server {
 			write(w, map[string]any{"results": []any{}})
 		}
 	})
+	mux.HandleFunc("GET /flights/{id}/plan", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("id") != "f-live" {
+			w.WriteHeader(404)
+			return
+		}
+		line := [][2]float64{{-117.19, 32.73}, {-118.0, 35.0}, {-119.5, 38.0}, {-120.6, 41.0}, {-121.5, 44.0}, {-122.31, 47.45}}
+		write(w, map[string]any{"flight_id": "f-live", "live": true, "dep": "KSAN", "arr": "KSEA", "phase": "en_route",
+			"plan": map[string]any{"route": "KSAN DCT TESTA DCT TESTB KSEA", "route_kind": "filed", "dep": "KSAN", "arr": "KSEA",
+				"line": map[string]any{"type": "LineString", "coordinates": line}, "length_nm": 900}})
+	})
+	mux.HandleFunc("GET /flights/{id}/track", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("id") != "f-live" {
+			w.WriteHeader(404)
+			return
+		}
+		ms := now.UnixMilli()
+		write(w, map[string]any{"flight_id": "f-live", "live": true, "resolution": "line",
+			"trail": []any{
+				[]any{ms - 5_400_000, 32.80, -117.25, 3000, "adsb", 180, 300, 0},
+				[]any{ms - 3_600_000, 35.50, -118.40, 35000, "adsb", 450, 330, 0},
+				[]any{ms - 2_000_000, 45.00, -125.00, 35000, "est", 450, 330, 0}, // dead-reckoned: not drawn
+				[]any{ms - 1_200_000, 38.20, -119.70, 35000, "mlat", 450, 330, 1},
+			},
+			"tail_5m": []any{
+				[]any{ms - 290_000, 39.80, -120.05, 35000, "adsb", 450, 330, 0},
+				[]any{ms - 285_000, 39.81, -120.06, 35000, "adsb", nil, nil, nil},
+				[]any{ms - 10_000, 40.10, -120.20, 35000, "adsb", 450, 330, 0},
+			}})
+	})
 	mux.HandleFunc("GET /flights/{id}/live", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("id") != "f-live" {
 			w.WriteHeader(404)
@@ -390,5 +419,79 @@ func TestLiveRefresh(t *testing.T) {
 	h.ServeHTTP(rr, req)
 	if !strings.Contains(rr.Body.String(), "Disallow: /tracker/live/") {
 		t.Errorf("robots.txt does not keep crawlers off the refresh:\n%s", rr.Body)
+	}
+}
+
+// With the trail and plan endpoints answering, the flight map draws the
+// path flown and the rest of the filed route, not great circles.
+func TestFlightMapRealPath(t *testing.T) {
+	up := fakeAPI(t)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	s, err := New(api.New(up.URL, "test-token", 4, log), store.NewIndex(),
+		Config{SiteURL: "https://www.wingview.com", AppURL: "https://app.wingview.com", MapTiles: "https://i.wvcdn.com/v4.pmtiles"}, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	lines := func(raw string) map[string][][2]float64 {
+		var d struct {
+			Lines []struct {
+				C [][2]float64
+				K string
+			}
+		}
+		if err := json.Unmarshal([]byte(raw), &d); err != nil {
+			t.Fatalf("map data: %v", err)
+		}
+		out := map[string][][2]float64{}
+		for _, l := range d.Lines {
+			out[l.K] = l.C
+		}
+		return out
+	}
+	has := func(c [][2]float64, p [2]float64) bool {
+		for _, q := range c {
+			if q == p {
+				return true
+			}
+		}
+		return false
+	}
+
+	body := get(t, h, "/flight/ASA14").Body.String()
+	m := regexp.MustCompile(`data-map role="region"[^>]*><div class="map-canvas"></div><script type="application/json">([^<]+)</script>`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("no map data on the flight page")
+	}
+	l := lines(m[1])
+	flown, ahead := l["flown"], l["ahead"]
+	if !has(flown, [2]float64{-118.4, 35.5}) || !has(flown, [2]float64{-119.7, 38.2}) {
+		t.Errorf("flown line is not the trail: %v", flown)
+	}
+	if has(flown, [2]float64{-125, 45}) {
+		t.Error("flown line includes a dead-reckoned point")
+	}
+	if last := flown[len(flown)-1]; last != [2]float64{-120.2, 40.1} {
+		t.Errorf("flown line ends at %v, not the aircraft", last)
+	}
+	if len(ahead) == 0 || ahead[0] != [2]float64{-120.2, 40.1} || !has(ahead, [2]float64{-121.5, 44}) || has(ahead, [2]float64{-118, 35}) {
+		t.Errorf("ahead line is not the rest of the plan from the aircraft: %v", ahead)
+	}
+
+	// the live refresh sends the same shape, split at the new position
+	u := regexp.MustCompile(`data-live="([^"]+)"`).FindStringSubmatch(body)
+	if u == nil {
+		t.Fatal("no refresh URL")
+	}
+	var a struct{ Map json.RawMessage }
+	if err := json.Unmarshal(get(t, h, u[1]).Body.Bytes(), &a); err != nil {
+		t.Fatal(err)
+	}
+	l = lines(string(a.Map))
+	if f := l["flown"]; len(f) == 0 || f[len(f)-1] != [2]float64{-121, 41.5} || !has(f, [2]float64{-118.4, 35.5}) {
+		t.Errorf("refresh flown line: %v", f)
+	}
+	if a := l["ahead"]; len(a) == 0 || a[0] != [2]float64{-121, 41.5} || !has(a, [2]float64{-121.5, 44}) || has(a, [2]float64{-120.6, 41}) {
+		t.Errorf("refresh ahead line: %v", a)
 	}
 }

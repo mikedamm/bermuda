@@ -168,7 +168,7 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 	if !v.LADD {
 		// network map: every route of the window, the busiest drawn strongest
 		if v.Live != nil {
-			v.Map = s.legMapV(*v.Live, "Map of "+v.Registration+"'s current flight")
+			v.Map = s.legMapV(*v.Live, s.legShape(ctx, v.Live.FlightID), "Map of "+v.Registration+"'s current flight")
 		} else {
 			var plane *mapPlane
 			if last := p0.Status.Last; last != nil && (st.Flight == nil || !st.Flight.LADDRedacted) {

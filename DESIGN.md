@@ -303,7 +303,7 @@ Full-width collapsed tables at 13.5px: navy header row with 12px 600 `grid-head-
 
 ### Map
 MapLibre GL JS over WingView's Protomaps v4 basemap (`i.wvcdn.com/v4.pmtiles`), styled by `static/map-style.json`, generated from `@protomaps/basemaps` light with the WingView palette: land `land`, water `ocean`, parks a faint green, aeroways and runways in pale blue-greys, country borders in a muted blue-grey; POI icons, shields and one-way arrows are dropped. Map labels are Noto Sans (the glyphs MapLibre can render), not Inter.
-- **Route flown:** solid `link`, 3.2px. **Route ahead:** sky, 3px, short dashes.
+- **Route flown:** solid `link`, 3.2px, along the trail the aircraft actually flew. **Route ahead:** sky, 3px, short dashes, along the rest of its filed route from the aircraft onward. Great circles stand in when the trail or plan is missing, when the aircraft is far off its route, or when it has diverted. A route across the antimeridian stays in one copy of the world, with its airports and aircraft beside it.
 - **Airport pins:** a navy ring around a white dot, sized by traffic; main airports get a sky dot with a white stroke and larger 13px labels. Labels are navy with a white halo and give way to each other, busiest first.
 - **Subject airport:** navy ring, sky dot, white stroke, 15px label that never gives way, drawn above traffic.
 - **Planes:** navy top-down airliner glyph with a white edge, rotated to heading; the subject flight larger (30px) than other traffic (22px).

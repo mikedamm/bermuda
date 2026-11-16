@@ -3,7 +3,11 @@
 // 0 for numbers, the zero time for timestamps.
 package api
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
 // AirportRef is the shared airport reference shape.
 type AirportRef struct {
@@ -314,4 +318,90 @@ type LiveAnswer struct {
 	At     time.Time      `json:"at"`
 	Live   bool           `json:"live"`
 	Flight *FlightSummary `json:"flight"`
+}
+
+// PlanAnswer is GET /flights/{id}/plan. Plan is nil when there is none.
+type PlanAnswer struct {
+	FlightID string `json:"flight_id"`
+	Live     bool   `json:"live"`
+	Dep      string `json:"dep"`
+	Arr      string `json:"arr"`
+	Phase    string `json:"phase"`
+	Plan     *Plan  `json:"plan"`
+}
+
+// Plan is a flight's route resolved to positions. RouteKind is cleared,
+// filed, or likely (what the flight number usually files on this leg).
+type Plan struct {
+	Route     string      `json:"route"`
+	RouteKind string      `json:"route_kind"`
+	Dep       string      `json:"dep"`
+	Arr       string      `json:"arr"`
+	Waypoints []Waypoint  `json:"waypoints"`
+	Line      *LineString `json:"line"`
+	LengthNM  float64     `json:"length_nm"`
+}
+
+type Waypoint struct {
+	Ident  string  `json:"ident"`
+	Type   string  `json:"type"`
+	Lat    float64 `json:"lat"`
+	Lon    float64 `json:"lon"`
+	Approx bool    `json:"approx"`
+}
+
+// LineString is a GeoJSON line: coordinates are [lon, lat].
+type LineString struct {
+	Coordinates [][2]float64 `json:"coordinates"`
+}
+
+// TrackAnswer is GET /flights/{id}/track?res=line. A live flight has Trail
+// (the whole flight thinned to its shape) and Tail5m (the last five minutes
+// at full density); an archived one has Track.
+type TrackAnswer struct {
+	FlightID string       `json:"flight_id"`
+	Live     bool         `json:"live"`
+	Trail    []TrackPoint `json:"trail"`
+	Tail5m   []TrackPoint `json:"tail_5m"`
+	Track    *LineString  `json:"track"`
+}
+
+// TrackPoint arrives as [unix_ms, lat, lon, alt_ft, class, gs_kt, hdg, interp].
+type TrackPoint struct {
+	T      int64
+	Lat    float64
+	Lon    float64
+	Alt    float64
+	Class  string // adsb, mlat, tisb, adsc, radar, atc, est, other
+	GS     float64
+	Hdg    float64
+	Interp bool // interpolated between reports
+}
+
+func (p *TrackPoint) UnmarshalJSON(b []byte) error {
+	var raw []json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if len(raw) < 3 {
+		return fmt.Errorf("track point %s: too short", b)
+	}
+	var t float64 // unix ms, possibly written as a float
+	for i, dst := range []any{&t, &p.Lat, &p.Lon} {
+		if err := json.Unmarshal(raw[i], dst); err != nil {
+			return fmt.Errorf("track point %s: %w", b, err)
+		}
+	}
+	p.T = int64(t)
+	// the rest is optional: a null or odd value leaves the zero value
+	for i, dst := range []any{&p.Alt, &p.Class, &p.GS, &p.Hdg} {
+		if 3+i < len(raw) {
+			json.Unmarshal(raw[3+i], dst)
+		}
+	}
+	if len(raw) > 7 {
+		s := string(raw[7])
+		p.Interp = s == "1" || s == "true"
+	}
+	return nil
 }

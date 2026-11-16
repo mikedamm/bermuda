@@ -141,7 +141,7 @@ func (s *Server) liveFlightAnswer(ctx context.Context, id string, now time.Time)
 		}
 		out.Parts[part] = b.String()
 	}
-	if d, ok := legMapData(f); ok {
+	if d, ok := legMapData(f, s.legShape(ctx, id)); ok {
 		out.Map = &d
 	}
 	if f.Phase == "arrived" || f.Phase == "cancelled" {

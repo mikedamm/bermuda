@@ -35,8 +35,11 @@ One Go binary, standard library only.
   the pmtiles protocol and the label glyphs are self-hosted under
   `static/vendor/`; the style (`static/map-style.json`) is generated from
   `@protomaps/basemaps` in the WingView palette. The server computes
-  everything the maps draw (great-circle routes split at the live position,
-  airport pins, range rings, live aircraft and their headings) and embeds it
+  everything the maps draw (a flight's real path: the trail it flew from
+  `/flights/{id}/track` and the rest of its filed route from
+  `/flights/{id}/plan`, split at the live position, with great circles
+  wherever either is missing; airport pins, range rings, live aircraft and
+  their headings) and embeds it
   as JSON; `static/site.js` only renders it, after the page content and never
   for crawlers. With `MAP_TILES=off` the server draws SVG maps from embedded
   Natural Earth data instead (tests).

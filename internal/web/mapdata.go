@@ -74,8 +74,8 @@ func encodeMap(d mapData) template.JS {
 
 // legMapV draws one leg: the route split at the live position, both
 // airports, and the aircraft.
-func (s *Server) legMapV(l LegV, label string) *MapV {
-	d, ok := legMapData(l)
+func (s *Server) legMapV(l LegV, sh routeShape, label string) *MapV {
+	d, ok := legMapData(l, sh)
 	if !ok {
 		return nil
 	}
@@ -88,9 +88,10 @@ func (s *Server) legMapV(l LegV, label string) *MapV {
 	return m
 }
 
-// legMapData is what the interactive map draws for one leg; the live
-// refresh sends it again as the aircraft moves.
-func legMapData(l LegV) (mapData, bool) {
+// legMapData is what the interactive map draws for one leg: the trail it
+// flew and the rest of its filed route when the API has them, great circles
+// when not. The live refresh sends it again as the aircraft moves.
+func legMapData(l LegV, sh routeShape) (mapData, bool) {
 	arr := l.Arr
 	if l.DivertedTo != nil && l.DivertedTo.LL.Valid() {
 		arr = *l.DivertedTo
@@ -105,20 +106,83 @@ func legMapData(l LegV) (mapData, bool) {
 		}
 	}
 	flying := l.Airborne && l.HasPos && l.Phase != "arrived" && l.Phase != "landed"
-	if l.Dep.LL.Valid() && arr.LL.Valid() {
-		switch {
-		case flying:
-			d.Lines = append(d.Lines, mapLine{C: arc(l.Dep.LL, l.Pos), K: "flown"}, mapLine{C: arc(l.Pos, arr.LL), K: "ahead"})
-		case l.Progress >= 100:
-			d.Lines = append(d.Lines, mapLine{C: arc(l.Dep.LL, arr.LL), K: "flown"})
-		default:
-			d.Lines = append(d.Lines, mapLine{C: arc(l.Dep.LL, arr.LL), K: "ahead"})
+	both := l.Dep.LL.Valid() && arr.LL.Valid()
+	plan := sh.plan
+	if l.DivertedTo != nil {
+		plan = nil // it leads where the flight is no longer going
+	}
+	line := func(c [][2]float64, k string) {
+		if len(c) < 2 {
+			return
+		}
+		// each line starts in the copy of the world where the one before it
+		// ends (the ahead line begins at the raw position; the flown line may
+		// have run past ±180° to reach it)
+		if n := len(d.Lines); n > 0 {
+			prev := d.Lines[n-1].C
+			if shift := 360 * math.Round((prev[len(prev)-1][0]-c[0][0])/360); shift != 0 {
+				moved := make([][2]float64, len(c))
+				for i, p := range c {
+					moved[i] = [2]float64{p[0] + shift, p[1]}
+				}
+				c = moved
+			}
+		}
+		d.Lines = append(d.Lines, mapLine{C: c, K: k})
+	}
+	switch {
+	case flying:
+		if sh.flown != nil {
+			line(withEnd(sh.flown, l.Pos), "flown")
+		} else if l.Dep.LL.Valid() {
+			line(arc(l.Dep.LL, l.Pos), "flown")
+		}
+		if ahead := planAhead(plan, l.Pos); ahead != nil {
+			line(ahead, "ahead")
+		} else if arr.LL.Valid() {
+			line(arc(l.Pos, arr.LL), "ahead")
+		}
+	case l.Progress >= 100:
+		if sh.flown != nil {
+			line(sh.flown, "flown")
+		} else if both {
+			line(arc(l.Dep.LL, arr.LL), "flown")
+		}
+	default:
+		if plan != nil {
+			line(plan, "ahead")
+		} else if both {
+			line(arc(l.Dep.LL, arr.LL), "ahead")
 		}
 	}
 	if l.HasPos && l.Phase != "arrived" && l.Phase != "landed" {
 		d.Plane = &mapPlane{P: pt(l.Pos), H: math.Round(l.Hdg)}
 	}
+	// a route across the antimeridian runs past ±180°: keep the airports and
+	// the aircraft in the same copy of the world as the line beside them, or
+	// the camera frames both copies and shows the whole planet
+	for i := range d.Pins {
+		d.Pins[i].P = alignLon(d.Lines, d.Pins[i].P)
+	}
+	if d.Plane != nil {
+		d.Plane.P = alignLon(d.Lines, d.Plane.P)
+	}
 	return d, true
+}
+
+// alignLon moves p by whole turns of longitude to the copy of the world
+// holding the nearest point of the lines.
+func alignLon(lines []mapLine, p [2]float64) [2]float64 {
+	near, best := p, math.Inf(1)
+	for _, l := range lines {
+		for _, c := range l.C {
+			if d := math.Abs(wrapLon(c[0]-p[0])) + math.Abs(c[1]-p[1]); d < best {
+				near, best = c, d
+			}
+		}
+	}
+	p[0] += 360 * math.Round((near[0]-p[0])/360)
+	return p
 }
 
 // networkMapV draws a set of routes (an aircraft's month, an airline's week)

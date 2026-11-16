@@ -122,6 +122,11 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 			typeNames[x.ICAOType] = x.Name
 		}
 	}
+	// the live leg's real path (trail and filed route) loads alongside the history
+	shape := make(chan routeShape, 1)
+	if live != nil {
+		go func() { shape <- s.legShape(ctx, live.FlightID) }()
+	}
 	history := s.callsignHistory(ctx, canon, airframes)
 	rf := refs{}
 	rf.addHistory(history)
@@ -171,7 +176,10 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 	if live != nil {
 		v.AppURL = s.appLink("flight", live.FlightID)
 	}
-	v.Map = s.legMapV(featured, fmt.Sprintf("Map of %s from %s to %s", v.Number, featured.Dep.City, featured.Arr.City))
+	if live == nil {
+		go func() { shape <- s.legShape(ctx, featured.FlightID) }()
+	}
+	v.Map = s.legMapV(featured, <-shape, fmt.Sprintf("Map of %s from %s to %s", v.Number, featured.Dep.City, featured.Arr.City))
 	all := append([]LegV{featured}, legs...)
 	v.Summary = flightSummary(v, all, now)
 	v.Facts = flightFacts(all)
