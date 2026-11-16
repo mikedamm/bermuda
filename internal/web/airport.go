@@ -52,6 +52,7 @@ type TrafficRow struct {
 	State                 string // on the ground: Landed, Departing
 	Type                  string // parked: aircraft type from the index
 	Airline               string
+	Op                    string // operator ICAO code, for its logo
 	distMi                float64
 	pos                   geo.LL // live position, when resolved
 	hdg                   float64
@@ -165,7 +166,7 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 	var needRoute []*TrafficRow
 	for _, x := range t.Aircraft {
 		row := TrafficRow{
-			Callsign: x.Callsign, Number: x.Callsign, URL: flightURL(x.Callsign),
+			Callsign: x.Callsign, Number: x.Callsign, URL: flightURL(x.Callsign), Op: opCode("", x.Callsign),
 			Reg: x.Registration, RegURL: aircraftURL(x.Registration),
 			Alt: fmtAlt(x.AltFt, x.OnGround), Dist: fmtMiles(x.DistanceMi), distMi: x.DistanceMi,
 			Status: sentence(x.Status),
@@ -250,7 +251,7 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 				v.Parked[i].Type = a.Type
 			}
 			if al, ok := s.index.Airline(a.Airline); ok {
-				v.Parked[i].Airline = al.Name
+				v.Parked[i].Airline, v.Parked[i].Op = al.Name, a.Airline
 			}
 		}
 	}

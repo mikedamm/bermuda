@@ -2,6 +2,7 @@
 <div class="band">
 	<div class="wrap band-in">
 		<div class="band-id">
+			{{template "band-logo" $v.AirlineICAO}}
 			<h1>{{$v.Number}}</h1>
 			<p class="band-sub">
 				{{if $v.AirlineURL}}<a href="{{$v.AirlineURL}}">{{$v.Airline}}</a>{{else if $v.Airline}}<span>{{$v.Airline}}</span>{{end}}

@@ -22,6 +22,7 @@ type AircraftPageV struct {
 	Name         string // Boeing 737-890
 	Operator     string
 	OperatorURL  string
+	OperatorICAO string
 	Owner        string
 	OwnerPlace   string
 	Status       string
@@ -90,6 +91,7 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 		v.Operator = titleCase(p0.Operator.Name)
 		if p0.Operator.ICAO != "" {
 			v.OperatorURL = "/airline/" + p0.Operator.ICAO
+			v.OperatorICAO = p0.Operator.ICAO
 		}
 	}
 	if o := p0.Owner; o != nil && o.Name != "" {

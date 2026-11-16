@@ -93,6 +93,7 @@ type LegV struct {
 	URL        string // flight page, empty for non-airline callsigns
 	Airline    string
 	AirlineURL string
+	Op         string // operator ICAO code, for its logo
 
 	Dep, Arr   AirportV
 	DivertedTo *AirportV
@@ -149,6 +150,18 @@ func aircraftURL(reg string) string {
 	return "/aircraft/" + reg
 }
 
+// opCode is an operator's ICAO code for its logo: its own, else the airline
+// its callsign belongs to.
+func opCode(icao, callsign string) string {
+	if icao != "" {
+		return icao
+	}
+	if al, _, ok := store.AirlineCallsign(callsign); ok {
+		return al
+	}
+	return ""
+}
+
 func legNumber(iata, callsign string) string {
 	if iata != "" {
 		return iata
@@ -160,7 +173,7 @@ func legNumber(iata, callsign string) string {
 func legFromLive(fs api.FlightSummary, r refs, now time.Time) LegV {
 	l := LegV{
 		FlightID: fs.FlightID, Ident: fs.Callsign, Number: legNumber(fs.IATAFlight, fs.Callsign), URL: flightURL(fs.Callsign),
-		Airline: fs.Operator.Name, Dep: r.airport(fs.Dep), Arr: r.airport(fs.Arr),
+		Airline: fs.Operator.Name, Op: opCode(fs.Operator.ICAO, fs.Callsign), Dep: r.airport(fs.Dep), Arr: r.airport(fs.Arr),
 		Phase: fs.Phase, PhaseWord: fs.PhaseWord, Live: true,
 		Reg: fs.Registration, RegURL: aircraftURL(fs.Registration), Type: fs.Type, Model: fs.Model,
 	}
@@ -256,7 +269,7 @@ func legFromLive(fs api.FlightSummary, r refs, now time.Time) LegV {
 func legFromHistory(h api.HistoryEntry, now time.Time) LegV {
 	l := LegV{
 		FlightID: h.FlightID, Ident: h.Callsign, Number: legNumber(h.IATAFlight, h.Callsign), URL: flightURL(h.Callsign),
-		Airline: h.Operator.Name, Dep: airportV("", h.Dep), Arr: airportV("", h.Arr),
+		Airline: h.Operator.Name, Op: opCode(h.Operator.ICAO, h.Callsign), Dep: airportV("", h.Dep), Arr: airportV("", h.Arr),
 		Phase: h.Phase, PhaseWord: h.PhaseWord,
 		Reg: h.Registration, RegURL: aircraftURL(h.Registration), Type: h.Type,
 	}

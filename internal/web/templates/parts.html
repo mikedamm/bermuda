@@ -7,6 +7,11 @@
      data, or the server's SVG when no tiles are configured. */}}
 {{define "map"}}{{with .}}{{if .JSON}}<div class="map" data-map role="region" aria-label="{{.Label}}"><div class="map-canvas"></div><script type="application/json">{{.JSON}}</script></div>{{else if .SVG}}<div class="map map-static" role="img" aria-label="{{.Label}}">{{with .SVG}}<div class="map-box" style="aspect-ratio:{{.W}}/{{.H}}">{{svg .SVG}}{{range .Markers}}{{if eq .Kind "plane"}}<span class="mk-plane" style="left:{{pct .X}};top:{{pct .Y}};--r:{{rot .Rot}}">{{template "icon-plane"}}</span>{{else}}<span class="mk-pin{{if eq .Kind "pin primary"}} mk-main{{end}} at-{{.LabelAt}}" style="left:{{pct .X}};top:{{pct .Y}}"><i></i>{{if .Label}}<b>{{.Label}}</b>{{end}}</span>{{end}}{{end}}</div>{{end}}</div>{{end}}{{end}}{{end}}
 
+{{/* Operator logos: a fixed slot in tables and lists, so numbers stay
+     aligned whether or not an operator has one; a white tile in the band. */}}
+{{define "op"}}{{with logo .}}<img class="op" src="{{.}}" alt="" width="20" height="20" loading="lazy" decoding="async">{{else}}<span class="op"></span>{{end}}{{end}}
+{{define "band-logo"}}{{with logo .}}<img class="band-logo" src="{{.}}" alt="" width="40" height="40">{{end}}{{end}}
+
 {{define "band-status"}}<p class="status s-{{.Class}}"><strong>{{.Title}}</strong>{{with .Detail}} <span>{{.}}</span>{{end}}</p>{{end}}
 
 {{define "pill"}}<span class="tag tag-{{.StatusClass}}">{{if .PhaseWord}}{{.PhaseWord}}{{else}}Unknown{{end}}</span>{{end}}
@@ -60,7 +65,7 @@
 	<tbody>
 	{{range .Legs}}<tr>
 		<td class="nowrap" data-label="Date">{{.Date}}</td>
-		{{if $.ShowFlight}}<td data-label="Flight">{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}</td>
+		{{if $.ShowFlight}}<td data-label="Flight" class="nowrap">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}</td>
 		{{else}}<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a> {{else if .Reg}}{{.Reg}} {{end}}<span class="dim">{{or .Type "–"}}</span></td>{{end}}
 		<td data-label="From">{{template "airport-inline" .Dep}}</td>
 		<td data-label="To">{{if .DivertedTo}}{{template "airport-inline" .DivertedTo}} <span class="dim">(planned {{.Arr.Code}})</span>{{else}}{{template "airport-inline" .Arr}}{{end}}</td>

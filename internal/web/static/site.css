@@ -128,6 +128,9 @@ time, .num { font-variant-numeric: tabular-nums; }
 .band-sub a { color: #fff; font-weight: 600; }
 .band-sub a:hover { color: #fff; }
 .band-codes { color: #fff; font-weight: 600; }
+.band-id:has(> .band-logo) { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; align-items: center; }
+.band-logo { grid-row: span 2; width: 52px; height: 52px; padding: 6px; border-radius: 6px; background: #fff; object-fit: contain; }
+.op { display: inline-block; width: 20px; height: 20px; margin-right: 8px; vertical-align: -5px; object-fit: contain; }
 .band-meta { font-size: 13px; color: #9db4d1; }
 .band-meta time { color: #dbe7f5; }
 .band-state { display: inline-block; margin-right: 14px; padding: 3px 9px; border-radius: 3px; font-size: 13px; font-weight: 700; color: #fff; vertical-align: 1px; }
@@ -381,6 +384,7 @@ a.mk-plane-sm:hover { color: var(--link); }
 }
 
 @media (max-width: 640px) {
+	.band-logo { width: 44px; height: 44px; padding: 5px; }
 	.route-code { font-size: 28px; }
 	.cols { padding-inline: 0; gap: 16px; }
 	.panel { border-radius: 0; border-inline: 0; }

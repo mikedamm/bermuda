@@ -54,7 +54,7 @@
 		{{if $v.Airlines}}
 		<section class="panel" aria-labelledby="al-h">
 			<h2 id="al-h">Airlines, last 24 hours</h2>
-			<table class="grid grid-plain"><tbody>{{range $v.Airlines}}<tr><th scope="row"><a href="{{.URL}}">{{.Name}}</a></th><td class="num">{{plural .Count "flight" "flights"}}</td></tr>{{end}}</tbody></table>
+			<table class="grid grid-plain"><tbody>{{range $v.Airlines}}<tr><th scope="row">{{template "op" .ICAO}}<a href="{{.URL}}">{{.Name}}</a></th><td class="num">{{plural .Count "flight" "flights"}}</td></tr>{{end}}</tbody></table>
 		</section>
 		{{end}}
 		{{if $v.Totals.Flights24h}}

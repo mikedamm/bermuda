@@ -53,6 +53,9 @@ type Config struct {
 	// LiveKey signs the flight pages' live-refresh URLs. Every instance
 	// needs the same key; empty means a random one (a single instance).
 	LiveKey []byte
+	// LogoBase is where operator logos live ({base}/{ICAO}/icon.png);
+	// empty means no logos.
+	LogoBase string
 }
 
 // Vendored map libraries, served from versioned folders under static/vendor.
@@ -73,6 +76,8 @@ type Server struct {
 	assets      map[string]asset // path under /static/ → content
 	host        string           // canonical host
 	tilesOrigin string           // scheme://host of MapTiles, for the CSP
+	logos       *logoSet
+	imgSrc      string // the CSP's img-src origins
 }
 
 type asset struct {
@@ -92,7 +97,17 @@ func New(a *api.Client, idx *store.Index, cfg Config, log *slog.Logger) (*Server
 		cfg.LiveKey = make([]byte, 32)
 		rand.Read(cfg.LiveKey)
 	}
-	s := &Server{api: a, index: idx, cfg: cfg, log: log, pages: cache.New(5000), host: u.Host}
+	s := &Server{api: a, index: idx, cfg: cfg, log: log, pages: cache.New(5000), host: u.Host,
+		logos: newLogoSet(cfg.LogoBase, log), imgSrc: "'self' https://i.wvcdn.com"}
+	if cfg.LogoBase != "" {
+		l, err := url.Parse(cfg.LogoBase)
+		if err != nil || l.Host == "" {
+			return nil, fmt.Errorf("bad LOGOS %q", cfg.LogoBase)
+		}
+		if o := l.Scheme + "://" + l.Host; o != "https://i.wvcdn.com" {
+			s.imgSrc += " " + o
+		}
+	}
 	if cfg.MapTiles != "" {
 		t, err := url.Parse(cfg.MapTiles)
 		if err != nil || t.Host == "" {
@@ -105,6 +120,11 @@ func New(a *api.Client, idx *store.Index, cfg Config, log *slog.Logger) (*Server
 	}
 	if err := s.loadTemplates(); err != nil {
 		return nil, err
+	}
+	// check the logos of the airlines the index already knows, so the first
+	// pages rendered after a start (and cached for a while) have them
+	for _, a := range idx.TopAirlines(time.Now().Add(-7*24*time.Hour), 600) {
+		s.logos.URL(a.ICAO)
 	}
 	return s, nil
 }
@@ -214,6 +234,9 @@ func (s *Server) Handler() http.Handler {
 		st["version"] = s.cfg.Version
 		if c := s.api.Stats(); c != nil {
 			st["api_cache"] = c
+		}
+		if l := s.logos.Status(); l != nil {
+			st["logos"] = l
 		}
 		json.NewEncoder(w).Encode(st)
 	})
@@ -402,7 +425,7 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		// MapLibre runs from our own origin (module scripts, a blob: module
 		// worker) and reads tiles from the PMTiles host by range requests.
-		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' https://i.wvcdn.com data: blob:; "+
+		h.Set("Content-Security-Policy", "default-src 'self'; img-src "+s.imgSrc+" data: blob:; "+
 			"style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; "+
 			"connect-src 'self' "+s.tilesOrigin+"; worker-src 'self' blob:; child-src blob:; "+
 			"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")

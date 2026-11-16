@@ -2,6 +2,7 @@
 <div class="band">
 	<div class="wrap band-in">
 		<div class="band-id">
+			{{template "band-logo" $v.OperatorICAO}}
 			<h1>{{$v.Registration}}</h1>
 			<p class="band-sub">
 				{{if $v.Name}}<span>{{$v.Name}}</span>{{end}}

@@ -9,7 +9,7 @@
 		<th scope="col" class="num">Distance</th>
 	</tr></thead>
 	<tbody>{{range .Rows}}<tr>
-		<td data-label="Flight">{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{or .Number "?"}}{{end}}</td>
+		<td data-label="Flight" class="nowrap">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{or .Number "?"}}{{end}}</td>
 		<td data-label="{{$.Other}}">{{if .Other.Code}}{{template "airport-inline" .Other}} <span class="dim">{{.Other.City}}</span>{{else}}<span class="dim">&ndash;</span>{{end}}</td>
 		<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{else}}<span class="dim">{{or .Reg "–"}}</span>{{end}}</td>
 		<td class="num" data-label="Altitude">{{.Alt}}</td>
@@ -76,7 +76,7 @@
 			<table class="grid">
 				<thead><tr><th scope="col">Flight</th>{{if $v.GroundHasReg}}<th scope="col">Aircraft</th>{{end}}{{if $v.GroundHasRoute}}<th scope="col">From or to</th>{{end}}<th scope="col">State</th></tr></thead>
 				<tbody>{{range $v.Ground}}<tr>
-					<td data-label="Flight">{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{or .Number "–"}}{{end}}</td>
+					<td data-label="Flight" class="nowrap">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{or .Number "–"}}{{end}}</td>
 					{{if $v.GroundHasReg}}<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{else}}<span class="dim">&ndash;</span>{{end}}</td>{{end}}
 					{{if $v.GroundHasRoute}}<td data-label="From or to">{{if .Other.Code}}{{template "airport-inline" .Other}} <span class="dim">{{.Other.City}}</span>{{else}}<span class="dim">&ndash;</span>{{end}}</td>{{end}}
 					<td data-label="State"><span class="tag{{if eq .State "Landed"}} tag-landed{{else if eq .State "Departing"}} tag-air{{end}}">{{.State}}</span></td>
@@ -102,7 +102,7 @@
 				<tbody>{{range $v.Parked}}<tr>
 					<td data-label="Registration"><a href="{{.RegURL}}">{{.Reg}}</a></td>
 					<td data-label="Type">{{or .Type "–"}}</td>
-					<td data-label="Operator">{{or .Airline "–"}}</td>
+					<td data-label="Operator">{{if .Airline}}{{template "op" .Op}}{{.Airline}}{{else}}&ndash;{{end}}</td>
 				</tr>{{end}}</tbody>
 			</table>
 			</div>
@@ -122,7 +122,7 @@
 		{{if $v.Airlines}}
 		<section class="panel" aria-labelledby="al-h">
 			<h2 id="al-h">Airlines here now</h2>
-			<table class="grid grid-plain"><tbody>{{range $v.Airlines}}<tr><th scope="row">{{if .URL}}<a href="{{.URL}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</th><td class="num">{{plural .Count "flight" "flights"}}</td></tr>{{end}}</tbody></table>
+			<table class="grid grid-plain"><tbody>{{range $v.Airlines}}<tr><th scope="row">{{template "op" .ICAO}}{{if .URL}}<a href="{{.URL}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</th><td class="num">{{plural .Count "flight" "flights"}}</td></tr>{{end}}</tbody></table>
 		</section>
 		{{end}}
 		{{if $v.Nearby}}

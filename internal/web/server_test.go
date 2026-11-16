@@ -65,6 +65,15 @@ func fakeAPI(t *testing.T) *httptest.Server {
 			write(w, map[string]any{"results": []any{}})
 		}
 	})
+	mux.HandleFunc("GET /logos/{code}/icon.png", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("code") != "ASA" {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(404)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.Write([]byte("\x89PNG\r\n\x1a\n"))
+	})
 	mux.HandleFunc("GET /flights/{id}/plan", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("id") != "f-live" {
 			w.WriteHeader(404)
@@ -138,6 +147,10 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		}})
 	})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/logos/") { // the logo CDN is public
+			mux.ServeHTTP(w, r)
+			return
+		}
 		if r.Header.Get("Authorization") != "Bearer test-token" {
 			w.WriteHeader(401)
 			return
@@ -493,5 +506,55 @@ func TestFlightMapRealPath(t *testing.T) {
 	}
 	if a := l["ahead"]; len(a) == 0 || a[0] != [2]float64{-121, 41.5} || !has(a, [2]float64{-121.5, 44}) || has(a, [2]float64{-120.6, 41}) {
 		t.Errorf("refresh ahead line: %v", a)
+	}
+}
+
+// Logos appear once the CDN has been seen to have them: never a broken
+// image for an operator without one.
+func TestOperatorLogos(t *testing.T) {
+	up := fakeAPI(t)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	s, err := New(api.New(up.URL, "test-token", 4, log), store.NewIndex(),
+		Config{SiteURL: "https://www.wingview.com", AppURL: "https://app.wingview.com", LogoBase: up.URL + "/logos"}, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.logos.URL("ASA") != "" {
+		t.Fatal("a logo before it was checked")
+	}
+	for _, code := range []string{"ZZZ", "../x", "asa", ""} {
+		s.logos.URL(code)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for s.logos.URL("ASA") == "" && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := s.logos.URL("ASA"); got != up.URL+"/logos/ASA/icon.png" {
+		t.Fatalf("ASA logo = %q", got)
+	}
+	time.Sleep(100 * time.Millisecond) // ZZZ's check has answered too
+	for _, code := range []string{"ZZZ", "../x", "asa", ""} {
+		if got := s.logos.URL(code); got != "" {
+			t.Errorf("logo for %q = %q, want none", code, got)
+		}
+	}
+	if st := s.logos.Status(); st["found"] != 1 {
+		t.Errorf("status %v", st)
+	}
+
+	h := s.Handler()
+	body := get(t, h, "/flight/ASA14").Body.String()
+	if !strings.Contains(body, `<img class="band-logo" src="`+up.URL+`/logos/ASA/icon.png"`) {
+		t.Error("flight page band has no airline logo")
+	}
+	rec := get(t, h, "/airport/KSEA")
+	if !strings.Contains(rec.Body.String(), `<img class="op" src="`+up.URL+`/logos/ASA/icon.png"`) {
+		t.Error("airport board has no logo beside the Alaska flight")
+	}
+	if strings.Contains(rec.Body.String(), "/logos/ZZZ/") {
+		t.Error("a missing logo was rendered")
+	}
+	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "img-src 'self' https://i.wvcdn.com "+up.URL) {
+		t.Errorf("CSP does not allow the logo host: %s", csp)
 	}
 }
