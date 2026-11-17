@@ -153,8 +153,8 @@ time, .num { font-variant-numeric: tabular-nums; }
 	box-shadow: 0 10px 30px rgb(16 31 51 / 0.22), 0 1px 3px rgb(16 31 51 / 0.16);
 }
 .dock-search { width: 400px; }
-/* the aircraft's 3D model under the dock, over the map, as wide as the dock */
-.model { pointer-events: auto; position: relative; z-index: 2; display: block; width: 360px; aspect-ratio: 16 / 9; margin-top: 12px; border: 0; background: transparent; }
+/* the aircraft's 3D model heads the dock, on the dock's own surface */
+.model { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: transparent; }
 .dock-body { padding: 16px; }
 .dock-note, .dock-flight { margin-bottom: 12px; font-size: 14px; }
 .dock-flight a { font-weight: 700; }
@@ -408,7 +408,6 @@ a.mk-plane-sm:hover { color: var(--link); }
 	.stage-wrap { padding-block: 0; }
 	.dock, .dock-search { width: auto; border-radius: 0; box-shadow: none; border-bottom: 1px solid var(--line); }
 	.stage-bare .dock { margin: 0; max-width: none; border-inline: 0; }
-	.model { width: 100%; margin-top: 0; }
 	.foot-in { grid-template-columns: 1fr; }
 	.foot-mark { display: none; }
 	.foot-small { grid-column: auto; }

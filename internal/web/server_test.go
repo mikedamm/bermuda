@@ -261,7 +261,9 @@ func TestMapLibreMaps(t *testing.T) {
 	for _, want := range []string{`data-map-tiles="https://i.wvcdn.com/v4.pmtiles"`, `data-map-lib="/tracker/static/vendor/maplibre-gl-6.16.0/maplibre-gl.mjs`,
 		`data-map role="region"`, `"k":"flown"`, `"k":"ahead"`, `"plane":`, "/site.js", `<link rel="preconnect" href="https://i.wvcdn.com"`,
 		`data-map-terrain="https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"`, `<link rel="preconnect" href="https://tiles.mapterhorn.com"`,
-		`<iframe class="model" src="https://app.wingview.com/aircraft.html?embed=1&amp;registration=N527AS&amp;transparent=1"`} {
+		// the model heads the dock, outside the part live refresh rewrites (or it would reload every 30s)
+		"<div class=\"dock\">\n\t\t\t<iframe class=\"model\" src=\"https://app.wingview.com/aircraft.html?embed=1&amp;registration=N527AS&amp;transparent=1\"",
+		"</iframe>\n\t\t\t<div data-part=\"dock\">"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("map page lacks %q", want)
 		}

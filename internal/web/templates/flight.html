@@ -17,8 +17,10 @@
 <section class="stage{{if not $v.Map}} stage-bare{{end}}" aria-label="Where {{$v.Number}} is now">
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
 	<div class="wrap stage-wrap">
-		<div class="dock" data-part="dock">{{template "flight-dock" $v}}</div>
-		{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Featured.Reg}}"></iframe>{{end}}
+		<div class="dock">
+			{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Featured.Reg}}"></iframe>{{end}}
+			<div data-part="dock">{{template "flight-dock" $v}}</div>
+		</div>
 	</div>
 </section>
 

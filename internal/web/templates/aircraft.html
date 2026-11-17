@@ -18,6 +18,7 @@
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
 	<div class="wrap stage-wrap">
 		<div class="dock">
+			{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Registration}}"></iframe>{{end}}
 			{{template "band-status" $v.Band}}
 			<div class="dock-body">
 				{{if $v.LADD}}
@@ -31,7 +32,6 @@
 				{{end}}
 			</div>
 		</div>
-		{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Registration}}"></iframe>{{end}}
 	</div>
 </section>
 
