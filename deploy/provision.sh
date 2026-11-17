@@ -85,15 +85,18 @@ else
 	echo "updated environment of app $id (kept: $(printf '%s' "$merged" | jq -r --argjson ours "$(printf '%s' "$env_obj" | jq -c 'keys')" 'keys - $ours | join(", ")'))" >&2
 fi
 
-# The endpoint's pull zone ships with defaults that defeat this site: it drops
-# query strings from the cache key and its smart cache won't store HTML.
-# Make it follow the origin's Cache-Control and serve stale while refreshing.
+# The endpoint's pull zone (development only) must keep nothing the container
+# renders: every response is no-store except hashed static files. Follow the
+# origin's Cache-Control, pass query strings through, never serve a stale
+# copy, and purge whatever an earlier configuration stored.
 pz=$(call GET "/apps/$id/endpoints" | jq -r '[.items[]? // .[]? | select(.type == "cdn") | .pullZoneId][0] // empty')
 if [[ -n $pz ]]; then
-	printf '%s' '{"IgnoreQueryStrings":false,"EnableSmartCache":false,"UseStaleWhileUpdating":true,"UseStaleWhileOffline":true,"CacheControlMaxAgeOverride":-1,"CacheControlPublicMaxAgeOverride":-1}' |
+	printf '%s' '{"IgnoreQueryStrings":false,"EnableSmartCache":false,"UseStaleWhileUpdating":false,"UseStaleWhileOffline":false,"CacheControlMaxAgeOverride":-1,"CacheControlPublicMaxAgeOverride":-1}' |
 		curl -sS --fail-with-body -K <(printf 'header = "AccessKey: %s"\n' "$BUNNYNET_API_KEY") \
 			-H 'Content-Type: application/json' -X POST --data-binary @- "https://api.bunny.net/pullzone/$pz" >/dev/null
-	echo "pull zone $pz: origin cache headers, query strings in key, stale serving on" >&2
+	curl -sS --fail-with-body -K <(printf 'header = "AccessKey: %s"\n' "$BUNNYNET_API_KEY") \
+		-X POST "https://api.bunny.net/pullzone/$pz/purgeCache" >/dev/null
+	echo "pull zone $pz: origin cache headers, no stale serving, purged" >&2
 fi
 
 host=$(call GET "/apps/$id" | jq -r '.displayEndpoint.address // empty')
