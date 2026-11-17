@@ -18,6 +18,7 @@
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
 	<div class="wrap stage-wrap">
 		<div class="dock">
+			<div data-part="status">{{template "flight-status" $v}}</div>
 			{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Featured.Reg}}"></iframe>{{end}}
 			<div data-part="dock">{{template "flight-dock" $v}}</div>
 		</div>
@@ -58,8 +59,9 @@
 
 {{define "flight-meta"}}{{with .Featured.Band}}<span class="band-state s-{{.Class}}">{{.Title}}</span>{{end}} Updated <time datetime="{{.Updated.ISO}}">{{.Updated.Clock}} UTC</time>{{end}}
 
+{{define "flight-status"}}{{template "band-status" .Featured.Band}}{{end}}
+
 {{define "flight-dock"}}{{$f := .Featured}}
-{{template "band-status" $f.Band}}
 <div class="dock-body">
 	{{template "route" $f}}
 	{{if and $f.Live $f.HasPos}}{{template "telemetry" $f}}{{end}}

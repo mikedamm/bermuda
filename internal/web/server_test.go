@@ -261,8 +261,8 @@ func TestMapLibreMaps(t *testing.T) {
 	for _, want := range []string{`data-map-tiles="https://i.wvcdn.com/v4.pmtiles"`, `data-map-lib="/tracker/static/vendor/maplibre-gl-6.16.0/maplibre-gl.mjs`,
 		`data-map role="region"`, `"k":"flown"`, `"k":"ahead"`, `"plane":`, "/site.js", `<link rel="preconnect" href="https://i.wvcdn.com"`,
 		`data-map-terrain="https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"`, `<link rel="preconnect" href="https://tiles.mapterhorn.com"`,
-		// the model heads the dock, outside the part live refresh rewrites (or it would reload every 30s)
-		"<div class=\"dock\">\n\t\t\t<iframe class=\"model\" src=\"https://app.wingview.com/aircraft.html?embed=1&amp;registration=N527AS&amp;transparent=1\"",
+		// the model sits under the status band, between the parts live refresh rewrites (or it would reload every 30s)
+		"</p></div>\n\t\t\t<iframe class=\"model\" src=\"https://app.wingview.com/aircraft.html?embed=1&amp;registration=N527AS&amp;transparent=1\"",
 		"</iframe>\n\t\t\t<div data-part=\"dock\">"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("map page lacks %q", want)
@@ -384,7 +384,7 @@ func TestLiveRefresh(t *testing.T) {
 	if !strings.Contains(page.Body.String(), "/live.js") {
 		t.Error("live flight page does not load live.js")
 	}
-	for _, part := range []string{`data-part="meta"`, `data-part="dock"`, `data-part="times"`, `data-part="track"`} {
+	for _, part := range []string{`data-part="meta"`, `data-part="status"`, `data-part="dock"`, `data-part="times"`, `data-part="track"`} {
 		if !strings.Contains(page.Body.String(), part) {
 			t.Errorf("page lacks %s", part)
 		}
@@ -418,6 +418,9 @@ func TestLiveRefresh(t *testing.T) {
 	// position refresh in the side panel
 	if !strings.Contains(a.Parts["dock"], "37,000 ft") || strings.Contains(a.Parts["dock"], "N527AS") || strings.Contains(a.Parts["dock"], "in 3D") {
 		t.Errorf("dock part: want the new altitude, not the registration or a 3D button:\n%s", a.Parts["dock"])
+	}
+	if !strings.Contains(a.Parts["status"], "<strong>En route</strong>") || strings.Contains(a.Parts["dock"], `class="status`) {
+		t.Errorf("status part: want the band, and only there:\n%s", a.Parts["status"])
 	}
 	if !strings.Contains(a.Parts["track"], "N527AS") || !strings.Contains(a.Parts["track"], "Squawk") {
 		t.Errorf("track part lacks the registration or the squawk:\n%s", a.Parts["track"])

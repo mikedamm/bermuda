@@ -18,8 +18,8 @@
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
 	<div class="wrap stage-wrap">
 		<div class="dock">
-			{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Registration}}"></iframe>{{end}}
 			{{template "band-status" $v.Band}}
+			{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Registration}}"></iframe>{{end}}
 			<div class="dock-body">
 				{{if $v.LADD}}
 				<p class="dock-note">The owner of {{$v.Registration}} has asked the FAA to limit public tracking of this aircraft (the LADD program). Its identity and registration are public record; its flights and positions are not shown.</p>
