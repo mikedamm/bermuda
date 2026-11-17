@@ -973,3 +973,29 @@ func TestClockAt(t *testing.T) {
 		}
 	}
 }
+
+// A board shows each flight once and every time from the board's own sort
+// time: CV1 arrived and also still "coming" is one row; KE233 held twice two
+// minutes apart is one row; a flight with no touchdown time still has one.
+func TestBoardRowsDedupe(t *testing.T) {
+	at := func(m int) time.Time {
+		return time.Date(2026, 11, 17, 8, 0, 0, 0, time.UTC).Add(time.Duration(m) * time.Minute)
+	}
+	arrived := func(id, cs string, m int) api.BoardRow {
+		return api.BoardRow{BoardTime: at(m), Archived: &api.HistoryEntry{FlightID: id, Callsign: cs, Phase: "arrived", PhaseWord: "Arrived"}}
+	}
+	inbound := func(id, cs string, m int) api.BoardRow {
+		return api.BoardRow{BoardTime: at(m), Live: &api.FlightSummary{FlightID: id, Callsign: cs, Dep: "KORD", Arr: "KSEA", Phase: "en_route", PhaseWord: "En Route"}}
+	}
+	rows := boardRows(
+		[]api.BoardRow{arrived("a2", "CV1", 59), arrived("a1", "ASA285", 2)}, // newest first, CV1 without a touchdown time
+		[]api.BoardRow{inbound("c1", "CV1", 57), inbound("k1", "KAL233", 139), inbound("k2", "KAL233", 141), inbound("d1", "DAL375", 193)},
+		true, "America/Los_Angeles", at(70))
+	var got []string
+	for _, r := range rows {
+		got = append(got, r.Ident+"@"+r.At.Clock)
+	}
+	if want := "[ASA285@12:02 AM CV1@12:59 AM KAL233@2:19 AM DAL375@3:13 AM]"; fmt.Sprint(got) != want {
+		t.Errorf("got %v\nwant %s", got, want)
+	}
+}

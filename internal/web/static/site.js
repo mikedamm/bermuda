@@ -4,6 +4,17 @@
 // title band's "Updated" time up. Everything else on the page works
 // without this script.
 
+// Operator logos come from WingView's CDN for any three-letter designator,
+// unchecked; one it does not have would show the browser's broken image.
+// Hide those, including any that failed before this script ran.
+(() => {
+	"use strict";
+	const logo = "img.op, img.band-logo, img.band-bar-logo";
+	const hide = (img) => (img.style.visibility = "hidden");
+	document.querySelectorAll(logo).forEach((img) => img.complete && !img.naturalWidth && hide(img));
+	document.addEventListener("error", (e) => e.target.matches?.(logo) && hide(e.target), true);
+})();
+
 // The airport band's split-flap clock: the airport's local time, each
 // changed figure turning over as on an old departures board. The server
 // draws the time it rendered; this keeps it turning, on the minute.

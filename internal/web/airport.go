@@ -46,6 +46,7 @@ type BoardRowV struct {
 	Class  string // the status tag's
 	Note   string // how late or early, when known
 	Past   bool   // it has landed or left; the first row that has not starts the "now" line
+	t      time.Time
 }
 
 // ClockV is the band's split-flap clock: the airport's local time as four
@@ -138,8 +139,8 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 	var planes []mapPlane
 	if b := <-boards; b != nil {
 		v.Boards = true
-		v.Arrivals = boardRows(b.Boards.Arrivals, b.Boards.Enroute, true, now)
-		v.Departures = boardRows(b.Boards.Departures, b.Boards.Scheduled, false, now)
+		v.Arrivals = boardRows(b.Boards.Arrivals, b.Boards.Enroute, true, a.TZ, now)
+		v.Departures = boardRows(b.Boards.Departures, b.Boards.Scheduled, false, a.TZ, now)
 		// the boards' flights in the air near the field go on the map
 		for _, r := range append(append([]BoardRowV(nil), v.Arrivals...), v.Departures...) {
 			if r.Airborne && r.HasPos && geo.DistanceMi(a.Lat, a.Lon, r.Pos.Lat, r.Pos.Lon) < 250 {
@@ -209,9 +210,24 @@ func codeSlash(a geo.Airport) string {
 // boardRows turns a board's recent rows (newest first) and its coming ones
 // (soonest first) into one list, earliest first, as an airport's screens
 // show it: what has landed (or left), then what is on its way. arriving says
-// which end of each flight is here.
-func boardRows(recent, coming []api.BoardRow, arriving bool, now time.Time) []BoardRowV {
+// which end of each flight is here. Each row shows the time the board sorts
+// it by (wheels-on or gate-in, wheels-off or gate-out, the estimate, the
+// schedule), so the column reads in order and is never blank. A flight the
+// data holds twice shows once: the same flight number within half an hour
+// on the board, or still listed as coming within three hours of landing or
+// leaving.
+func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time.Time) []BoardRowV {
 	var out []BoardRowV
+	seen := map[string][]time.Time{}
+	fresh := func(id string, t time.Time, within time.Duration) bool {
+		for _, k := range seen[id] {
+			if d := t.Sub(k); d < within && d > -within {
+				return false
+			}
+		}
+		seen[id] = append(seen[id], t)
+		return true
+	}
 	add := func(b api.BoardRow, past bool) {
 		var l LegV
 		switch {
@@ -222,7 +238,7 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, now time.Time) []Bo
 		default:
 			return
 		}
-		r := BoardRowV{LegV: l, Past: past, Status: firstNonEmpty(l.PhaseWord, "Unknown"), Class: l.StatusClass}
+		r := BoardRowV{LegV: l, Past: past, Status: firstNonEmpty(l.PhaseWord, "Unknown"), Class: l.StatusClass, t: b.BoardTime}
 		switch {
 		case arriving && past:
 			r.Place, r.At = l.Dep, firstCell(l.ArrIn, l.ArrOn, l.ArrEst)
@@ -241,6 +257,16 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, now time.Time) []Bo
 			} else {
 				r.At, r.Note = l.DepPlanned, l.DepDelay
 			}
+		}
+		if !b.BoardTime.IsZero() {
+			r.At = timeCell(b.BoardTime, tz, "")
+		}
+		window := 30 * time.Minute
+		if !past {
+			window = 3 * time.Hour
+		}
+		if !fresh(firstNonEmpty(l.Ident, l.FlightID), firstSet(b.BoardTime, now), window) {
+			return
 		}
 		out = append(out, r)
 	}
@@ -292,7 +318,9 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 			case live && x.Direction == "departing":
 				row.State, row.StateClass = "Departing", "air"
 			case live && (x.Status == "landed" || x.Direction == "arriving"):
-				row.State, row.StateClass = "Just landed", "landed"
+				// a landed flight stays live for hours until it closes, so it
+				// has arrived, not "just" landed
+				row.State, row.StateClass = "Arrived", "landed"
 			default:
 				row.State, row.StateClass = "Parked", "muted"
 				row.URL = "" // its callsign is the last flight's, not a flight under way
@@ -310,9 +338,9 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 			}
 		}
 	}
-	// moving first (leaving, then just in), then parked aircraft the index
-	// can name, then by registration
-	rank := map[string]int{"Departing": 0, "Just landed": 1, "Parked": 2}
+	// leaving first, then arrived, then parked; within each, aircraft the
+	// index can name first, then by registration
+	rank := map[string]int{"Departing": 0, "Arrived": 1, "Parked": 2}
 	sort.SliceStable(v.Parked, func(i, j int) bool {
 		a, b := v.Parked[i], v.Parked[j]
 		if rank[a.State] != rank[b.State] {
