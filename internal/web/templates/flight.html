@@ -7,11 +7,11 @@
 				{{if $v.AirlineURL}}<a class="band-mark" href="{{$v.AirlineURL}}" aria-label="{{$v.Airline}}">{{template "band-logo" $v.AirlineICAO}}</a>{{else}}{{template "band-logo" $v.AirlineICAO}}{{end}}
 				<h1>{{$v.Heading}}</h1>
 			</div>
-			<p class="band-meta" data-part="meta">{{template "flight-meta" $v}}</p>
+			{{if $f.Reg}}<p class="band-tail">{{if $f.RegURL}}<a class="band-reg" href="{{$f.RegURL}}">{{$f.Reg}}</a>{{else}}<span class="band-reg">{{$f.Reg}}</span>{{end}}{{with $v.Airframe}}<span class="band-type">{{.}}</span>{{end}}</p>{{end}}
 		</div>
 	</div>
 	<section class="wrap stage-wrap" aria-label="Where {{$v.Number}} is now">
-		<div class="dock">
+		<div class="dock" data-rendered="{{$v.Updated.ISO}}">
 			<div data-part="status">{{template "flight-status" $v}}</div>
 			{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Featured.Reg}}"></iframe>{{end}}
 			<div data-part="dock">{{template "flight-dock" $v}}</div>
@@ -50,8 +50,6 @@
 
 {{/* The parts below change while a flight is under way; the live refresh
      (live.go) renders them again with the same templates. */}}
-
-{{define "flight-meta"}}Updated <time datetime="{{.Updated.ISO}}" data-ago>{{.Updated.Clock}} UTC</time>{{end}}
 
 {{define "flight-status"}}{{template "band-status" .Featured.Band}}{{end}}
 

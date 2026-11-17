@@ -42,9 +42,19 @@ type AircraftPageV struct {
 	Upcoming     []LegV
 	History      []api.RegistryVersion
 	LADD         bool
-	ModelURL     string // its 3D model, floated under the dock
+	ModelURL     string // its 3D model, in the dock
+	Hero         *Hero  // the band's left side: the flight it is on or assigned to next, else its operator
 	Days         int
 	Summary      []string
+}
+
+// Hero is the band's named mark: an airline's logo and a flight or
+// operator name, linked to its page.
+type Hero struct{ Name, URL, Logo string }
+
+// legHero names a leg as its own flight page does.
+func legHero(l LegV) *Hero {
+	return &Hero{Name: flightName(l.Number, l.Ident, l.Airline), URL: l.URL, Logo: l.Op}
 }
 
 type AirportCountV struct {
@@ -168,6 +178,22 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 	for _, u := range upcoming {
 		v.Upcoming = append(v.Upcoming, legFromLive(u, rf, now))
 	}
+	// the band names the flight it is flying, else the next one it is
+	// assigned to, else who operates it (LADD aircraft have no flights here)
+	switch {
+	case v.Live != nil:
+		v.Hero = legHero(*v.Live)
+	case len(v.Upcoming) > 0:
+		next := v.Upcoming[0]
+		for _, u := range v.Upcoming[1:] {
+			if !u.sort.IsZero() && (next.sort.IsZero() || u.sort.Before(next.sort)) {
+				next = u
+			}
+		}
+		v.Hero = legHero(next)
+	case v.Operator != "":
+		v.Hero = &Hero{Name: v.Operator, URL: v.OperatorURL, Logo: v.OperatorICAO}
+	}
 	if !v.LADD {
 		// network map: every route of the window, the busiest drawn strongest
 		if v.Live != nil {
@@ -199,6 +225,9 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 			code += ", " + k
 		}
 		add(&v.Specs, "Type code", code)
+	}
+	if v.Hex != v.Registration {
+		add(&v.Specs, "Mode S", v.Hex)
 	}
 	add(&v.Specs, "Engines", engines(a.Engines, a.EngineType))
 	if a.Seats > 0 {

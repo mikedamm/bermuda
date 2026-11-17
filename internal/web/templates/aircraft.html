@@ -3,16 +3,12 @@
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
 	<div class="band">
 		<div class="wrap band-in">
-			<div class="band-id">
-				{{template "band-logo" $v.OperatorICAO}}
+			{{with $v.Hero}}{{if .URL}}<a class="band-id band-hero" href="{{.URL}}">{{template "band-logo" .Logo}}<span class="band-name">{{.Name}}</span></a>
+			{{else}}<div class="band-id">{{template "band-logo" .Logo}}<span class="band-name">{{.Name}}</span></div>{{end}}{{end}}
+			<div class="band-tail">
 				<h1>{{$v.Registration}}</h1>
-				<p class="band-sub">
-					{{if $v.Name}}<span>{{$v.Name}}</span>{{end}}
-					{{if $v.OperatorURL}}<a href="{{$v.OperatorURL}}">{{$v.Operator}}</a>{{else if $v.Operator}}<span>{{$v.Operator}}</span>{{end}}
-					{{if and $v.Hex (ne $v.Hex $v.Registration)}}<span>Mode S {{$v.Hex}}</span>{{end}}
-				</p>
+				{{with $v.Name}}<p class="band-type">{{.}}</p>{{end}}
 			</div>
-			<p class="band-meta">Updated <time datetime="{{.Updated.ISO}}" data-ago>{{.Updated.Clock}} UTC</time></p>
 		</div>
 	</div>
 	<section class="wrap stage-wrap" aria-label="Where {{$v.Registration}} is now">

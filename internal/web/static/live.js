@@ -15,7 +15,7 @@
 	const map = document.querySelector("[data-map]");
 	let timer = 0, wait = EVERY, busy = false, stopped = false;
 	// a cached page can already be older than one interval: then refresh at once
-	const rendered = Date.parse(parts.meta?.querySelector("time")?.dateTime);
+	const rendered = Date.parse(document.querySelector("[data-rendered]")?.dataset.rendered);
 	let last = Number.isNaN(rendered) ? Date.now() : Math.min(rendered, Date.now());
 
 	const schedule = (ms) => {
@@ -40,7 +40,6 @@
 				if (!el || shown[k] === html || el.contains(document.activeElement)) continue;
 				el.innerHTML = shown[k] = html;
 			}
-			document.dispatchEvent(new Event("wv:parts")); // site.js recounts the new "Updated" time at once
 			if (d.map && map) map.dispatchEvent(new CustomEvent("wv:live", { detail: d.map }));
 			if (d.next) url = d.next;
 			stopped = !!d.done;

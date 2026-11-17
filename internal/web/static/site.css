@@ -131,7 +131,17 @@ time, .num { font-variant-numeric: tabular-nums; }
 
 .band { background: var(--navy); color: #fff; }
 .band-in { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; padding-block: 18px 16px; }
-.band h1 { font-size: 28px; font-weight: 700; line-height: 1.15; letter-spacing: -0.015em; color: #fff; text-wrap: balance; }
+.band h1, .band-name, .band-reg { font-size: 28px; font-weight: 700; line-height: 1.15; letter-spacing: -0.015em; color: #fff; text-wrap: balance; }
+/* a hero that links (the aircraft page's flight) underlines its name, not its logo */
+.band-hero { color: #fff; }
+.band-hero:hover { color: #fff; text-decoration: none; }
+.band-hero:hover .band-name, a.band-reg:hover { color: #fff; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+/* the tail number and airframe, opposite the flight; leading the band when
+   nothing stands to its left */
+.band-tail { margin-left: auto; text-align: right; }
+.band-tail:first-child { margin-left: 0; text-align: left; }
+.band-reg { display: block; }
+.band-type { display: block; margin-top: 4px; font-size: 14px; color: #b9cce4; }
 .band-sub { display: flex; flex-wrap: wrap; gap: 2px 18px; margin-top: 6px; font-size: 14px; color: #b9cce4; }
 .band-sub a { color: #fff; font-weight: 600; }
 .band-sub a:hover { color: #fff; }
@@ -233,7 +243,8 @@ time, .num { font-variant-numeric: tabular-nums; }
 .route-code { font-size: 32px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; color: var(--navy); }
 a.route-code:hover { color: var(--link); text-decoration: none; }
 .route-city { margin-top: 5px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
-.route-mid { font-size: 13px; font-weight: 600; line-height: 1.35; color: var(--ink); text-align: center; text-wrap: balance; font-variant-numeric: tabular-nums; }
+.route-mid { font-size: 13px; font-weight: 600; line-height: 1.35; color: var(--ink); text-align: center; font-variant-numeric: tabular-nums; }
+.route-mid span { display: block; } /* flown over to go, one to a line */
 .route-times { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
 .route-times > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .route-label { font-size: 12px; color: var(--muted); }
@@ -418,7 +429,7 @@ a.mk-plane-sm:hover { color: var(--link); }
 	.find { max-width: none; }
 	.stores { gap: 6px; }
 	.stores img { height: min(7vw, 40px); }
-	.band h1 { font-size: 24px; }
+	.band h1, .band-name, .band-reg { font-size: 24px; }
 	.stage { background: none; border: 0; }
 	/* the band over the map's top, then 320px of map, then the dock */
 	.stage:not(.stage-bare) { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 320px auto; }
@@ -437,6 +448,14 @@ a.mk-plane-sm:hover { color: var(--link); }
 
 @media (max-width: 640px) {
 	.band-logo { width: 44px; height: 44px; padding: 5px; }
+	/* under the flight, not across from it: its own row past a faint rule,
+	   the airframe beside the tail number */
+	.band-tail {
+		display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; flex-basis: 100%;
+		margin-left: 0; padding-top: 10px; border-top: 1px solid rgb(255 255 255 / 0.18); text-align: left;
+	}
+	.band-tail:first-child { padding-top: 0; border-top: 0; }
+	.band-tail .band-type { margin-top: 0; }
 	.route-code { font-size: 28px; }
 	.cols { padding-inline: 0; gap: 16px; }
 	.panel { border-radius: 0; border-inline: 0; }

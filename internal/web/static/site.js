@@ -27,7 +27,6 @@
 	};
 	tick();
 	setInterval(tick, 1000);
-	document.addEventListener("wv:parts", tick); // live refresh swapped in a new time
 })();
 
 (() => {

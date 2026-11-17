@@ -30,7 +30,7 @@
 		{{if .Dep.URL}}<a class="route-code" href="{{.Dep.URL}}">{{.Dep.Code}}</a>{{else}}<span class="route-code">{{or .Dep.Code "?"}}</span>{{end}}
 		<span class="route-city">{{.Dep.City}}</span>
 	</div>
-	<p class="route-mid">{{if .FlownMi}}{{.FlownMi}} flown, {{.LeftMi}} to go{{else if .Dist}}{{.Dist}}{{if .Duration}}, {{.Duration}} in the air{{end}}{{end}}</p>
+	<p class="route-mid">{{if .FlownMi}}<span>{{.FlownMi}} flown</span> <span>{{.LeftMi}} to go</span>{{else if .Dist}}<span>{{.Dist}}</span>{{if .Duration}} <span>{{.Duration}} in the air</span>{{end}}{{end}}</p>
 	<div class="route-end route-end-arr">
 		{{if .DivertedTo}}{{with .DivertedTo}}{{if .URL}}<a class="route-code" href="{{.URL}}">{{.Code}}</a>{{else}}<span class="route-code">{{.Code}}</span>{{end}}<span class="route-city">{{.City}}</span>{{end}}
 		{{else}}{{if .Arr.URL}}<a class="route-code" href="{{.Arr.URL}}">{{.Arr.Code}}</a>{{else}}<span class="route-code">{{or .Arr.Code "?"}}</span>{{end}}

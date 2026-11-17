@@ -98,20 +98,17 @@ func TestZoneAndCoordinates(t *testing.T) {
 	}
 }
 
-func TestFlightHeading(t *testing.T) {
-	for _, c := range []struct {
-		v    FlightPageV
-		want string
-	}{
-		{FlightPageV{Ident: "UAL7", Number: "UA7", Airline: "United Airlines"}, "United Airlines Flight 7"},
-		{FlightPageV{Ident: "UAL7", Number: "UA0007", Airline: "United Airlines"}, "United Airlines Flight 7"},
-		{FlightPageV{Ident: "SWA12AB", Number: "WN1234", Airline: "Southwest Airlines"}, "Southwest Airlines Flight 1234"}, // the ticketed number, not the callsign's
-		{FlightPageV{Ident: "ASA14", Number: "ASA14", Airline: "Alaska Airlines"}, "Alaska Airlines Flight 14"},            // no IATA number: the callsign's
-		{FlightPageV{Ident: "N61103", Number: "N61103", Airline: "Textron Aviation"}, "N61103"},                            // a registration, not "N6" 1103
-		{FlightPageV{Ident: "UAL7", Number: "UA7"}, "UA7"},                                                                 // no airline
+func TestFlightName(t *testing.T) {
+	for _, c := range []struct{ number, callsign, airline, want string }{
+		{"UA7", "UAL7", "United Airlines", "United Airlines Flight 7"},
+		{"UA0007", "UAL7", "United Airlines", "United Airlines Flight 7"},
+		{"WN1234", "SWA12AB", "Southwest Airlines", "Southwest Airlines Flight 1234"}, // the ticketed number, not the callsign's
+		{"ASA14", "ASA14", "Alaska Airlines", "Alaska Airlines Flight 14"},            // no IATA number: the callsign's
+		{"N61103", "N61103", "Textron Aviation", "N61103"},                            // a registration, not "N6" 1103
+		{"UA7", "UAL7", "", "UA7"},                                                    // no airline
 	} {
-		if got := flightHeading(c.v); got != c.want {
-			t.Errorf("flightHeading(%s %s) = %q, want %q", c.v.Ident, c.v.Number, got, c.want)
+		if got := flightName(c.number, c.callsign, c.airline); got != c.want {
+			t.Errorf("flightName(%s, %s) = %q, want %q", c.number, c.callsign, got, c.want)
 		}
 	}
 }

@@ -184,14 +184,17 @@ func TestPages(t *testing.T) {
 			// the masthead's store badges, and the band's count-up time
 			`<a href="https://www.wingview.com/ios"><img src="/tracker/static/`, `/badge-app-store.svg" width="135" height="40" alt="Download on the App Store">`,
 			`<a href="https://www.wingview.com/android"><img src="/tracker/static/`, `/badge-google-play.svg" width="135" height="40" alt="Get it on Google Play">`,
-			`data-ago>`,
+			// the band: the flight as people say it, its tail number and airframe opposite
+			`<p class="band-tail"><a class="band-reg" href="/aircraft/N527AS">N527AS</a>`,
 			`href="/aircraft/N527AS"`, `href="/airport/KSEA"`, "2h 30m", // history duration from off/on, not the "seen" span
 		}},
 		{"/flight/AS14", 301, "/flight/ASA14", nil},
 		{"/flight/asa14", 301, "/flight/ASA14", nil},
 		{"/flight/N527AS", 301, "/aircraft/N527AS", nil},
 		{"/flight/ZZZ999", 404, "", []string{`<meta name="robots" content="noindex,follow">`}},
-		{"/aircraft/N527AS", 200, "", []string{`<link rel="canonical" href="https://www.wingview.com/aircraft/N527AS">`, "Boeing 737-890", "Alaska Airlines Inc"}},
+		{"/aircraft/N527AS", 200, "", []string{`<link rel="canonical" href="https://www.wingview.com/aircraft/N527AS">`, "Boeing 737-890", "Alaska Airlines Inc",
+			// the band: the flight it is flying, named as its page names it, opposite its tail number
+			`<a class="band-id band-hero" href="/flight/ASA14">`, `<span class="band-name">Alaska Airlines Flight 14</span>`, "<h1>N527AS</h1>", "<dt>Mode S</dt>"}},
 		{"/aircraft/a6a300", 301, "/aircraft/N527AS", nil},
 		{"/aircraft/N0NE", 404, "", nil},
 		{"/airport/SEA", 301, "/airport/KSEA", nil},
@@ -388,7 +391,7 @@ func TestLiveRefresh(t *testing.T) {
 	if !strings.Contains(page.Body.String(), "/live.js") {
 		t.Error("live flight page does not load live.js")
 	}
-	for _, part := range []string{`data-part="meta"`, `data-part="status"`, `data-part="dock"`, `data-part="times"`, `data-part="track"`} {
+	for _, part := range []string{`data-rendered="`, `data-part="status"`, `data-part="dock"`, `data-part="times"`, `data-part="track"`} {
 		if !strings.Contains(page.Body.String(), part) {
 			t.Errorf("page lacks %s", part)
 		}
@@ -429,8 +432,8 @@ func TestLiveRefresh(t *testing.T) {
 	if !strings.Contains(a.Parts["track"], "N527AS") || !strings.Contains(a.Parts["track"], "Squawk") {
 		t.Errorf("track part lacks the registration or the squawk:\n%s", a.Parts["track"])
 	}
-	if !strings.Contains(a.Parts["times"], "Flight times") || !strings.Contains(a.Parts["meta"], "Updated") {
-		t.Error("times or meta part missing")
+	if !strings.Contains(a.Parts["times"], "Flight times") {
+		t.Error("times part missing")
 	}
 	if a.Map.Plane.P != [2]float64{-121, 41.5} {
 		t.Errorf("map plane at %v, want the moved position", a.Map.Plane.P)

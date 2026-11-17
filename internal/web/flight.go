@@ -20,6 +20,7 @@ type FlightPageV struct {
 	Ident       string
 	Number      string
 	Heading     string // "United Airlines Flight 7"
+	Airframe    string // "Boeing 787-9 Dreamliner", under the tail number in the band
 	Airline     string
 	AirlineURL  string
 	AirlineICAO string
@@ -119,11 +120,15 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 		}
 	}
 
-	// ICAO type designators (B39M) read better as names (Boeing 737-9)
-	typeNames := map[string]string{}
+	// ICAO type designators (B39M) read better as names (Boeing 737-9); each
+	// airframe's own name (Boeing 737-890) is what its aircraft page shows
+	typeNames, regNames := map[string]string{}, map[string]string{}
 	for _, x := range res.Results {
 		if x.ICAOType != "" && x.Name != "" {
 			typeNames[x.ICAOType] = x.Name
+		}
+		if x.Registration != "" && x.Name != "" && !x.LADDRedacted {
+			regNames[x.Registration] = x.Name
 		}
 	}
 	// the live leg's real path (trail and filed route) loads alongside the history
@@ -177,7 +182,8 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 			}
 		}
 	}
-	v.Heading = flightHeading(v)
+	v.Heading = flightName(v.Number, v.Ident, v.Airline)
+	v.Airframe = firstNonEmpty(regNames[featured.Reg], typeNames[featured.Type], featured.Model, featured.Type)
 	if live != nil {
 		v.AppURL = s.appLink("flight", live.FlightID)
 	}
@@ -259,29 +265,29 @@ func (s *Server) callsignHistory(ctx context.Context, callsign string, airframes
 	return dedup
 }
 
-// flightHeading names a flight the way people say it, "United Airlines
+// flightName names a flight the way people say it, "United Airlines
 // Flight 7": the airline, then the number without the airline's code. The
 // number is the IATA one when the flight has it (what tickets and boards
 // show), else the callsign's. Without an airline it is the flight number.
-func flightHeading(v FlightPageV) string {
-	if v.Airline == "" {
-		return v.Number
+func flightName(number, callsign, airline string) string {
+	if airline == "" {
+		return number
 	}
 	n := ""
 	// the IATA number differs from the callsign; one that doesn't is the
 	// callsign itself, and a registration like N61103 would split as "N6" 1103
-	if m := iataFlight.FindStringSubmatch(v.Number); m != nil && v.Number != v.Ident {
+	if m := iataFlight.FindStringSubmatch(number); m != nil && number != callsign {
 		n = m[2]
-	} else if _, num, ok := store.AirlineCallsign(v.Ident); ok && v.Number == v.Ident {
+	} else if _, num, ok := store.AirlineCallsign(callsign); ok && number == callsign {
 		n = num
 	}
 	if t := strings.TrimLeft(n, "0"); t != "" && t[0] <= '9' {
 		n = t // "UA0007" is Flight 7
 	}
 	if n == "" {
-		return v.Number
+		return number
 	}
-	return v.Airline + " Flight " + n
+	return airline + " Flight " + n
 }
 
 func flightTitle(v FlightPageV) string {
