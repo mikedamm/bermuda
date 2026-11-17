@@ -12,6 +12,24 @@
 {{define "op"}}{{with logo .}}<img class="op" src="{{.}}" alt="" width="20" height="20" loading="lazy" decoding="async">{{else}}<span class="op"></span>{{end}}{{end}}
 {{define "band-logo"}}{{with logo .}}<img class="band-logo" src="{{.}}" alt="" width="40" height="40">{{end}}{{end}}
 
+{{/* The condensed band (BarV) on flight and aircraft pages, which fades in
+     as the band condenses: the WingView logo, the dock's one-line summary,
+     and the airline's mark with the short codes by the tail. It only repeats
+     the page, so it is hidden from assistive tech and out of the tab order. */}}
+{{define "band-bar"}}<div class="wrap band-bar" aria-hidden="true">
+	<a class="band-bar-home" href="/" tabindex="-1"><img class="band-bar-logo-full" src="{{static "wingview-header-dark.svg"}}" width="116" height="32" alt=""><img class="band-bar-logo-icon" src="{{static "wingview-icon.svg"}}" width="32" height="32" alt=""></a>
+	{{if .Leg}}<div class="band-sum"{{with .Part}} data-part="{{.}}"{{end}}>{{template "band-sum" .}}</div>{{else}}<span></span>{{end}}
+	<div class="band-bar-id">
+		{{with logo .Logo}}<img class="band-bar-logo" src="{{.}}" alt="" width="28" height="28">{{end}}{{with .Code}}<span class="band-bar-code">{{.}}</span>{{end}}{{with .Reg}}<span class="band-bar-reg">{{.}}</span>{{end}}
+	</div>
+</div>{{end}}
+
+{{/* the dock in one line: the status chip, the route's codes either side of
+     its progress, the status detail */}}
+{{define "band-sum"}}{{with .Leg}}<span class="band-chip s-{{$.Band.Class}}">{{$.Band.Title}}</span>
+<span class="band-sum-route"><b>{{.Dep.Code}}</b><span class="band-sum-track" style="--p:{{.Progress}}%"></span><b>{{if .DivertedTo}}{{.DivertedTo.Code}}{{else}}{{.Arr.Code}}{{end}}</b></span>
+{{with $.Band.Detail}}<span class="band-sum-detail">{{.}}</span>{{end}}{{end}}{{end}}
+
 {{define "band-status"}}<p class="status s-{{.Class}}"><strong>{{.Title}}</strong>{{with .Detail}} <span>{{.}}</span>{{end}}</p>{{end}}
 
 {{define "pill"}}<span class="tag tag-{{.StatusClass}}">{{if .PhaseWord}}{{.PhaseWord}}{{else}}Unknown{{end}}</span>{{end}}

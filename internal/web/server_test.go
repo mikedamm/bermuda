@@ -464,7 +464,7 @@ func TestLiveRefresh(t *testing.T) {
 	if !strings.Contains(page.Body.String(), "/live.js") {
 		t.Error("live flight page does not load live.js")
 	}
-	for _, part := range []string{`data-part="status"`, `data-part="dock"`, `data-part="times"`, `data-part="track"`} {
+	for _, part := range []string{`data-part="status"`, `data-part="dock"`, `data-part="times"`, `data-part="track"`, `<div class="band-sum" data-part="bar">`} {
 		if !strings.Contains(page.Body.String(), part) {
 			t.Errorf("page lacks %s", part)
 		}
@@ -507,6 +507,10 @@ func TestLiveRefresh(t *testing.T) {
 	}
 	if !strings.Contains(a.Parts["times"], "Flight times") {
 		t.Error("times part missing")
+	}
+	// the condensed band's summary refreshes with the dock it stands in for
+	if !strings.Contains(a.Parts["bar"], `<span class="band-chip s-`) || !strings.Contains(a.Parts["bar"], "<b>SAN</b>") {
+		t.Errorf("bar part: want the status chip and the route:\n%s", a.Parts["bar"])
 	}
 	if a.Map.Plane.P != [2]float64{-121, 41.5} {
 		t.Errorf("map plane at %v, want the moved position", a.Map.Plane.P)
@@ -858,5 +862,21 @@ func TestAircraftBandCondenses(t *testing.T) {
 	// its operator's code is public identity; a flight is not
 	if strings.Contains(ladd, "band-sum") || strings.Contains(ladd, `band-bar-code">ASA14`) {
 		t.Error("a LADD aircraft's bar summarises or names a flight")
+	}
+}
+
+// The flight page gets the same condensing band: above the stage, with the
+// bar naming the flight's ICAO ident and its aircraft by the tail.
+func TestFlightBandCondenses(t *testing.T) {
+	body := get(t, testServer(t), "/flight/ASA14").Body.String()
+	band, stage := strings.Index(body, `data-condense>`), strings.Index(body, `<div class="stage`)
+	if band < 0 || stage < 0 || band > stage {
+		t.Fatalf("band at %d, stage at %d: the band must come first, outside the stage", band, stage)
+	}
+	for _, want := range []string{`<div class="wrap band-bar" aria-hidden="true">`, `<span class="band-bar-code">ASA14</span><span class="band-bar-reg">N527AS</span>`,
+		`>Alaska Airlines Flight 14</h1>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("flight band lacks %s", want)
+		}
 	}
 }

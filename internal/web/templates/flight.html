@@ -1,15 +1,20 @@
 {{define "content"}}{{$v := .Body}}{{$f := $v.Featured}}
+{{/* The band sits above the stage, not in it, so it can stick to the top
+     of the whole page. When the dock scrolls up into it, the dock folds in
+     (site.js marks it is-docked): the band condenses into band-bar, whose
+     summary is a live part. */}}
+<div class="band band-sticky{{if $v.Map}} band-over{{end}}" data-condense>
+	<div class="wrap band-in">
+		<div class="band-id">
+			{{if $v.AirlineURL}}<a class="band-mark" href="{{$v.AirlineURL}}" aria-label="{{$v.Airline}}">{{template "band-logo" $v.AirlineICAO}}</a>{{else}}{{template "band-logo" $v.AirlineICAO}}{{end}}
+			<h1>{{$v.Heading}}</h1>
+		</div>
+		{{if $f.Reg}}<p class="band-tail">{{if $f.RegURL}}<a class="band-reg" href="{{$f.RegURL}}">{{$f.Reg}}</a>{{else}}<span class="band-reg">{{$f.Reg}}</span>{{end}}{{with $v.Airframe}}<span class="band-type">{{.}}</span>{{end}}</p>{{end}}
+	</div>
+	{{template "band-bar" $v.Bar}}
+</div>
 <div class="stage{{if not $v.Map}} stage-bare{{end}}">
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
-	<div class="band">
-		<div class="wrap band-in">
-			<div class="band-id">
-				{{if $v.AirlineURL}}<a class="band-mark" href="{{$v.AirlineURL}}" aria-label="{{$v.Airline}}">{{template "band-logo" $v.AirlineICAO}}</a>{{else}}{{template "band-logo" $v.AirlineICAO}}{{end}}
-				<h1>{{$v.Heading}}</h1>
-			</div>
-			{{if $f.Reg}}<p class="band-tail">{{if $f.RegURL}}<a class="band-reg" href="{{$f.RegURL}}">{{$f.Reg}}</a>{{else}}<span class="band-reg">{{$f.Reg}}</span>{{end}}{{with $v.Airframe}}<span class="band-type">{{.}}</span>{{end}}</p>{{end}}
-		</div>
-	</div>
 	<section class="wrap stage-wrap" aria-label="Where {{$v.Number}} is now">
 		<div class="dock">
 			<div data-part="status">{{template "flight-status" $v}}</div>
@@ -48,6 +53,8 @@
      (live.go) renders them again with the same templates. */}}
 
 {{define "flight-status"}}{{template "band-status" .Featured.Band}}{{end}}
+
+{{define "flight-bar"}}{{template "band-sum" .Bar}}{{end}}
 
 {{define "flight-dock"}}{{$f := .Featured}}
 <div class="dock-body">

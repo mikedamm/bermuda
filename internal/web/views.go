@@ -591,3 +591,40 @@ func capFirst(s string) string {
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
 }
+
+// BarV is the condensed band on flight and aircraft pages (band-bar in
+// parts.html): the airline's mark with a short code and the tail number by
+// it, and the one-line summary of the dock the band takes over.
+type BarV struct {
+	Logo, Code, Reg string
+	Leg             *LegV // the flight the summary sums up; nil for none
+	Band            StatusBand
+	Part            string // the live part the summary is, so the refresh keeps it current
+}
+
+// Bar is the flight page's: its airline, its ICAO ident and its aircraft,
+// summed up as live parts so the refresh keeps it current.
+func (v FlightPageV) Bar() BarV {
+	f := v.Featured
+	b := BarV{Logo: v.AirlineICAO, Code: v.Ident, Reg: f.Reg, Leg: &f, Band: f.Band(), Part: "bar"}
+	if b.Code == b.Reg {
+		b.Code = "" // a private flight flies under its registration
+	}
+	return b
+}
+
+// Bar is the aircraft page's: the flight it is on (else its latest) and
+// whose it is, or its operator, by its tail.
+func (v AircraftPageV) Bar() BarV {
+	b := BarV{Reg: v.Registration, Band: v.Band, Leg: v.Live}
+	if b.Leg == nil {
+		b.Leg = v.Latest
+	}
+	if v.Hero != nil {
+		b.Logo, b.Code = v.Hero.Logo, v.Hero.Code
+	}
+	if b.Code == b.Reg {
+		b.Code = ""
+	}
+	return b
+}

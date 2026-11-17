@@ -1,11 +1,7 @@
 {{define "content"}}{{$v := .Body}}
 {{/* The band sits above the stage, not in it, so it can stick to the top
      of the whole page. When the dock scrolls up into it, the dock folds in
-     (site.js marks it is-docked): the band condenses and band-bar fades in,
-     the WingView mark at its left, the dock's one-line summary in its
-     middle, and the airline's mark with the short codes by the tail at its
-     right. band-bar only repeats what the band and the dock say, so it is
-     hidden from assistive tech and kept out of the tab order. */}}
+     (site.js marks it is-docked): the band condenses into band-bar. */}}
 <div class="band band-sticky{{if $v.Map}} band-over{{end}}" data-condense>
 	<div class="wrap band-in">
 		{{with $v.Hero}}{{if .URL}}<a class="band-id band-hero" href="{{.URL}}">{{template "band-logo" .Logo}}<span class="band-name">{{.Name}}</span></a>
@@ -15,18 +11,7 @@
 			{{with $v.Name}}<p class="band-type">{{.}}</p>{{end}}
 		</div>
 	</div>
-	<div class="wrap band-bar" aria-hidden="true">
-		<a class="band-bar-home" href="/" tabindex="-1"><img class="band-bar-logo-full" src="{{static "wingview-header-dark.svg"}}" width="116" height="32" alt=""><img class="band-bar-logo-icon" src="{{static "wingview-icon.svg"}}" width="32" height="32" alt=""></a>
-		{{with or $v.Live $v.Latest}}<div class="band-sum">
-			<span class="band-chip s-{{$v.Band.Class}}">{{$v.Band.Title}}</span>
-			<span class="band-sum-route"><b>{{.Dep.Code}}</b><span class="band-sum-track" style="--p:{{.Progress}}%"></span><b>{{if .DivertedTo}}{{.DivertedTo.Code}}{{else}}{{.Arr.Code}}{{end}}</b></span>
-			{{with $v.Band.Detail}}<span class="band-sum-detail">{{.}}</span>{{end}}
-		</div>{{else}}<span></span>{{end}}
-		<div class="band-bar-id">
-			{{with $v.Hero}}{{with logo .Logo}}<img class="band-bar-logo" src="{{.}}" alt="" width="28" height="28">{{end}}{{with .Code}}<span class="band-bar-code">{{.}}</span>{{end}}{{end}}
-			<span class="band-bar-reg">{{$v.Registration}}</span>
-		</div>
-	</div>
+	{{template "band-bar" $v.Bar}}
 </div>
 <div class="stage{{if not $v.Map}} stage-bare{{end}}">
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}

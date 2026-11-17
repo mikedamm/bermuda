@@ -44,7 +44,7 @@ var flightIDRe = regexp.MustCompile(`^[A-Za-z0-9-]{4,64}$`)
 
 // liveParts are the regions of the flight page the refresh replaces; each
 // is a template named flight-<part> in flight.html.
-var liveParts = []string{"status", "dock", "times", "track"}
+var liveParts = []string{"status", "dock", "times", "track", "bar"}
 
 // liveURL signs a refresh URL for one flight. Expiry is rounded to the hour,
 // so every page rendered in the same hour carries the same URL.
