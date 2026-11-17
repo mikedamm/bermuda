@@ -32,7 +32,7 @@ type mapData struct {
 
 type mapLine struct {
 	C [][2]float64 `json:"c"`
-	K string       `json:"k"` // flown, ahead, net, past (an earlier flight; W is its shade, 1 darkest)
+	K string       `json:"k"` // flown, ahead, net, past (an earlier flight; W is its age, 1 the latest)
 	W float64      `json:"w,omitempty"`
 }
 
@@ -235,7 +235,8 @@ func (d *mapData) addPast(legs []LegV, tracks [][][2]float64) {
 			continue
 		}
 		c = alignLine(d.Lines, c)
-		d.Lines = append(d.Lines, mapLine{C: c, K: "past", W: math.Max(0, 1-0.5*float64(i))})
+		// W is the age, 1 the latest: never 0, which the JSON leaves out
+		d.Lines = append(d.Lines, mapLine{C: c, K: "past", W: float64(i + 1)})
 		for _, a := range []AirportV{l.Dep, arr} {
 			if a.LL.Valid() && !pinned[a.Code] {
 				pinned[a.Code] = true

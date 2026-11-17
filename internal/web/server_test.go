@@ -306,6 +306,9 @@ func TestMapLibreMaps(t *testing.T) {
 	if strings.Index(ac, `"k":"past"`) < strings.Index(ac, `"k":"flown"`) {
 		t.Error("an earlier flight is drawn before the current one")
 	}
+	if strings.Contains(ac, `"k":"past"}`) {
+		t.Error("an earlier flight has no age: the map would draw it darkest")
+	}
 
 	csp := rec.Header().Get("Content-Security-Policy")
 	for _, want := range []string{"connect-src 'self' https://i.wvcdn.com https://tiles.mapterhorn.com;", "worker-src 'self' blob:", "script-src 'self';",
@@ -722,5 +725,30 @@ func TestFlightsPaging(t *testing.T) {
 	rec := get(t, testServer(t), "/aircraft/N527AS?page=4")
 	if rec.Code != 302 || rec.Header().Get("Location") != "/aircraft/N527AS" {
 		t.Errorf("past the end: %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+// Three earlier flights: oldest first (so the latest draws on top), each
+// with its age, 3 down to 1; none without one.
+func TestPastLinesAges(t *testing.T) {
+	leg := func(dep, arr string) LegV {
+		return LegV{Dep: airportV(dep, nil), Arr: airportV(arr, nil)}
+	}
+	var d mapData
+	d.addPast([]LegV{leg("KSEA", "KSAN"), leg("KPDX", "KSEA"), leg("KLAX", "KPDX")}, make([][][2]float64, 3))
+	var ages []float64
+	for _, l := range d.Lines {
+		if l.K == "past" {
+			ages = append(ages, l.W)
+		}
+	}
+	if fmt.Sprint(ages) != "[3 2 1]" {
+		t.Errorf("ages %v, want [3 2 1]", ages)
+	}
+	if b, _ := json.Marshal(d); strings.Contains(string(b), `"k":"past"}`) {
+		t.Errorf("a line without its age: %s", b)
+	}
+	if len(d.Pins) != 4 {
+		t.Errorf("%d minor pins, want SEA SAN PDX LAX", len(d.Pins))
 	}
 }

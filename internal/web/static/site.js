@@ -179,7 +179,7 @@
 			});
 			// earlier flights under the current one: gray, darkest the latest
 			line("wv-past", "past", {
-				"line-color": ["interpolate", ["linear"], ["get", "w"], 0, C.pastOld, 1, C.past],
+				"line-color": ["interpolate", ["linear"], ["get", "w"], 1, C.past, 3, C.pastOld], // w: age, 1 the latest
 				"line-width": 2.4,
 			});
 			line("wv-flown", "flown", { "line-color": C.flown, "line-width": 3.2 });
