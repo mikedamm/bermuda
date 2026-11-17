@@ -25,15 +25,12 @@
 {{/* route: the codes, the track between them with the plane at its
      progress, and the two times that matter */}}
 {{define "route"}}{{$d := .DepMoment}}{{$a := .ArrMoment}}
-<div class="route">
+<div class="route" style="--p:{{.Progress}}%">
 	<div class="route-end">
 		{{if .Dep.URL}}<a class="route-code" href="{{.Dep.URL}}">{{.Dep.Code}}</a>{{else}}<span class="route-code">{{or .Dep.Code "?"}}</span>{{end}}
 		<span class="route-city">{{.Dep.City}}</span>
 	</div>
-	<div class="route-track" role="img" aria-label="{{if .FlownMi}}{{.Progress}}% of the way, {{.LeftMi}} to go{{else}}{{.Headline}}{{end}}">
-		<span class="track-done" style="width:{{.Progress}}%"></span>
-		<span class="track-plane" style="left:{{.Progress}}%">{{template "icon-plane"}}</span>
-	</div>
+	<p class="route-mid">{{if .FlownMi}}{{.FlownMi}} flown, {{.LeftMi}} to go{{else if .Dist}}{{.Dist}}{{if .Duration}}, {{.Duration}} in the air{{end}}{{end}}</p>
 	<div class="route-end route-end-arr">
 		{{if .DivertedTo}}{{with .DivertedTo}}{{if .URL}}<a class="route-code" href="{{.URL}}">{{.Code}}</a>{{else}}<span class="route-code">{{.Code}}</span>{{end}}<span class="route-city">{{.City}}</span>{{end}}
 		{{else}}{{if .Arr.URL}}<a class="route-code" href="{{.Arr.URL}}">{{.Arr.Code}}</a>{{else}}<span class="route-code">{{or .Arr.Code "?"}}</span>{{end}}
@@ -44,7 +41,6 @@
 	<div>{{if $d.Label}}<span class="route-label">{{$d.Label}}</span>{{template "time" $d.T}}{{with $d.Delay}}<span class="delta delta-{{$d.Class}}">{{.}}</span>{{end}}{{end}}</div>
 	<div class="route-end-arr">{{if $a.Label}}<span class="route-label">{{$a.Label}}</span>{{template "time" $a.T}}{{with $a.Delay}}<span class="delta delta-{{$a.Class}}">{{.}}</span>{{end}}{{end}}</div>
 </div>
-{{if .FlownMi}}<p class="route-note">{{.FlownMi}} flown, {{.LeftMi}} to go</p>{{else if .Dist}}<p class="route-note">{{.Dist}}{{if .Duration}}, {{.Duration}} in the air{{end}}</p>{{end}}
 {{end}}
 
 {{/* legs: a list of LegV. ShowFlight adds a flight column (aircraft

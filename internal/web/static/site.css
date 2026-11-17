@@ -45,6 +45,7 @@
 	--late: #a24f00;
 	--bad: #c0342a;
 	--idle: #53627a;
+	--flown: #cee9fd; /* the route's progress fill: sky at 22% on white */
 	/* map */
 	--ocean: #c0dbe5; /* grey-teal, clear of the sky route */
 	--land: #faf4e9; /* warm stone: the complement of the navy and sky overlays */
@@ -168,8 +169,8 @@ time, .num { font-variant-numeric: tabular-nums; }
 	box-shadow: 0 10px 30px rgb(16 31 51 / 0.22), 0 1px 3px rgb(16 31 51 / 0.16);
 }
 .dock-search { width: 400px; }
-/* the aircraft's 3D model, under the status band, on the panel-heading tint so a white airframe keeps its edges */
-.model { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: var(--head); }
+/* the aircraft's 3D model, under the status band, on white */
+.model { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: var(--surface); }
 .dock-body { padding: 16px; }
 .dock-note, .dock-flight { margin-bottom: 12px; font-size: 14px; }
 .dock-flight a { font-weight: 700; }
@@ -218,25 +219,26 @@ time, .num { font-variant-numeric: tabular-nums; }
 .s-idle { background: var(--idle); }
 
 /* route: codes, track, the two times that matter */
-.route { display: grid; grid-template-columns: auto minmax(48px, 1fr) auto; align-items: start; gap: 14px; }
+/* the route is the progress bar: a strip across the dock, pale sky from the
+   left as far as the flight has come (--p), paper for the rest, the
+   distance between the two airports. No edge line: it would cut the text */
+.route {
+	display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px;
+	margin-inline: -16px; padding: 14px 16px;
+	background: linear-gradient(90deg, var(--flown) var(--p, 0%), var(--paper) var(--p, 0%));
+}
+.dock-body > .route:first-child { margin-top: -16px; }
 .route-end { display: flex; flex-direction: column; min-width: 0; }
 .route-end-arr { align-items: flex-end; text-align: right; }
 .route-code { font-size: 32px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; color: var(--navy); }
 a.route-code:hover { color: var(--link); text-decoration: none; }
 .route-city { margin-top: 5px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
-.route-track { position: relative; height: 2px; margin-top: 15px; background: repeating-linear-gradient(90deg, #86c4f8 0 5px, transparent 5px 10px); }
-.track-done { position: absolute; inset: 0 auto 0 0; background: var(--link); }
-.track-plane {
-	position: absolute; top: 50%; width: 24px; height: 24px; margin: -12px 0 0 -12px; padding: 2px;
-	color: var(--navy); background: var(--surface); border-radius: 50%; transform: rotate(90deg);
-}
-.track-plane .i { width: 100%; height: 100%; }
-.route-times { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.route-mid { font-size: 13px; font-weight: 600; line-height: 1.35; color: var(--ink); text-align: center; text-wrap: balance; font-variant-numeric: tabular-nums; }
+.route-times { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
 .route-times > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .route-label { font-size: 12px; color: var(--muted); }
 .route-times time { font-size: 19px; font-weight: 700; color: var(--navy); }
 .route-times time small { font-size: 12px; font-weight: 600; color: var(--muted); }
-.route-note { margin-top: 12px; font-size: 13px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
 .delta { font-size: 13px; font-weight: 600; }
 .delta-late { color: var(--late); }
 .delta-ok, .delta-ontime, .delta-early { color: var(--ok); }

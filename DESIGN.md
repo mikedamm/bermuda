@@ -29,7 +29,7 @@ colors:
   idle: "#53627a"
   ocean: "#c0dbe5"
   land: "#faf4e9"
-  route-ahead-dash: "#86c4f8"
+  flown: "#cee9fd"
 typography:
   display:
     fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
@@ -194,7 +194,7 @@ A two-blue brand on cool neutrals, with three solid state colours that do all th
 
 ### Secondary
 - **Sky** (`sky`): live and forward. The route still ahead on the map, the subject airport's fill, the main airport pins, focus rings, and the app button (always with navy text and a `sky-edge` border, as in the app itself). `sky-hover` is its hover.
-- **Deep Sky / Link Blue** (`link`, same value as `sky-edge`): text links, the route already flown, the progress fill on the route track, bar-chart fills, the airport-traffic network lines, range rings, and the live status band. `link-hover` darkens it for hovered links.
+- **Deep Sky / Link Blue** (`link`, same value as `sky-edge`): text links, the route already flown, bar-chart fills, the airport-traffic network lines, range rings, and the live status band. `link-hover` darkens it for hovered links.
 
 ### Tertiary (state)
 - **Landed Green** (`ok`): on time, arrived, landed without delay.
@@ -246,7 +246,7 @@ A single content column, max 1240px with a 20px gutter (16px under 900px), set b
 
 - **Shell, top to bottom:** white masthead (64px: logo at 168px on the left, search up to 460px at the page's centre, the App Store and Google Play badges on the right), title band (name, airline or owner line, codes; a quiet "Updated 12 seconds ago" at the bottom right), map stage, paper content area, white breadcrumb bar, deep-navy footer. The masthead is a three-column grid whose side columns are equal and never narrower than the two badges, so the search stays centred and gives up its own width first (256px at 900px).
 - **Title band:** on pages with a map it is the top of the stage, 80% navy over the map, and the map is framed below it; elsewhere it is solid navy. On flight pages it is only the airline's mark (linked to the airline) and the flight as people say it, "United Airlines Flight 7" (the IATA number without the airline's code, else the callsign's); the status lives in the dock, the date in the flight times panel. The "Updated" time counts up in the browser from when the page's data was read ("just now", "12 seconds ago", "3 minutes ago"); the server's clock time stays for readers without script and becomes its tooltip.
-- **Stage:** the map fills the stage absolutely (min 560px); the dock sits in normal flow inside the content column, 20px from the top, so the stage grows with the dock and nothing in it is ever clipped or scrolled. 360px wide for flights, 400px for search. On flight and aircraft pages the dock carries only what a glance needs (status, route, times, distance flown and to go, altitude, ground speed); the aircraft, heading, squawk and position age sit in a side panel that refreshes with it. The aircraft's 3D model from the app sits in the dock under the status band, above the route, full width and 16:9 on the panel-heading tint (`head`, so a white airframe keeps its edges): a plain iframe of the app's embed (it draws nothing when the app has no model for the aircraft). On flight pages the band and the route are separate live parts with the model between them, so it never reloads. The map is fixed: no pan, zoom or controls, framed by the server between the dock and the right edge of the content column; pins and aircraft link to their pages. At 900px and up the panels below rise 56px into the stage, and the map's last 176px fade into the paper behind them (no hairline under the stage); the map credit sits above the overlap.
+- **Stage:** the map fills the stage absolutely (min 560px); the dock sits in normal flow inside the content column, 20px from the top, so the stage grows with the dock and nothing in it is ever clipped or scrolled. 360px wide for flights, 400px for search. On flight and aircraft pages the dock carries only what a glance needs (status, route, times, distance flown and to go, altitude, ground speed); the aircraft, heading, squawk and position age sit in a side panel that refreshes with it. The aircraft's 3D model from the app sits in the dock under the status band, above the route, full width and 16:9 on white: a plain iframe of the app's embed (it draws nothing when the app has no model for the aircraft). On flight pages the band and the route are separate live parts with the model between them, so it never reloads. The map is fixed: no pan, zoom or controls, framed by the server between the dock and the right edge of the content column; pins and aircraft link to their pages. At 900px and up the panels below rise 56px into the stage, and the map's last 176px fade into the paper behind them (no hairline under the stage); the map credit sits above the overlap.
 - **Below the stage:** a main column plus a 340px side column at 1000px and up; 20px gaps between panels; 24px above (at 900px and up, 56px into the stage's fade instead), 48px below.
 - **Under 900px:** the logo and badges share the masthead's first row, scaled with the screen (logo 37vw, badges 7vw tall, both capped at their desktop size), and the search takes a full row. The stage stacks: the title band over the map's top, then 320px of map, then the dock, full width, square-cornered, no shadow, divided by a bottom rule.
 - **Under 640px:** panels go edge to edge (no side borders, no radius). Data grids drop their header row and reflow each row into a small labelled grid: four columns, or three for five-field rows; only times, durations, altitude, distance and last-seen get an 11px muted caption, since date, aircraft, route and status read on their own. The scheduled-versus-actual table keeps its table form at 12.5px.
@@ -265,7 +265,7 @@ Flat by default, ruled with hairlines. Depth appears only where something genuin
 
 ## Shapes
 
-Small, square-ish corners and hairline rules. Panels, the dock, buttons and inputs take 4px; the title-band status label and map-pin labels take 3px; pins and the route-track plane disc are round. Under 640px panels lose their corners and side borders; under 900px the dock does too. Lines are 1px everywhere; the only heavier strokes are map routes and the 2px sky underline on the current nav item.
+Small, square-ish corners and hairline rules. Panels, the dock, buttons and inputs take 4px; the title-band status label and map-pin labels take 3px; pins are round. Under 640px panels lose their corners and side borders; under 900px the dock does too. Lines are 1px everywhere; the only heavier strokes are map routes and the 2px sky underline on the current nav item.
 
 ## Components
 
@@ -294,7 +294,7 @@ Compact and solid, 600 weight at 14px, 38px tall, 4px corners.
 The one-line answer welded to the top edge of the dock: white text on a solid state fill, 11px 16px padding, the state word at 17px 700 and the detail at 600, spread to opposite ends. States: `ok` (arrived or landed on time), `late` (late departure or arrival, including a late departure on an otherwise on-time estimate), `bad` (diverted, cancelled), `live` (en route or taxiing with no delay known, in link blue), `idle` (scheduled, or no current data). The title band does not repeat it.
 
 ### Route Block
-Departure and arrival codes in 32px navy at either end, city names in 13px muted below. Between them a 2px track: dashed `route-ahead-dash` for the whole leg, solid `link` for the flown share, with a navy plane on a white disc at the progress point. Below a `line-soft` rule, the two times that matter at 19px navy with small zones, each with a 13px delay word in `ok` or `late`. A centred muted note gives distance flown and to go.
+The route is the dock's progress bar: a strip across the dock's full width, under the model, filled in `flown` (sky at 22% on white) from the left as far as the flight has come and `paper` for the rest; a landed flight is full, a scheduled one empty. Departure and arrival codes in 32px navy at either end with city names in 13px muted below; between them, centred and balanced, the distance in 13px 600 ink ("536 mi flown, 518 mi to go" in flight, "1,054 mi, 2h 30m in the air" otherwise). No line or marker at the fill's edge, which would cut the text. Below it, the two times that matter at 19px navy with small zones, each with a 13px delay word in `ok` or `late`.
 
 ### Telemetry Rows
 Two-column definition grid (altitude, ground speed, heading, squawk): 12px muted label over a 15px 600 tabular value, each cell topped by a `line-soft` rule. A muted right-aligned line gives the position's age. Missing readings show an en dash. Single label/value rows (aircraft, registration) are flex rows: muted label left, 600 value right.
