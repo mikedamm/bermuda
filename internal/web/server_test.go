@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -33,6 +34,7 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		"status": "active", "phase": "en_route", "phase_word": "En Route", "lat": 40.1, "lon": -120.2, "alt": 35000, "gs": 450, "hdg": 330,
 		"on_ground": false, "position_at": ts(-10 * time.Second), "last_seen": ts(-10 * time.Second),
 		"sched_dep": ts(-2 * time.Hour), "out": ts(-110 * time.Minute), "off": ts(-95 * time.Minute), "eta": ts(40 * time.Minute), "sched_arr": ts(30 * time.Minute),
+		"dep_terminal": "1", "dep_gate": "21", "arr_terminal": nil, "arr_gate": "n12", "baggage": "5",
 	}
 	hist := map[string]any{
 		"flight_id": "f-old", "airframe_id": "af-1", "callsign": "ASA14", "iata_flight": "AS14", "operator": op,
@@ -80,6 +82,17 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		case "N527AS":
 			write(w, map[string]any{"results": []any{map[string]any{"airframe_id": "af-1", "registration": "N527AS",
 				"matched": map[string]any{"kind": "registration", "value": "N527AS"}}}})
+		case "DAL7": // the callsign's flight is over the Pacific: not the aircraft passing Seattle
+			write(w, map[string]any{"results": []any{map[string]any{"airframe_id": "af-7", "registration": "N107DN",
+				"matched": map[string]any{"kind": "callsign", "value": "DAL7"},
+				"live": map[string]any{"flight_id": "f-dal7", "callsign": "DAL7", "iata_flight": "DL7", "dep": "KSEA", "arr": "PHNL",
+					"status": "active", "phase": "en_route", "lat": 26.8, "lon": -150.1, "alt": 37000, "position_at": ts(-5 * time.Second)}}}})
+		case "UAL5": // passing over Seattle on its way from San Diego to Bellingham
+			write(w, map[string]any{"results": []any{map[string]any{"airframe_id": "af-5", "registration": "N37505",
+				"matched": map[string]any{"kind": "callsign", "value": "UAL5"},
+				"live": map[string]any{"flight_id": "f-ual5", "callsign": "UAL5", "iata_flight": "UA5", "registration": "N37505",
+					"dep": "KSAN", "arr": "KBLI", "status": "active", "phase": "en_route", "phase_word": "En Route",
+					"lat": 47.6, "lon": -122.3, "alt": 31000, "gs": 440, "hdg": 350, "position_at": ts(-5 * time.Second), "last_seen": ts(-5 * time.Second)}}}})
 		default:
 			write(w, map[string]any{"results": []any{}})
 		}
@@ -192,6 +205,8 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		write(w, map[string]any{"airport": r.PathValue("code"), "radius_mi": 25, "aircraft": []any{
 			map[string]any{"callsign": "ASA14", "direction": "arriving", "registration": "N527AS", "alt_ft": 9000, "status": "active", "distance_mi": 30},
 			map[string]any{"callsign": "SLOW1", "direction": "transit", "alt_ft": 8000, "status": "active", "distance_mi": 20},
+			map[string]any{"callsign": "UAL5", "direction": "transit", "registration": "N37505", "alt_ft": 31000, "status": "active", "distance_mi": 8},
+			map[string]any{"callsign": "DAL7", "direction": "transit", "alt_ft": 2000, "status": "active", "distance_mi": 9},
 			// parked at the field, and on the ground at Boeing Field next door (not this field's)
 			map[string]any{"callsign": "ASA13", "direction": "local", "registration": "N2PARK", "on_ground": true, "alt_ft": 430, "status": "completed", "distance_mi": 0.6},
 			map[string]any{"callsign": "", "direction": "local", "registration": "N9BFI", "on_ground": true, "alt_ft": 20, "status": "completed", "distance_mi": 5.2},
@@ -209,7 +224,11 @@ func fakeAPI(t *testing.T) *httptest.Server {
 			arrived[k] = v
 		}
 		arrived["board_time"] = ts(-25 * time.Hour)
-		arrived["arr_gate"] = "b4"
+		arrived["arr_gate"], arrived["baggage"] = "b4", "4"
+		leaving := map[string]any{"dep_gate": "c12"}
+		for k, v := range nextLeg {
+			leaving[k] = v
+		}
 		inbound := map[string]any{"board_time": ts(40 * time.Minute)}
 		for k, v := range live {
 			inbound[k] = v
@@ -220,7 +239,7 @@ func fakeAPI(t *testing.T) *httptest.Server {
 				"arrivals":   []any{arrived},
 				"enroute":    []any{inbound},
 				"departures": []any{landed},
-				"scheduled":  []any{nextLeg},
+				"scheduled":  []any{leaving},
 			}})
 	})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -910,6 +929,17 @@ func TestFlightBandCondenses(t *testing.T) {
 	}
 }
 
+// The flight's route says where to find it at each end: the terminal and
+// gate it left from, the gate and carousel it is coming to.
+func TestFlightSpots(t *testing.T) {
+	body := get(t, testServer(t), "/flight/ASA14").Body.String()
+	for _, want := range []string{`<span class="route-spot">Terminal 1 · Gate 21</span>`, `<span class="route-spot">Gate N12 · Baggage 5</span>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("flight route lacks %s", want)
+		}
+	}
+}
+
 // The airport page: arrivals and departures as an airport's screens show
 // them (earliest first, a line at now), what is parked at the field (not the
 // next one over) and what flies over, and a split-flap clock. No 50-mile
@@ -933,8 +963,14 @@ func TestAirportBoards(t *testing.T) {
 		!strings.Contains(arrivals, `title="SAN DIEGO INTL">SAN</`) && !strings.Contains(arrivals, ">SAN<") {
 		t.Errorf("arrivals board:\n%s", arrivals)
 	}
+	// at the gate, its carousel; on the way, the gate it is coming to
+	for _, want := range []string{`<small class="fids-note">Baggage 4</small>`, `<small class="fids-note">Gate N12</small>`} {
+		if !strings.Contains(arrivals, want) {
+			t.Errorf("arrivals board lacks %s", want)
+		}
+	}
 	departures := body[dep:park]
-	for _, want := range []string{`href="/flight/ASA13"`, `href="/flight/ASA15"`, ">Scheduled<"} {
+	for _, want := range []string{`href="/flight/ASA13"`, `href="/flight/ASA15"`, ">Scheduled<", `<small class="fids-note">Gate C12</small>`} {
 		if !strings.Contains(departures, want) {
 			t.Errorf("departures board lacks %s", want)
 		}
@@ -945,6 +981,19 @@ func TestAirportBoards(t *testing.T) {
 	}
 	if !strings.Contains(body[over:], ">SLOW1<") {
 		t.Error("flying over lacks the passing flight")
+	}
+	// a passing flight found in time fills its row as far along as it is
+	// (San Diego to Bellingham, over Seattle: most of the way); SLOW1's
+	// lookup ran out of time and its row stays clear
+	m := regexp.MustCompile(`<tr role="row" class="is-filled" style="--p:(\d+)%">\s*<td role="cell" data-label="Flight" class="nowrap">(.*?)</td>`).FindAllStringSubmatch(body[over:], -1)
+	if len(m) != 1 || !strings.Contains(m[0][2], ">UA5</a>") {
+		t.Fatalf("flying over: want UA5's row alone filled, got %q", m)
+	}
+	if p, _ := strconv.Atoi(m[0][1]); p < 85 || p > 97 {
+		t.Errorf("flying over: UA5 fills %d%%, want most of the way", p)
+	}
+	if strings.Contains(body[over:], "PHNL") || strings.Contains(body[over:], ">DL7<") {
+		t.Error("flying over: DAL7 took the route of a DAL7 over the Pacific")
 	}
 	for _, gone := range []string{"Within 50 miles", "in 3D</a>", "Live traffic"} {
 		if strings.Contains(body, gone) {
@@ -1132,10 +1181,41 @@ func TestBoardFill(t *testing.T) {
 
 // A gate prints as boards print it; anything that does not read like one is
 // left off rather than shown.
+// Gates as the API sends them, kinds seen at SEA among them: a gate has a
+// number not led by a zero; the rest are placeholders.
 func TestGateName(t *testing.T) {
-	for in, want := range map[string]string{"B4": "B4", " n12 ": "N12", "C-17": "C-17", "37A": "37A", "": "", "TBD gate": "", "<b>": "", "ABCDEFGH": ""} {
+	for in, want := range map[string]string{"B4": "B4", " n12 ": "N12", "37A": "37A", "108B": "108B", "C10B": "C10B", "10": "10", "S7": "S7",
+		"": "", "TBD gate": "", "<b>": "", "ABCDEFGH": "", "N/A": "", "G": "", "B": "", "CHK": "", "INTL": "", "001": "", "01": "", "G002": ""} {
 		if got := gateName(in); got != want {
 			t.Errorf("gateName(%q) = %q, want %q", in, got, want)
 		}
+	}
+	for in, want := range map[string]string{"2e": "2E", "S": "S", "Terminal 3": "", "N/A": ""} {
+		if got := label(terminalRe, in); got != want {
+			t.Errorf("terminal %q = %q, want %q", in, got, want)
+		}
+	}
+	for in, want := range map[string]string{"7": "7", "cl-b": "CL-B", "1-3": "1-3", "IB11": "IB11", "N/A": ""} {
+		if got := label(claimRe, in); got != want {
+			t.Errorf("carousel %q = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A cancelled flight keeps no gates; one that went elsewhere keeps only
+// where it left from.
+func TestSpots(t *testing.T) {
+	spots := func(l LegV) (string, string) {
+		l.setSpots("3", "26", "S", "S7", "22")
+		return l.DepSpot(), l.ArrSpot()
+	}
+	if d, a := spots(LegV{Phase: "en_route"}); d != "Terminal 3 · Gate 26" || a != "Terminal S · Gate S7 · Baggage 22" {
+		t.Errorf("en route: %q / %q", d, a)
+	}
+	if d, a := spots(LegV{Phase: "cancelled"}); d != "" || a != "" {
+		t.Errorf("cancelled: %q / %q", d, a)
+	}
+	if d, a := spots(LegV{Phase: "arrived", DivertedTo: &AirportV{Code: "PDX"}}); d != "Terminal 3 · Gate 26" || a != "" {
+		t.Errorf("diverted: %q / %q", d, a)
 	}
 }

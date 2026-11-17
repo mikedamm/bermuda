@@ -99,14 +99,16 @@
 		{{if not $v.Live}}<p class="panel-empty">Traffic passing over {{$v.Code}} is not available right now.</p>
 		{{else if $v.Overhead}}
 		<div class="table-scroll">
-		<table class="grid grid-5">
-			<thead><tr><th scope="col">Flight</th><th scope="col">Route</th><th scope="col">Aircraft</th><th scope="col" class="num">Altitude</th><th scope="col" class="num">Distance</th></tr></thead>
-			<tbody>{{range $v.Overhead}}<tr>
-				<td data-label="Flight" class="nowrap">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{or .Number "–"}}{{end}}</td>
-				<td data-label="Route" class="nowrap">{{if or .From.Code .To.Code}}{{template "airport-inline" .From}} <span class="dim">&rarr;</span> {{template "airport-inline" .To}}{{else}}<span class="dim">&ndash;</span>{{end}}</td>
-				<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{else}}<span class="dim">{{or .Reg "–"}}</span>{{end}}</td>
-				<td class="num" data-label="Altitude">{{.Alt}}</td>
-				<td class="num" data-label="Distance">{{.Dist}}</td>
+		{{/* each row fills as far along its route as the flight is, as the
+		     boards' rows do; laid out on a grid like theirs (site.css) */}}
+		<table class="grid grid-5 grid-fill" role="table">
+			<thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Flight</th><th scope="col" role="columnheader">Route</th><th scope="col" role="columnheader">Aircraft</th><th scope="col" role="columnheader" class="num">Altitude</th><th scope="col" role="columnheader" class="num">Distance</th></tr></thead>
+			<tbody role="rowgroup">{{range $v.Overhead}}<tr role="row"{{if .Fill}} class="is-filled" style="--p:{{.Fill}}%"{{end}}>
+				<td role="cell" data-label="Flight" class="nowrap">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{or .Number "–"}}{{end}}</td>
+				<td role="cell" data-label="Route" class="nowrap">{{if or .From.Code .To.Code}}{{template "airport-inline" .From}} <span class="dim">&rarr;</span> {{template "airport-inline" .To}}{{if .Fill}}<span class="vh">, {{.Fill}}% of the way</span>{{end}}{{else}}<span class="dim">&ndash;</span>{{end}}</td>
+				<td role="cell" data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{else}}<span class="dim">{{or .Reg "–"}}</span>{{end}}</td>
+				<td role="cell" class="num" data-label="Altitude">{{.Alt}}</td>
+				<td role="cell" class="num" data-label="Distance">{{.Dist}}</td>
 			</tr>{{end}}</tbody>
 		</table>
 		</div>

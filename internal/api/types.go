@@ -69,10 +69,15 @@ type FlightSummary struct {
 	SchedDep     time.Time `json:"sched_dep"`
 	SchedArr     time.Time `json:"sched_arr"`
 	Runway       string    `json:"runway"`
-	DepGate      string    `json:"dep_gate"` // not sent yet: the gate fields are coming to the API
-	ArrGate      string    `json:"arr_gate"`
-	Squawk       string    `json:"squawk"`
-	LADDRedacted bool      `json:"ladd_redacted"`
+	// the airline's assignments from its schedule row (the departure gate is
+	// the tower's parking gate where it names one); empty where none is known
+	DepTerminal  string `json:"dep_terminal"`
+	DepGate      string `json:"dep_gate"`
+	ArrTerminal  string `json:"arr_terminal"`
+	ArrGate      string `json:"arr_gate"`
+	Baggage      string `json:"baggage"` // the arrival's baggage carousel
+	Squawk       string `json:"squawk"`
+	LADDRedacted bool   `json:"ladd_redacted"`
 }
 
 // HistoryEntry is an archived flight. Dep/Arr/ActualArr are references.
@@ -100,8 +105,11 @@ type HistoryEntry struct {
 	On            time.Time   `json:"on"`
 	Out           time.Time   `json:"out"`
 	In            time.Time   `json:"in"`
-	DepGate       string      `json:"dep_gate"` // not sent yet, as on FlightSummary
+	DepTerminal   string      `json:"dep_terminal"` // as on FlightSummary; on board rows
+	DepGate       string      `json:"dep_gate"`
+	ArrTerminal   string      `json:"arr_terminal"`
 	ArrGate       string      `json:"arr_gate"`
+	Baggage       string      `json:"baggage"`
 	DurationS     int64       `json:"duration_s"`
 	DurationBasis string      `json:"duration_basis"`
 	LADDRedacted  bool        `json:"ladd_redacted"`

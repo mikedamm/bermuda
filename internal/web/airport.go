@@ -45,7 +45,7 @@ type BoardRowV struct {
 	At     TimeCell // what happened, else what is expected, else the schedule
 	Status string
 	Class  string // the status tag's
-	Note   string // how late or early, when known
+	Note   string // its gate (or carousel) and how late or early, when known
 	Past   bool   // it has landed or left; the first row that has not starts the "now" line
 	Fill   int    // how much of its row fills (%): its progress in the air (1-97), 98 landed, 100 at the gate; 0 none
 	Air    bool   // the fill is a flight in the air's progress
@@ -174,6 +174,7 @@ type TrafficRow struct {
 	Type                  string // parked: aircraft type from the index
 	Airline               string
 	Op                    string // operator ICAO code, for its logo
+	Fill                  int    // passing: how far along its route it is (%), as the boards fill; 0 unknown
 	distMi                float64
 	pos                   geo.LL // live position, when resolved
 	hdg                   float64
@@ -336,23 +337,31 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 		switch {
 		case arriving && past:
 			r.Place, r.At = l.Dep, firstCell(l.ArrIn, l.ArrOn, l.ArrEst)
-			if l.Phase == "arrived" && l.ArrGate != "" {
-				r.Status = "Arrived Gate " + l.ArrGate // once the API sends gates
+			switch l.Phase {
+			case "arrived": // at its gate, the bags on their way
+				if l.ArrGate != "" {
+					r.Status = "Arrived Gate " + l.ArrGate
+				}
+				r.Note = named("Baggage", l.Baggage)
+			case "landed": // taxiing in
+				r.Note = named("Gate", l.ArrGate)
 			}
 		case arriving:
 			r.Place, r.At = l.Dep, firstCell(l.ArrEst, l.ArrPlanned)
 			// inbound: "En Route" says less than when it gets here, so an
 			// airborne flight's status is its estimate against the schedule;
-			// one still to leave keeps its phase and notes the estimate
+			// one still to leave keeps its phase and notes the estimate;
+			// either way the note leads with the gate it is coming to
 			var eta, class string
 			if fs := b.Live; fs != nil {
 				eta, class = etaStatus(firstSet(fs.ETA, fs.STA), fs.SchedArr)
 			}
+			r.Note = named("Gate", l.ArrGate)
 			switch {
 			case l.Phase == "en_route" && eta != "":
 				r.Status, r.Class = eta, class
 			case eta != "On time":
-				r.Note = eta
+				r.Note = joinDot(r.Note, eta)
 			}
 		default:
 			r.Place = l.Arr
@@ -366,16 +375,21 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 				}
 			} else {
 				r.At = l.DepPlanned
-				// in the board's words: off the gate, else the slot it is held to
-				if fs := b.Live; fs != nil {
-					switch {
-					case !fs.Out.IsZero():
-						if l.Phase == "scheduled" {
-							r.Status, r.Class = "Left gate", "taxi" // off the gate before its phase moves on
-						}
-						r.Note = lateWords("Left", fs.Out, fs.SchedDep)
-					case !fs.EDCT.IsZero():
-						r.Note = lateWords("ETD", fs.EDCT, fs.SchedDep)
+				// in the board's words: off the gate, else the gate it leaves
+				// from and the slot it is held to
+				fs := b.Live
+				switch {
+				case fs != nil && !fs.Out.IsZero():
+					if l.Phase == "scheduled" {
+						r.Status, r.Class = "Left gate", "taxi" // off the gate before its phase moves on
+					}
+					r.Note = lateWords("Left", fs.Out, fs.SchedDep)
+				default:
+					if l.Phase == "scheduled" {
+						r.Note = named("Gate", l.DepGate)
+					}
+					if fs != nil && !fs.EDCT.IsZero() {
+						r.Note = joinDot(r.Note, lateWords("ETD", fs.EDCT, fs.SchedDep))
 					}
 				}
 			}
@@ -484,7 +498,7 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 			passing = append(passing, &v.Overhead[i])
 		}
 	}
-	s.resolveLive(ctx, passing)
+	s.resolveLive(ctx, passing, geo.LL{Lat: v.Airport.Lat, Lon: v.Airport.Lon})
 
 	for icao, n := range airlines {
 		name := icao
@@ -511,16 +525,20 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 const liveLookupBudget = 3500 * time.Millisecond
 
 // resolveLive looks up the passing flights in parallel (cached, shared):
-// each one's position for the map, its IATA number and its route. Results
+// each one's position for the map, its IATA number, its route and how far
+// along it is. A flight found by its callsign that is nowhere near the field
+// is another aircraft's (a stale or reused callsign), not this one's. Results
 // that arrive after the budget are left out of this render.
-func (s *Server) resolveLive(ctx context.Context, rows []*TrafficRow) {
+func (s *Server) resolveLive(ctx context.Context, rows []*TrafficRow, field geo.LL) {
 	type found struct {
 		ok       bool
 		number   string
 		dep, arr string
 		pos      geo.LL
 		hdg      float64
+		fill     int
 	}
+	now := time.Now()
 	results := make([]found, len(rows))
 	var mu sync.Mutex
 	closed := false
@@ -541,8 +559,17 @@ func (s *Server) resolveLive(ctx context.Context, rows []*TrafficRow) {
 				if x.Live == nil || x.Live.LADDRedacted || (x.Live.Callsign != callsign && x.Registration != reg) {
 					continue
 				}
+				if p := (geo.LL{Lat: x.Live.Lat, Lon: x.Live.Lon}); p.Valid() && geo.DistanceMi(field.Lat, field.Lon, p.Lat, p.Lon) > 3*airportRadius {
+					continue
+				}
 				s.index.NoteLive(*x.Live)
 				f := found{ok: true, number: x.Live.IATAFlight, dep: x.Live.Dep, arr: x.Live.Arr, hdg: x.Live.Hdg}
+				// how far along it is, for a flight in the air between two
+				// fields: one back to where it left has no way along to show,
+				// and a record that has it down already is a finished leg's
+				if x.Live.Phase == "en_route" && f.dep != f.arr {
+					f.fill = boardFill(legFromLive(*x.Live, refs{}, now), x.Live, now)
+				}
 				if p := (geo.LL{Lat: x.Live.Lat, Lon: x.Live.Lon}); p.Valid() && !x.Live.OnGround {
 					f.pos = p
 				}
@@ -582,6 +609,7 @@ func (s *Server) resolveLive(ctx context.Context, rows []*TrafficRow) {
 		if f.arr != "" {
 			row.To = airportV(f.arr, nil)
 		}
+		row.Fill = f.fill
 	}
 }
 

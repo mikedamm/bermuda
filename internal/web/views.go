@@ -112,7 +112,9 @@ type LegV struct {
 	DepDelay, DepDelayClass    string
 	ArrDelay, ArrDelayClass    string
 	Runway                     string
-	DepGate, ArrGate           string // gate numbers, once the API sends them
+	DepTerminal, DepGate       string // where it leaves from and lands at, as the airline names them
+	ArrTerminal, ArrGate       string
+	Baggage                    string // the arrival's baggage carousel
 
 	Duration   string
 	flightTime time.Duration
@@ -181,11 +183,11 @@ func legFromLive(fs api.FlightSummary, r refs, now time.Time) LegV {
 	if runwayRe.MatchString(fs.Runway) {
 		l.Runway = fs.Runway
 	}
-	l.DepGate, l.ArrGate = gateName(fs.DepGate), gateName(fs.ArrGate)
 	if fs.ActualArr != "" && fs.ActualArr != fs.Arr {
 		d := r.airport(fs.ActualArr)
 		l.DivertedTo = &d
 	}
+	l.setSpots(fs.DepTerminal, fs.DepGate, fs.ArrTerminal, fs.ArrGate, fs.Baggage)
 	if fs.Operator.ICAO != "" && fs.Operator.Name != "" {
 		l.AirlineURL = "/airline/" + fs.Operator.ICAO
 	}
@@ -275,11 +277,11 @@ func legFromHistory(h api.HistoryEntry, now time.Time) LegV {
 		Phase: h.Phase, PhaseWord: h.PhaseWord,
 		Reg: h.Registration, RegURL: aircraftURL(h.Registration), Type: h.Type,
 	}
-	l.DepGate, l.ArrGate = gateName(h.DepGate), gateName(h.ArrGate)
 	if h.ActualArr != nil && (h.Arr == nil || h.ActualArr.ICAO != h.Arr.ICAO) {
 		d := airportV("", h.ActualArr)
 		l.DivertedTo = &d
 	}
+	l.setSpots(h.DepTerminal, h.DepGate, h.ArrTerminal, h.ArrGate, h.Baggage)
 	if h.Operator.ICAO != "" && h.Operator.Name != "" {
 		l.AirlineURL = "/airline/" + h.Operator.ICAO
 	}
@@ -330,16 +332,69 @@ func flightTime(off, on, out, in time.Time) time.Duration {
 
 var runwayRe = regexp.MustCompile(`^(0?[1-9]|[12][0-9]|3[0-6])[LRCW]?$`)
 
-// gateRe is what a gate reads like on a screen: B4, N12, 37A, C-17.
-var gateRe = regexp.MustCompile(`^[A-Z0-9][A-Z0-9-]{0,5}$`)
+// What a gate, a terminal and a baggage carousel read like on a screen. A
+// gate has a number, not led by a zero: B4, N12, 37A, 108B, C10B. Labels
+// without one ("G", "N/A", "INTL") and the "001" a regional departure waits
+// at until it has a gate are placeholders, not gates. Terminals are short
+// (3, 2E, S); carousels may be letters (J, CL-B, 1-3).
+var (
+	gateRe     = regexp.MustCompile(`^[A-Z]{0,3}-?[1-9][A-Z0-9]{0,4}$`)
+	terminalRe = regexp.MustCompile(`^[A-Z0-9]{1,3}$`)
+	claimRe    = regexp.MustCompile(`^[A-Z0-9][A-Z0-9-]{0,5}$`)
+)
 
-// gateName is a gate as boards print it, or nothing for a value that does
-// not read like one.
-func gateName(g string) string {
-	if g = strings.ToUpper(strings.TrimSpace(g)); gateRe.MatchString(g) {
-		return g
+// label is an airline's label as boards print it, or nothing for a value
+// that does not read like one.
+func label(re *regexp.Regexp, v string) string {
+	if v = strings.ToUpper(strings.TrimSpace(v)); re.MatchString(v) {
+		return v
 	}
 	return ""
+}
+
+func gateName(g string) string { return label(gateRe, g) }
+
+// setSpots keeps the terminals, gates and carousel that still mean
+// something: none for a cancelled flight, and only the departure's for one
+// that went elsewhere. Phase and DivertedTo are set first.
+func (l *LegV) setSpots(depTerm, depGate, arrTerm, arrGate, claim string) {
+	if l.Phase == "cancelled" {
+		return
+	}
+	l.DepTerminal, l.DepGate = label(terminalRe, depTerm), gateName(depGate)
+	if l.Phase == "diverted" || l.DivertedTo != nil {
+		return
+	}
+	l.ArrTerminal, l.ArrGate, l.Baggage = label(terminalRe, arrTerm), gateName(arrGate), label(claimRe, claim)
+}
+
+// DepSpot and ArrSpot are where to find the flight at each end, as its
+// route shows them: "Terminal 3 · Gate 26", "Gate S7 · Baggage 22".
+func (l LegV) DepSpot() string {
+	return joinDot(named("Terminal", l.DepTerminal), named("Gate", l.DepGate))
+}
+
+func (l LegV) ArrSpot() string {
+	return joinDot(named("Terminal", l.ArrTerminal), named("Gate", l.ArrGate), named("Baggage", l.Baggage))
+}
+
+// named is "Gate B4", or nothing without a value.
+func named(what, v string) string {
+	if v == "" {
+		return ""
+	}
+	return what + " " + v
+}
+
+// joinDot joins the parts that are there with a middle dot.
+func joinDot(parts ...string) string {
+	var out []string
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return strings.Join(out, " · ")
 }
 
 func firstSet(ts ...time.Time) time.Time {

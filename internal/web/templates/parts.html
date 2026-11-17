@@ -56,8 +56,8 @@
 	</div>
 </div>
 <div class="route-times">
-	<div>{{if $d.Label}}<span class="route-label">{{$d.Label}}</span>{{template "time" $d.T}}{{with $d.Delay}}<span class="delta delta-{{$d.Class}}">{{.}}</span>{{end}}{{end}}</div>
-	<div class="route-end-arr">{{if $a.Label}}<span class="route-label">{{$a.Label}}</span>{{template "time" $a.T}}{{with $a.Delay}}<span class="delta delta-{{$a.Class}}">{{.}}</span>{{end}}{{end}}</div>
+	<div>{{if $d.Label}}<span class="route-label">{{$d.Label}}</span>{{template "time" $d.T}}{{with $d.Delay}}<span class="delta delta-{{$d.Class}}">{{.}}</span>{{end}}{{end}}{{with .DepSpot}}<span class="route-spot">{{.}}</span>{{end}}</div>
+	<div class="route-end-arr">{{if $a.Label}}<span class="route-label">{{$a.Label}}</span>{{template "time" $a.T}}{{with $a.Delay}}<span class="delta delta-{{$a.Class}}">{{.}}</span>{{end}}{{end}}{{with .ArrSpot}}<span class="route-spot">{{.}}</span>{{end}}</div>
 </div>
 {{end}}
 
