@@ -100,7 +100,8 @@ time, .num { font-variant-numeric: tabular-nums; }
 
 /* ---------- masthead ---------- */
 
-.masthead { background: var(--surface); border-bottom: 1px solid var(--line); }
+/* positioned above the fixed map (z-index 0), which would otherwise paint over it */
+.masthead { position: relative; z-index: 4; background: var(--surface); border-bottom: 1px solid var(--line); }
 /* logo, search at the page's centre, the app stores. The side columns are
    equal and never narrower than the two badges (2 x 135px and their gap),
    so the search stays centred and gives up its own width first */
@@ -185,19 +186,34 @@ time, .num { font-variant-numeric: tabular-nums; }
 .dock-note, .dock-flight { margin-bottom: 12px; font-size: 14px; }
 .dock-flight a { font-weight: 700; }
 
-/* on wide screens the panels below rise into the map, whose last stretch
-   fades into the paper behind them. The stage grows by the overlap, so
-   nothing below moves and the dock keeps its gap to the panels. */
+/* The map is the page's fixed background: it stays put while the band, the
+   dock and the sheet of panels scroll up over it. It sits at z-index 0 rather
+   than below the page, so its pins and aircraft stay clickable through the
+   transparent parts of the stage; what must cover it is positioned above. */
+.stage:not(.stage-bare) { background: none; border-bottom: 0; }
+.stage:not(.stage-bare) > .stage-map { position: fixed; inset: 0; z-index: 0; }
+.stage:not(.stage-bare) + .sheet { position: relative; z-index: 1; background: var(--paper); }
+/* the credit stays at the foot of the window the page opens with (site.js
+   measures how much of the map the content below covers) */
+.stage .maplibregl-ctrl-bottom-right, .stage .maplibregl-ctrl-bottom-left { bottom: var(--map-cover, 0px); }
+
+/* on wide screens the sheet of panels rises into the map, which fades into
+   its paper over the 240px around the sheet's top edge; the fade travels
+   with the sheet as it scrolls. The stage grows by the overlap, so nothing
+   below moves and the dock keeps its gap to the panels. */
 @media (min-width: 900px) {
-	:root { --tuck: 120px; } /* how far the panels rise into the map; the stage and the panels both read it */
-	.stage:not(.stage-bare) { isolation: isolate; min-height: calc(var(--stage) + var(--tuck)); border-bottom: 0; }
+	:root { --tuck: 120px; } /* how far the panels rise into the map; the stage and the sheet both read it */
+	.stage:not(.stage-bare) { min-height: calc(var(--stage) + var(--tuck)); }
 	.stage:not(.stage-bare) .stage-wrap { padding-bottom: calc(44px + var(--tuck)); }
-	/* positioned, so the panels paint over the stage (also positioned) they overlap */
-	.stage:not(.stage-bare) + .cols { position: relative; margin-top: calc(-1 * var(--tuck)); padding-top: 0; }
-	/* above the map, below its controls (z-index 2) and the dock */
-	.stage-map::after {
-		content: ""; position: absolute; inset: auto 0 0; z-index: 1;
-		height: calc(var(--tuck) + 120px); pointer-events: none;
+	.stage:not(.stage-bare) + .sheet {
+		margin-top: calc(-1 * var(--tuck));
+		background: linear-gradient(transparent var(--tuck), var(--paper) var(--tuck));
+	}
+	.stage:not(.stage-bare) + .sheet > .cols { padding-top: 0; }
+	/* under the panels, above the map */
+	.stage:not(.stage-bare) + .sheet::before {
+		content: ""; position: absolute; z-index: -1; left: 0; right: 0;
+		top: calc(-1 * var(--tuck)); height: calc(2 * var(--tuck)); pointer-events: none;
 		background: linear-gradient(to bottom,
 			color-mix(in srgb, var(--paper) 0%, transparent),
 			color-mix(in srgb, var(--paper) 6%, transparent) 20%,
@@ -207,8 +223,6 @@ time, .num { font-variant-numeric: tabular-nums; }
 			color-mix(in srgb, var(--paper) 92%, transparent) 90%,
 			var(--paper));
 	}
-	/* the credit stays above the panels, where it can be read and reopened */
-	.stage .maplibregl-ctrl-bottom-right, .stage .maplibregl-ctrl-bottom-left { bottom: var(--tuck); }
 }
 
 .stage-bare { min-height: 0; background: none; border: 0; }
@@ -444,12 +458,12 @@ a.mk-plane-sm:hover { color: var(--link); }
 
 /* ---------- breadcrumbs and footer ---------- */
 
-.crumbs { background: var(--surface); border-top: 1px solid var(--line); }
+.crumbs { position: relative; z-index: 1; background: var(--surface); border-top: 1px solid var(--line); }
 .crumbs ol { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0 auto; padding-block: 10px; list-style: none; font-size: 13px; color: var(--muted); }
 .crumbs li + li::before { content: "/"; margin-right: 8px; color: #a7b3c4; }
 .crumbs a { color: var(--muted); }
 
-.foot { padding: 28px 0 24px; background: var(--navy-deep); color: #b9cce4; font-size: 13px; }
+.foot { position: relative; z-index: 1; padding: 28px 0 24px; background: var(--navy-deep); color: #b9cce4; font-size: 13px; }
 .foot-in { display: grid; grid-template-columns: auto 1fr auto; gap: 12px 20px; align-items: start; }
 .foot p { max-width: 70ch; }
 .foot-links { display: flex; flex-wrap: wrap; gap: 6px 20px; }
@@ -470,7 +484,6 @@ a.mk-plane-sm:hover { color: var(--link); }
 	.stage { background: none; border: 0; }
 	/* the band over the map's top, then 320px of map, then the dock */
 	.stage:not(.stage-bare) { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 320px auto; }
-	.stage:not(.stage-bare) > .stage-map { grid-area: 1 / 1 / 3 / 2; position: relative; }
 	.stage:not(.stage-bare) > .band { grid-area: 1 / 1; align-self: start; }
 	.stage:not(.stage-bare) > .stage-wrap { grid-area: 3 / 1; margin-inline: 0; } /* auto margins would shrink a grid item to fit */
 	.stage-wrap { padding-inline: 0; }

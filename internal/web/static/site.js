@@ -90,25 +90,31 @@
 
 		// the camera frames the route between the docked panel and the right
 		// edge of the content column, not the window: on a wide screen the
-		// map runs edge to edge but the route stays where the page's content is
+		// map runs edge to edge but the route stays where the page's content is.
+		// The map is the page's fixed background, filling the window, so the
+		// page around it is measured as it lies scrolled to the top: the route
+		// sits in the window the page opens with, under the title band and
+		// above whatever covers the map below (the panels; on phones the dock).
 		const padding = () => {
 			const stage = el.closest(".stage");
 			const dock = stage?.querySelector(".dock");
 			const box = el.getBoundingClientRect();
-			// the title band lies over the map's top: frame the route below it
+			const y = window.scrollY;
 			const band = stage?.querySelector(":scope > .band");
-			const under = band ? Math.max(0, band.getBoundingClientRect().bottom - box.top) : 0;
+			const under = band ? Math.max(0, band.getBoundingClientRect().bottom + y - box.top) : 0;
 			const over = dock && matchMedia("(min-width: 900px)").matches;
-			if (!over) return { top: under + 52, bottom: 52, left: 52, right: 52 }; // dock sits below: even margins
+			const wrap = stage?.querySelector(":scope > .stage-wrap");
+			const cover = !over && wrap?.offsetHeight ? wrap : stage?.nextElementSibling;
+			const covered = cover ? Math.max(0, box.bottom - (cover.getBoundingClientRect().top + y)) : 0;
+			el.style.setProperty("--map-cover", covered + "px");
+			if (!over) return { top: under + 52, bottom: covered + 52, left: 52, right: 52 }; // dock sits below: even margins
 			const left = Math.min(dock.getBoundingClientRect().right - box.left + 48, el.clientWidth * 0.62);
 			const col = dock.parentElement; // .stage-wrap, the content column
 			const end = col.getBoundingClientRect().right - parseFloat(getComputedStyle(col).paddingRight);
 			// 64 px inside the column leaves room for a pin's label, which sits to its right
 			const right = Math.max(64, Math.min(box.right - end + 64, el.clientWidth - left - 240));
-			// the panels below rise over the map's faded foot: keep the route above it
-			const below = stage.nextElementSibling;
-			const rise = below ? Math.max(0, box.bottom - below.getBoundingClientRect().top) : 0;
-			return { top: under + 56, bottom: rise + 80, left, right };
+			// the panels rise over the map's faded foot: keep the route above it
+			return { top: under + 56, bottom: covered + 80, left, right };
 		};
 		const bounds = (pts) => pts.reduce((b, c) => b.extend(c), new ml.LngLatBounds(pts[0], pts[0]));
 		const coords = [];
