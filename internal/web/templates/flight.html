@@ -21,17 +21,11 @@
 
 <div class="wrap cols">
 	<div class="col-main">
-		<section class="panel" aria-labelledby="times-h" data-part="times">{{template "flight-times" $v}}</section>
-
-		{{if $v.History}}
-		<section class="panel" aria-labelledby="hist-h">
-			<h2 id="hist-h">{{$v.Number}} flight history <span class="panel-count">{{len $v.History}} flights, last {{$v.Days}} days</span></h2>
-			{{template "legs" (legTable $v.History false)}}
-		</section>
-		{{end}}
+		{{template "flights" $v.Flights}}
 	</div>
 
 	<aside class="col-side">
+		<section class="panel" aria-labelledby="times-h" data-part="times">{{template "flight-times" $v}}</section>
 		{{if or $f.Model $f.Type $f.Reg $f.Live}}<section class="panel" aria-labelledby="track-h" data-part="track">{{template "flight-track" $v}}</section>{{end}}
 		<section class="panel" aria-labelledby="about-h">
 			<h2 id="about-h">About {{$v.Number}}</h2>

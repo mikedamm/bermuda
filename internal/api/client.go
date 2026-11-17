@@ -85,6 +85,14 @@ func (c *Client) AircraftFlights(ctx context.Context, key string, days, limit in
 	return get[FlightsPage](ctx, c, "/aircraft/"+url.PathEscape(key)+"/flights", q)
 }
 
+// OperatorFlights lists an operator's flights in one status group, soonest
+// departure first. "scheduled" is what has not left yet: the plans and
+// schedule rows the gateway holds for the day ahead.
+func (c *Client) OperatorFlights(ctx context.Context, code, status string, limit int) (*OperatorFlights, error) {
+	v := url.Values{"status": {status}, "sort": {"etd"}, "limit": {strconv.Itoa(limit)}}
+	return get[OperatorFlights](ctx, c, "/operators/"+url.PathEscape(code)+"/flights", v)
+}
+
 func (c *Client) Search(ctx context.Context, q string, limit int) (*Search, error) {
 	v := url.Values{"q": {q}, "limit": {strconv.Itoa(limit)}}
 	return get[Search](ctx, c, "/search/aircraft", v)

@@ -234,6 +234,15 @@ type AircraftPage struct {
 }
 
 // FlightsPage is GET /aircraft/{key}/flights.
+// OperatorFlights is GET /operators/{code}/flights: rows are flight
+// summaries.
+type OperatorFlights struct {
+	Code    string          `json:"code"`
+	Count   int             `json:"count"`
+	Total   int             `json:"total"`
+	Flights []FlightSummary `json:"flights"`
+}
+
 type FlightsPage struct {
 	Key        string         `json:"key"`
 	AirframeID string         `json:"airframe_id"`

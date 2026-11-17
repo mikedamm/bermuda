@@ -189,7 +189,7 @@ time, .num { font-variant-numeric: tabular-nums; }
    fades into the paper behind them. The stage grows by the overlap, so
    nothing below moves and the dock keeps its gap to the panels. */
 @media (min-width: 900px) {
-	:root { --tuck: 56px; } /* how far the panels rise into the map; the stage and the panels both read it */
+	:root { --tuck: 120px; } /* how far the panels rise into the map; the stage and the panels both read it */
 	.stage:not(.stage-bare) { isolation: isolate; min-height: calc(var(--stage) + var(--tuck)); border-bottom: 0; }
 	.stage:not(.stage-bare) .stage-wrap { padding-bottom: calc(44px + var(--tuck)); }
 	/* positioned, so the panels paint over the stage (also positioned) they overlap */
@@ -317,7 +317,44 @@ a.route-code:hover { color: var(--link); text-decoration: none; }
 .grid-times .grid-group th { padding-top: 12px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 700; color: var(--navy); white-space: normal; }
 .grid-times tbody tr.grid-group:hover { background: var(--surface); }
 .grid-times td time { font-weight: 600; color: var(--ink); }
+/* in the side rail the four columns share 340px: tighter cells, event names
+   that wrap, an estimate under its time, and no zone names (the note says
+   times are local to each airport) */
+.col-side .grid-times th, .col-side .grid-times td { padding-inline: 6px; }
+.col-side .grid-times tr > :first-child { padding-left: 14px; }
+.col-side .grid-times tr > :last-child { padding-right: 14px; }
+.col-side .grid-times tbody th { white-space: normal; }
+.col-side .grid-times time small { display: none; }
+.col-side .grid-times .est { display: block; }
 .est { font-size: 11.5px; font-weight: 500; color: var(--muted); }
+
+/* the Flights panel: still to come in muted ink, the current (else latest)
+   flight on the route's sky fill in bold, the past as plain rows */
+.flights .fl-future td { color: var(--muted); }
+.flights .fl-future a { color: inherit; font-weight: 500; }
+.flights .fl-future .op { opacity: 0.5; }
+.flights .fl-future .tag { color: var(--muted); }
+.flights tbody tr.fl-current { background: var(--flown); }
+.flights .fl-current td, .flights .fl-current a, .flights .fl-current .dim { font-weight: 700; }
+.flights .fl-current .dim { color: var(--ink); }
+@media (hover: hover) {
+	.flights tbody tr.fl-current:hover { background: var(--flown); }
+	.flights tbody tr.fl-future:hover td { color: var(--ink); }
+}
+.flights-foot {
+	display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
+	padding: 8px 14px; border-top: 1px solid var(--line-soft);
+	font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.pager { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.pager a, .pager span {
+	min-width: 32px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 4px;
+	text-align: center; font-weight: 600; line-height: 20px;
+}
+.pager a:hover { border-color: var(--line-strong); background: var(--hover); text-decoration: none; }
+.pager a[aria-current] { border-color: var(--navy); background: var(--navy); color: #fff; }
+.pager span[aria-disabled] { color: var(--line-strong); }
+.pager .pager-gap { min-width: 0; padding-inline: 2px; border: 0; color: var(--muted); }
 
 .grid-bars .bar-cell { width: 32%; padding-left: 0; }
 .bar { position: relative; display: block; height: 6px; background: var(--line-soft); }
@@ -470,7 +507,7 @@ a.mk-plane-sm:hover { color: var(--link); }
 	.grid.grid-5:not(.grid-plain):not(.grid-times) tr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 	.grid:not(.grid-plain):not(.grid-times):not(.grid-bars) td { padding: 0; border: 0; text-align: left; white-space: normal; min-width: 0; overflow-wrap: anywhere; }
 	/* only the times need a caption; date, aircraft, route and status read on their own */
-	.grid td[data-label="Departed"]::before, .grid td[data-label="Arrived"]::before, .grid td[data-label="Duration"]::before,
+	.grid td[data-label="Departure"]::before, .grid td[data-label="Arrival"]::before, .grid td[data-label="Duration"]::before,
 	.grid td[data-label="Altitude"]::before, .grid td[data-label="Distance"]::before, .grid td[data-label="Last seen"]::before {
 		content: attr(data-label); display: block; font-size: 11px; font-weight: 400; color: var(--muted);
 	}

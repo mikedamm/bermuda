@@ -52,6 +52,11 @@ One Go binary, standard library only.
   shared by every instance and kept across restarts. Reads get 300 ms and
   fall back to the API; writes happen in the background; expired rows are
   pruned every 10 minutes. `/statusz` reports its hits and misses.
+- **Reload on deploy.** Every page carries the build that rendered it
+  (`data-version`); `static/version.js` asks `/tracker/version` every 30 s
+  while the tab is visible, and once more when it comes back, and reloads
+  the page when the build has changed. It never reloads over someone typing,
+  and at most once a minute per build, so a rolling deploy cannot loop it.
 - **Live refresh.** A flight page whose flight is under way polls
   `/tracker/live/{flight id}/{signature}` every 30 s (`static/live.js`) and
   swaps in its status band, dock and times, rendered by the page's own

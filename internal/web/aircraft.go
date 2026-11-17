@@ -40,6 +40,7 @@ type AircraftPageV struct {
 	MaxCount     int
 	Recent       []LegV
 	Upcoming     []LegV
+	Flights      FlightsV // the Flights panel: still to come, the current or latest, the window
 	History      []api.RegistryVersion
 	LADD         bool
 	ModelURL     string // its 3D model, in the dock
@@ -70,7 +71,7 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 	if key == "" || len(key) > 36 {
 		return s.notFound("That doesn't look like a registration or Mode S address.", raw), nil
 	}
-	p0, err := s.api.Aircraft(ctx, key, 30, 50)
+	p0, err := s.api.Aircraft(ctx, key, flightHistoryDays, 200)
 	if errors.Is(err, api.ErrNotFound) || errors.Is(err, api.ErrBadRequest) {
 		return s.notFound("No aircraft with registration or address "+key+" is on record.", key), nil
 	}
@@ -112,7 +113,14 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 
 	// Redaction is decided once: everything below reads these filtered lists,
 	// never the raw answer.
-	recent, upcoming := visibleFlights(p0)
+	// the answer holds 200 flights at most; a busier window pages on
+	hist := p0.RecentFlights
+	if len(hist) >= 200 && p0.AirframeID != "" {
+		if fp, err := s.api.AircraftFlights(ctx, p0.AirframeID, flightHistoryDays, 500); err == nil && len(fp.Flights) > len(hist) {
+			hist = fp.Flights
+		}
+	}
+	recent, upcoming := visibleFlights(p0, hist)
 	rf := refs{}
 	rf.addHistory(recent)
 	for _, ac := range p0.Stats.Airports {
@@ -276,6 +284,29 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 	}
 	v.Summary = aircraftSummary(v, p0)
 
+	// the Flights panel: still to come, the flight under way (else the
+	// latest one flown), then the window
+	past := append([]LegV(nil), v.Recent...)
+	sort.SliceStable(past, func(i, j int) bool { return past[i].sort.After(past[j].sort) })
+	var current *LegV
+	var future []LegV
+	switch {
+	case v.Live != nil:
+		current = v.Live
+	case len(past) > 0:
+		current, past = &past[0], past[1:]
+	}
+	for _, u := range v.Upcoming {
+		if current == nil || u.FlightID != current.FlightID {
+			future = append(future, u)
+		}
+	}
+	flights, to := pageFlights(r, flightRows(future, current, past), true, v.Days)
+	if to != "" {
+		return redirect302(to), nil
+	}
+	v.Flights = flights
+
 	title := v.Registration
 	if v.Name != "" {
 		title += " " + v.Name
@@ -293,7 +324,7 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 	p := s.basePage(http.StatusOK, title, desc, "/aircraft/"+canon)
 	p.Section = "aircraft"
 	p.Query = v.Registration
-	p.NoIndex = v.LADD // respect the owner's request to limit tracking
+	p.NoIndex = v.LADD || v.Flights.Page > 1 // the owner's request to limit tracking; later pages repeat the first
 	if !v.LADD {
 		v.ModelURL = s.modelURL(v.Registration)
 	}
@@ -310,11 +341,11 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 
 // visibleFlights drops everything LADD withholds: all of it for a listed
 // aircraft, and any individually redacted row otherwise.
-func visibleFlights(p0 *api.AircraftPage) (recent []api.HistoryEntry, upcoming []api.FlightSummary) {
+func visibleFlights(p0 *api.AircraftPage, hist []api.HistoryEntry) (recent []api.HistoryEntry, upcoming []api.FlightSummary) {
 	if p0.LADD.Listed {
 		return nil, nil
 	}
-	for _, h := range p0.RecentFlights {
+	for _, h := range hist {
 		if !h.LADDRedacted {
 			recent = append(recent, h)
 		}

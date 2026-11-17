@@ -28,6 +28,7 @@ type FlightPageV struct {
 	Map         *MapV
 	ModelURL    string // the aircraft's 3D model, floated under the dock
 	History     []LegV
+	Flights     FlightsV // the Flights panel: still to come, this one, the history window
 	Days        int
 	Summary     []string
 	Facts       []Fact
@@ -136,6 +137,9 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 	if live != nil {
 		go func() { shape <- s.legShape(ctx, live.FlightID) }()
 	}
+	// and so do the flights still to come
+	planned := make(chan []api.FlightSummary, 1)
+	go func() { planned <- s.plannedFlights(ctx, canon) }()
 	history := s.callsignHistory(ctx, canon, airframes)
 	rf := refs{}
 	rf.addHistory(history)
@@ -160,9 +164,6 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 		featured, legs = legs[0], legs[1:]
 	default:
 		return s.notFound("We haven't tracked a flight "+ident+" in the last 30 days.", ident), nil
-	}
-	if len(legs) > 60 {
-		legs = legs[:60]
 	}
 	for _, l := range append([]*LegV{&featured}, ptrs(legs)...) {
 		if l.Model == "" {
@@ -204,9 +205,31 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 		}
 	}
 
+	// the Flights panel: what is still to come, this flight, then the window
+	var future []LegV
+	flown := map[string]bool{featured.FlightID: true}
+	for _, l := range legs {
+		flown[l.FlightID] = true
+	}
+	for _, f := range <-planned {
+		if !flown[f.FlightID] {
+			l := legFromLive(f, rf, now)
+			if l.Model == "" {
+				l.Model = typeNames[l.Type]
+			}
+			future = append(future, l)
+		}
+	}
+	flights, to := pageFlights(r, flightRows(future, &featured, legs), false, v.Days)
+	if to != "" {
+		return redirect302(to), nil
+	}
+	v.Flights = flights
+
 	title := flightTitle(v)
 	desc := flightDescription(v)
 	p := s.basePage(http.StatusOK, title, desc, "/flight/"+canon)
+	p.NoIndex = v.Flights.Page > 1 // later pages repeat the first's content
 	p.Section = "flights"
 	p.Query = v.Number
 	if v.AppURL != "" {
@@ -223,6 +246,26 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 	p.JSONLD = append(p.JSONLD, flightLD(v, s.cfg.SiteURL))
 
 	return s.html("flight", p, v)
+}
+
+// plannedFlights is the callsign's flights still to come: the plans and
+// schedule rows its operator holds for the day ahead.
+func (s *Server) plannedFlights(ctx context.Context, callsign string) []api.FlightSummary {
+	op, _, ok := store.AirlineCallsign(callsign)
+	if !ok {
+		return nil
+	}
+	of, err := s.api.OperatorFlights(ctx, op, "scheduled", 2000)
+	if err != nil {
+		return nil
+	}
+	var out []api.FlightSummary
+	for _, f := range of.Flights {
+		if f.Callsign == callsign && !f.LADDRedacted {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // callsignHistory pages through each airframe that flew the callsign and

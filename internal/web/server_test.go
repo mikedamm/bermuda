@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -39,12 +40,22 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		"phase": "arrived", "phase_word": "Arrived", "first_seen": ts(-30 * time.Hour), "last_seen": ts(-25 * time.Hour),
 		"off": ts(-29 * time.Hour), "on": ts(-26*time.Hour - 30*time.Minute), "duration_s": 99999, "duration_basis": "seen",
 	}
+	// flights still to come: tomorrow's ASA14 (and another number, which
+	// the ASA14 page must leave out), and this airframe's next leg
+	planned := func(id, callsign, iata, dep, arr string, in time.Duration) map[string]any {
+		return map[string]any{"flight_id": id, "callsign": callsign, "iata_flight": iata, "operator": op,
+			"dep": dep, "arr": arr, "status": "scheduled", "phase": "scheduled", "phase_word": "Scheduled",
+			"sched_dep": ts(in), "sched_arr": ts(in + 150*time.Minute)}
+	}
+	nextASA14 := planned("f-next", "ASA14", "AS14", "KSAN", "KSEA", 20*time.Hour)
+	otherASA := planned("f-140", "ASA140", "AS140", "KSEA", "KSAN", 3*time.Hour)
+	nextLeg := planned("f-leg", "ASA15", "AS15", "KSEA", "KSAN", 2*time.Hour)
 	aircraft := map[string]any{
 		"key": "N527AS", "airframe_id": "af-1", "days": 30,
 		"aircraft": map[string]any{"icao_type": "B738", "manufacturer": "Boeing", "model": "737-890", "name": "Boeing 737-890",
 			"registration": "N527AS", "hex": "A6A300", "country": map[string]any{"iso": "US", "name": "United States"}, "type_description": "L2J"},
 		"operator": op, "owner": map[string]any{"name": "ALASKA AIRLINES INC", "city": "SEATAC", "state": "WA", "country": "US"},
-		"status":         map[string]any{"phase": "flying", "flight": live, "upcoming": []any{}},
+		"status":         map[string]any{"phase": "flying", "flight": live, "upcoming": []any{nextLeg}},
 		"stats":          map[string]any{"days": 30, "flights": 2, "hours": 5.5, "airports": []any{map[string]any{"code": "KSEA", "count": 2, "airport": sea}}},
 		"recent_flights": []any{hist},
 		"ladd":           map[string]any{"listed": false},
@@ -107,6 +118,13 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		}
 		moved["lat"], moved["lon"], moved["alt"] = 41.5, -121.0, 37000
 		write(w, map[string]any{"key": "f-live", "kind": "flight_id", "live": true, "flight": moved})
+	})
+	mux.HandleFunc("GET /operators/{code}/flights", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("code") != "ASA" || r.URL.Query().Get("status") != "scheduled" {
+			write(w, map[string]any{"flights": []any{}})
+			return
+		}
+		write(w, map[string]any{"code": "ASA", "count": 2, "total": 2, "flights": []any{otherASA, nextASA14}})
 	})
 	mux.HandleFunc("GET /aircraft/{key}/flights", func(w http.ResponseWriter, r *http.Request) {
 		write(w, map[string]any{"key": r.PathValue("key"), "flights": []any{hist}})
@@ -582,5 +600,114 @@ func TestOperatorLogos(t *testing.T) {
 	}
 	if got := off.logoURL("ASA"); got != "" {
 		t.Errorf("a logo with LOGOS=off: %q", got)
+	}
+}
+
+// Open pages learn the build that rendered them and can ask which one the
+// server runs now, so they reload after a deploy.
+func TestVersionReload(t *testing.T) {
+	up := fakeAPI(t)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	s, err := New(api.New(up.URL, "test-token", 4, log), store.NewIndex(), Config{SiteURL: "https://www.wingview.com", Version: "v-test"}, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	page := get(t, h, "/aircraft/N527AS").Body.String()
+	for _, want := range []string{`data-version="v-test"`, `/version.js" defer></script>`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page lacks %s", want)
+		}
+	}
+	rec := get(t, h, "/tracker/version")
+	if rec.Code != 200 || rec.Body.String() != "v-test" || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("version: %d %q %q", rec.Code, rec.Body, rec.Header().Get("Cache-Control"))
+	}
+	if strings.Contains(get(t, testServer(t), "/aircraft/N527AS").Body.String(), "version.js") {
+		t.Error("a build without a version must not poll for one")
+	}
+}
+
+// One Flights panel, latest first: what is still to come (grayed,
+// Scheduled), the current flight highlighted, then the past. Flight times
+// sit in the side rail.
+func TestFlightsPanel(t *testing.T) {
+	h := testServer(t)
+	order := func(t *testing.T, body string, wants ...string) {
+		t.Helper()
+		at := 0
+		for _, w := range wants {
+			i := strings.Index(body[at:], w)
+			if i < 0 {
+				t.Fatalf("lacks %q after offset %d", w, at)
+			}
+			at += i + len(w)
+		}
+	}
+	flight := get(t, h, "/flight/ASA14").Body.String()
+	order(t, flight,
+		`<h2 id="flights-h">Flights</h2>`,
+		`<tr class="fl-future">`, ">Scheduled</span>",
+		`<tr class="fl-current" aria-current="true">`, "En Route",
+		`<tr class="fl-past">`, "Arrived",
+		"3 flights, last 30 days",
+		`<aside class="col-side">`, `data-part="times"`)
+	if strings.Contains(flight, "AS140") {
+		t.Error("another flight number's plan is listed on ASA14")
+	}
+	if strings.Contains(flight, `id="hist-h"`) || strings.Contains(flight, `class="pager"`) {
+		t.Error("old history title or a pager on a one-page list")
+	}
+
+	aircraft := get(t, h, "/aircraft/N527AS").Body.String()
+	order(t, aircraft,
+		`<h2 id="flights-h">Flights</h2>`, "<th scope=\"col\">Flight</th>",
+		`<tr class="fl-future">`, `href="/flight/ASA15"`,
+		`<tr class="fl-current" aria-current="true">`, `href="/flight/ASA14"`, " <small class=\"est\">est.</small>",
+		`<tr class="fl-past">`)
+	for _, gone := range []string{"Recent flights", "Planned flights"} {
+		if strings.Contains(aircraft, gone) {
+			t.Errorf("aircraft page still has %q", gone)
+		}
+	}
+}
+
+// Pages of 25: the bare URL is page 1, later pages link both ways, and a
+// page that does not exist redirects to one that does.
+func TestFlightsPaging(t *testing.T) {
+	rows := make([]FlightRowV, 60)
+	req := func(q string) *http.Request { return httptest.NewRequest("GET", "/aircraft/N1"+q, nil) }
+
+	v, to := pageFlights(req(""), rows, true, 30)
+	if to != "" || v.Page != 1 || v.Pages != 3 || len(v.Rows) != 25 || v.Newer != "" || v.Older != "/aircraft/N1?page=2#flights" {
+		t.Errorf("page 1: %+v %q", v, to)
+	}
+	v, to = pageFlights(req("?page=2"), rows, true, 30)
+	if to != "" || v.First != 26 || v.Last != 50 || v.Total != 60 || v.Newer != "/aircraft/N1#flights" || v.Older != "/aircraft/N1?page=3#flights" {
+		t.Errorf("page 2: %+v %q", v, to)
+	}
+	if v, _ := pageFlights(req("?page=3"), rows, true, 30); len(v.Rows) != 10 || v.Older != "" {
+		t.Errorf("last page: %d rows, older %q", len(v.Rows), v.Older)
+	}
+	for q, want := range map[string]string{"?page=1": "/aircraft/N1", "?page=x": "/aircraft/N1", "?page=0": "/aircraft/N1", "?page=9": "/aircraft/N1?page=3"} {
+		if _, to := pageFlights(req(q), rows, true, 30); to != want {
+			t.Errorf("%s: redirect %q, want %q", q, to, want)
+		}
+	}
+	many := make([]FlightRowV, 25*12)
+	v, _ = pageFlights(req("?page=6"), many, true, 30)
+	var ns []int
+	for _, l := range v.Links {
+		ns = append(ns, l.N)
+		if l.Gap != (l.N == 4 || l.N == 12) {
+			t.Errorf("link %d gap=%v", l.N, l.Gap)
+		}
+	}
+	if fmt.Sprint(ns) != "[1 4 5 6 7 8 12]" {
+		t.Errorf("links %v", ns)
+	}
+	rec := get(t, testServer(t), "/aircraft/N527AS?page=4")
+	if rec.Code != 302 || rec.Header().Get("Location") != "/aircraft/N527AS" {
+		t.Errorf("past the end: %d %q", rec.Code, rec.Header().Get("Location"))
 	}
 }

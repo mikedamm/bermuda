@@ -33,6 +33,7 @@ type Page struct {
 	Map         *MapAssets // set when interactive maps are on
 	Updated     TimeCell   // when the data on this page was read
 	Live        string     // signed refresh URL while the page's flight is under way
+	Version     string     // the build that rendered the page; version.js reloads it when the site moves on
 }
 
 // MapAssets is what the page's script needs to draw maps.
@@ -58,8 +59,8 @@ type Crumb struct {
 func (s *Server) basePage(status int, title, desc, canonicalPath string) Page {
 	p := Page{
 		Status: status, Title: title, Description: desc,
-		AppURL: s.cfg.AppURL,
-		Site:   s.cfg.SiteURL, Year: time.Now().Year(),
+		AppURL: s.cfg.AppURL, Version: s.cfg.Version,
+		Site: s.cfg.SiteURL, Year: time.Now().Year(),
 		OGImage: s.cfg.SiteURL + s.staticURL("og-default.jpg"),
 		Map:     s.mapAssets(),
 		Updated: timeCell(time.Now(), "UTC", ""),
@@ -130,12 +131,6 @@ func (s *Server) funcs() template.FuncMap {
 		"add":     func(a, b int) int { return a + b },
 		"country": geo.CountryName,
 		"query":   url.QueryEscape,
-		"legTable": func(legs []LegV, showFlight bool) any {
-			return struct {
-				Legs       []LegV
-				ShowFlight bool
-			}{legs, showFlight}
-		},
 		"board": func(rows []TrafficRow, other string) any {
 			return struct {
 				Rows  []TrafficRow

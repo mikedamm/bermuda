@@ -45,34 +45,47 @@
 
 {{/* legs: a list of LegV. ShowFlight adds a flight column (aircraft
      page); otherwise an aircraft column (flight page). */}}
-{{define "legs"}}
-<div class="table-scroll">
-<table class="grid">
-	<thead><tr>
-		<th scope="col">Date</th>
-		{{if .ShowFlight}}<th scope="col">Flight</th>{{else}}<th scope="col">Aircraft</th>{{end}}
-		<th scope="col">From</th>
-		<th scope="col">To</th>
-		<th scope="col" class="num">Departed</th>
-		<th scope="col" class="num">Arrived</th>
-		<th scope="col" class="num">Duration</th>
-		<th scope="col">Status</th>
-	</tr></thead>
-	<tbody>
-	{{range .Legs}}<tr>
-		<td class="nowrap" data-label="Date">{{.Date}}</td>
-		{{if $.ShowFlight}}<td data-label="Flight" class="nowrap">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}</td>
-		{{else}}<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a> {{else if .Reg}}{{.Reg}} {{end}}<span class="dim">{{or .Type "–"}}</span></td>{{end}}
-		<td data-label="From">{{template "airport-inline" .Dep}}</td>
-		<td data-label="To">{{if .DivertedTo}}{{template "airport-inline" .DivertedTo}} <span class="dim">(planned {{.Arr.Code}})</span>{{else}}{{template "airport-inline" .Arr}}{{end}}</td>
-		<td class="num" data-label="Departed">{{if .DepOff.Set}}{{template "time" .DepOff}}{{else}}{{template "time" .DepOut}}{{end}}</td>
-		<td class="num" data-label="Arrived">{{if .ArrOn.Set}}{{template "time" .ArrOn}}{{else}}{{template "time" .ArrIn}}{{end}}</td>
-		<td class="num" data-label="Duration">{{if .Duration}}{{.Duration}}{{else}}<span class="dim">&ndash;</span>{{end}}</td>
-		<td data-label="Status">{{template "pill" .}}</td>
-	</tr>
-	{{end}}</tbody>
-</table>
-</div>
+{{/* the Flights panel (flights.go): one list, latest first. Flights still
+     to come are grayed, the current (else latest) flight is highlighted. */}}
+{{define "flights"}}
+<section class="panel" id="flights" aria-labelledby="flights-h">
+	<h2 id="flights-h">Flights</h2>
+	<div class="table-scroll">
+	<table class="grid flights">
+		<thead><tr>
+			<th scope="col">Date</th>
+			{{if .ShowFlight}}<th scope="col">Flight</th>{{else}}<th scope="col">Aircraft</th>{{end}}
+			<th scope="col">From</th>
+			<th scope="col">To</th>
+			<th scope="col" class="num">Departure</th>
+			<th scope="col" class="num">Arrival</th>
+			<th scope="col" class="num">Duration</th>
+			<th scope="col">Status</th>
+		</tr></thead>
+		<tbody>
+		{{range .Rows}}<tr class="fl-{{.When}}"{{if eq .When "current"}} aria-current="true"{{end}}>
+			<td class="nowrap" data-label="Date">{{.Date}}</td>
+			{{if $.ShowFlight}}<td data-label="Flight" class="nowrap">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}</td>
+			{{else}}<td data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a> {{else if .Reg}}{{.Reg}} {{end}}<span class="dim">{{or .Type "–"}}</span></td>{{end}}
+			<td data-label="From">{{template "airport-inline" .Dep}}</td>
+			<td data-label="To">{{if .DivertedTo}}{{template "airport-inline" .DivertedTo}} <span class="dim">(planned {{.Arr.Code}})</span>{{else}}{{template "airport-inline" .Arr}}{{end}}</td>
+			<td class="num" data-label="Departure">{{template "time" .DepAt}}</td>
+			<td class="num" data-label="Arrival">{{template "time" .ArrAt}}{{if .ArrEst}} <small class="est">est.</small>{{end}}</td>
+			<td class="num" data-label="Duration">{{if .Duration}}{{.Duration}}{{else}}<span class="dim">&ndash;</span>{{end}}</td>
+			<td data-label="Status">{{template "pill" .}}</td>
+		</tr>
+		{{end}}</tbody>
+	</table>
+	</div>
+	<div class="flights-foot">
+		<p>{{if gt .Pages 1}}{{.First}}&ndash;{{.Last}} of {{.Total}}{{else}}{{.Total}} {{if eq .Total 1}}flight{{else}}flights{{end}}{{end}}, last {{.Days}} days</p>
+		{{if gt .Pages 1}}<nav class="pager" aria-label="Flight pages">
+			{{if .Newer}}<a href="{{.Newer}}" rel="prev">Newer</a>{{else}}<span aria-disabled="true">Newer</span>{{end}}
+			{{range .Links}}{{if .Gap}}<span class="pager-gap" aria-hidden="true">&hellip;</span>{{end}}<a href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.N}}</a>{{end}}
+			{{if .Older}}<a href="{{.Older}}" rel="next">Older</a>{{else}}<span aria-disabled="true">Older</span>{{end}}
+		</nav>{{end}}
+	</div>
+</section>
 {{end}}
 
 {{/* scheduled versus actual, one table with a departure and an arrival group */}}

@@ -32,20 +32,7 @@
 
 <div class="wrap cols">
 	<div class="col-main">
-		{{if $v.Recent}}
-		<section class="panel" aria-labelledby="hist-h">
-			<h2 id="hist-h">Recent flights <span class="panel-count">last {{len $v.Recent}}, newest first</span></h2>
-			{{template "legs" (legTable $v.Recent true)}}
-		</section>
-		{{end}}
-
-		{{if $v.Upcoming}}
-		<section class="panel" aria-labelledby="up-h">
-			<h2 id="up-h">Planned flights</h2>
-			<ul class="links links-rows">{{range $v.Upcoming}}<li>{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}
-				<span>{{template "airport-inline" .Dep}} to {{template "airport-inline" .Arr}}</span>{{with .DepPlanned}}{{if .Set}}<span class="dim">{{.Day}} {{.Clock}} {{.Zone}}</span>{{end}}{{end}}</li>{{end}}</ul>
-		</section>
-		{{end}}
+		{{if $v.Flights.Rows}}{{template "flights" $v.Flights}}{{end}}
 
 		{{if $v.Registry}}
 		<section class="panel" aria-labelledby="reg-h">
