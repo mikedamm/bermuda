@@ -18,6 +18,8 @@
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
 	<div class="wrap stage-wrap">
 		<div class="dock" data-part="dock">{{template "flight-dock" $v}}</div>
+		{{/* the aircraft's 3D model, floated over the map under the dock; site.js adds the frame */}}
+		{{with $v.ModelURL}}<div class="model" data-model="{{.}}" data-title="3D model of {{$v.Featured.Reg}}"></div>{{end}}
 	</div>
 </section>
 
@@ -34,6 +36,7 @@
 	</div>
 
 	<aside class="col-side">
+		{{if or $f.Model $f.Type $f.Reg $f.Live}}<section class="panel" aria-labelledby="track-h" data-part="track">{{template "flight-track" $v}}</section>{{end}}
 		<section class="panel" aria-labelledby="about-h">
 			<h2 id="about-h">About {{$v.Number}}</h2>
 			<div class="panel-body prose">{{range $v.Summary}}<p>{{.}}</p>{{end}}</div>
@@ -58,13 +61,17 @@
 {{template "band-status" $f.Band}}
 <div class="dock-body">
 	{{template "route" $f}}
-	<dl class="kv kv-dock">
-		{{if or $f.Model $f.Type}}<div><dt>Aircraft</dt><dd>{{or $f.Model $f.Type}}{{if and $f.Model $f.Type}} <span class="dim">{{$f.Type}}</span>{{end}}</dd></div>{{end}}
-		{{if $f.Reg}}<div><dt>Registration</dt><dd>{{if $f.RegURL}}<a href="{{$f.RegURL}}">{{$f.Reg}}</a>{{else}}{{$f.Reg}}{{end}}</dd></div>{{end}}
-	</dl>
 	{{if and $f.Live $f.HasPos}}{{template "telemetry" $f}}{{end}}
-	{{if .AppURL}}<a class="btn btn-app btn-block" href="{{.AppURL}}">Watch {{.Number}} in 3D</a>{{end}}
 </div>
+{{end}}
+
+{{define "flight-track"}}{{$f := .Featured}}
+<h2 id="track-h">Aircraft and position</h2>
+<dl class="kv">
+	{{if or $f.Model $f.Type}}<div><dt>Aircraft</dt><dd>{{or $f.Model $f.Type}}{{if and $f.Model $f.Type}} <span class="dim">{{$f.Type}}</span>{{end}}</dd></div>{{end}}
+	{{if $f.Reg}}<div><dt>Registration</dt><dd>{{if $f.RegURL}}<a href="{{$f.RegURL}}">{{$f.Reg}}</a>{{else}}{{$f.Reg}}{{end}}</dd></div>{{end}}
+	{{if and $f.Live $f.HasPos}}{{template "position" $f}}{{end}}
+</dl>
 {{end}}
 
 {{define "flight-times"}}{{$f := .Featured}}

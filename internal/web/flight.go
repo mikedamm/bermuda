@@ -24,6 +24,7 @@ type FlightPageV struct {
 	AirlineICAO string
 	Featured    LegV
 	Map         *MapV
+	ModelURL    string // the aircraft's 3D model, floated under the dock
 	History     []LegV
 	Days        int
 	Summary     []string
@@ -182,6 +183,7 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 		go func() { shape <- s.legShape(ctx, featured.FlightID) }()
 	}
 	v.Map = s.legMapV(featured, <-shape, fmt.Sprintf("Map of %s from %s to %s", v.Number, featured.Dep.City, featured.Arr.City))
+	v.ModelURL = s.modelURL(featured.Reg)
 	all := append([]LegV{featured}, legs...)
 	v.Summary = flightSummary(v, all, now)
 	v.Facts = flightFacts(featured, all, v.Days, now)

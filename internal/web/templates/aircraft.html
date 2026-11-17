@@ -29,14 +29,9 @@
 				{{end}}{{else}}
 				{{template "kv" $v.LastSeen}}
 				{{end}}
-				<dl class="kv kv-dock">
-					{{if $v.Name}}<div><dt>Type</dt><dd>{{$v.Name}}</dd></div>{{end}}
-					{{if $v.Operator}}<div><dt>Operator</dt><dd>{{if $v.OperatorURL}}<a href="{{$v.OperatorURL}}">{{$v.Operator}}</a>{{else}}{{$v.Operator}}{{end}}</dd></div>{{end}}
-					{{if and $v.Owner (ne $v.Owner $v.Operator)}}<div><dt>Owner</dt><dd>{{$v.Owner}}</dd></div>{{end}}
-				</dl>
-				{{if and $v.Live (not $v.LADD)}}<a class="btn btn-app btn-block" href="{{.AppURL}}">Watch {{$v.Registration}} in 3D</a>{{end}}
 			</div>
 		</div>
+		{{with $v.ModelURL}}<div class="model" data-model="{{.}}" data-title="3D model of {{$v.Registration}}"></div>{{end}}
 	</div>
 </section>
 
@@ -75,6 +70,12 @@
 	</div>
 
 	<aside class="col-side">
+		{{if not $v.LADD}}{{with $v.Live}}{{if .HasPos}}
+		<section class="panel" aria-labelledby="pos-h">
+			<h2 id="pos-h">Position</h2>
+			<dl class="kv">{{template "position" .}}</dl>
+		</section>
+		{{end}}{{end}}{{end}}
 		<section class="panel" aria-labelledby="about-h">
 			<h2 id="about-h">About {{$v.Registration}}</h2>
 			<div class="panel-body prose">{{range $v.Summary}}<p>{{.}}</p>{{end}}</div>

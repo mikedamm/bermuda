@@ -42,6 +42,7 @@ type AircraftPageV struct {
 	Upcoming     []LegV
 	History      []api.RegistryVersion
 	LADD         bool
+	ModelURL     string // its 3D model, floated under the dock
 	Days         int
 	Summary      []string
 }
@@ -264,6 +265,9 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 	p.Section = "aircraft"
 	p.Query = v.Registration
 	p.NoIndex = v.LADD // respect the owner's request to limit tracking
+	if !v.LADD {
+		v.ModelURL = s.modelURL(v.Registration)
+	}
 	if v.Live != nil && !v.LADD {
 		p.AppURL, p.AppLabel = s.appLink("flight", v.Live.FlightID), "Follow this aircraft live"
 	}

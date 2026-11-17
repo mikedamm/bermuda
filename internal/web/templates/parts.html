@@ -98,12 +98,17 @@
 {{end}}
 
 {{/* live telemetry: four readings in a 2 x 2 grid, with the position's age */}}
+{{/* the dock's two live numbers; the rest of a position is in "position" */}}
 {{define "telemetry"}}
 <dl class="telemetry">
 	<div><dt>Altitude</dt><dd>{{or .Alt "–"}}</dd></div>
 	<div><dt>Ground speed</dt><dd>{{or .Speed "–"}}</dd></div>
-	<div><dt>Heading</dt><dd>{{or .Heading "–"}}</dd></div>
-	<div><dt>Squawk</dt><dd>{{or .Squawk "–"}}</dd></div>
 </dl>
-{{with .PosAge}}<p class="telemetry-age">Position reported {{.}}</p>{{end}}
+{{end}}
+
+{{/* rows of a live position for a kv list in a side panel */}}
+{{define "position"}}
+<div><dt>Heading</dt><dd>{{or .Heading "–"}}</dd></div>
+<div><dt>Squawk</dt><dd>{{or .Squawk "–"}}</dd></div>
+{{with .PosAge}}<div><dt>Position reported</dt><dd>{{.}}</dd></div>{{end}}
 {{end}}

@@ -161,6 +161,15 @@ func trimFloat(v float64) string {
 	return strconv.FormatFloat(math.Round(v*100)/100, 'f', -1, 64)
 }
 
+// modelURL is the app's 3D model of an aircraft, made to be embedded over
+// a map: transparent, no app chrome. Empty without a registration.
+func (s *Server) modelURL(reg string) string {
+	if reg == "" || s.cfg.AppURL == "" {
+		return ""
+	}
+	return strings.TrimRight(s.cfg.AppURL, "/") + "/aircraft.html?" + url.Values{"registration": {reg}, "embed": {"1"}, "transparent": {"1"}}.Encode()
+}
+
 // appLink builds a deep link into the WingView app.
 func (s *Server) appLink(kind, val string) string {
 	u, _ := url.Parse(s.cfg.AppURL)

@@ -80,6 +80,7 @@ type Server struct {
 	host          string           // canonical host
 	tilesOrigin   string           // scheme://host of MapTiles, for the CSP
 	terrainOrigin string           // and of MapTerrain
+	appOrigin     string           // and of AppURL, whose 3D model pages are framed
 	logoBase      string           // operator logos, no trailing slash; empty means none
 	imgSrc        string           // the CSP's img-src origins
 }
@@ -111,6 +112,9 @@ func New(a *api.Client, idx *store.Index, cfg Config, log *slog.Logger) (*Server
 		if o := l.Scheme + "://" + l.Host; o != "https://i.wvcdn.com" {
 			s.imgSrc += " " + o
 		}
+	}
+	if a, err := url.Parse(cfg.AppURL); err == nil && a.Host != "" {
+		s.appOrigin = a.Scheme + "://" + a.Host
 	}
 	if cfg.MapTiles != "" {
 		t, err := url.Parse(cfg.MapTiles)
@@ -434,6 +438,7 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		h.Set("Content-Security-Policy", "default-src 'self'; img-src "+s.imgSrc+" data: blob:; "+
 			"style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; "+
 			"connect-src 'self' "+strings.TrimSpace(s.tilesOrigin+" "+s.terrainOrigin)+"; worker-src 'self' blob:; child-src blob:; "+
+			"frame-src "+strings.TrimSpace(s.appOrigin+" blob:")+"; "+
 			"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		rec := &statusRecorder{ResponseWriter: w, status: 200}

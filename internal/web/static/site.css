@@ -153,6 +153,9 @@ time, .num { font-variant-numeric: tabular-nums; }
 	box-shadow: 0 10px 30px rgb(16 31 51 / 0.22), 0 1px 3px rgb(16 31 51 / 0.16);
 }
 .dock-search { width: 400px; }
+/* the aircraft's 3D model under the dock, over the map, as wide as the dock */
+.model { pointer-events: auto; position: relative; z-index: 2; width: 360px; aspect-ratio: 16 / 9; margin-top: 12px; }
+.model iframe { display: block; width: 100%; height: 100%; border: 0; background: transparent; }
 .dock-body { padding: 16px; }
 .dock-note, .dock-flight { margin-bottom: 12px; font-size: 14px; }
 .dock-flight a { font-weight: 700; }
@@ -242,7 +245,6 @@ a.route-code:hover { color: var(--link); text-decoration: none; }
 .telemetry dd, .counts dd { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 .counts { margin: 0 0 4px; }
 .counts > div:nth-child(-n+2) { border-top: 0; }
-.telemetry-age { margin-top: 4px; font-size: 12px; color: var(--muted); text-align: right; }
 
 
 /* ---------- below the stage ---------- */
@@ -407,6 +409,7 @@ a.mk-plane-sm:hover { color: var(--link); }
 	.stage-wrap { padding-block: 0; }
 	.dock, .dock-search { width: auto; border-radius: 0; box-shadow: none; border-bottom: 1px solid var(--line); }
 	.stage-bare .dock { margin: 0; max-width: none; border-inline: 0; }
+	.model { display: none; }
 	.foot-in { grid-template-columns: 1fr; }
 	.foot-mark { display: none; }
 	.foot-small { grid-column: auto; }
