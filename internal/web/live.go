@@ -1,19 +1,22 @@
 package web
 
-// The flight page's live refresh. A page showing a flight that is still
-// under way carries a URL to this endpoint; its script polls it every 30
-// seconds and swaps in the parts of the page that change.
+// The live refresh. A flight page showing a flight that is still under way,
+// and every airport page, carries a URL to this endpoint; its script
+// (live.js) polls it every 30 seconds and swaps in the parts of the page
+// that change: a flight's status, dock, times and track; an airport's
+// arrivals and departures boards.
 //
 // What keeps it from being worth scraping:
-//   - the URL is signed and expires. It is bound to one flight and handed
-//     out only by that flight's page, so there is nothing to enumerate: no
+//   - the URL is signed and expires. It is bound to one flight or one airport
+//     and handed out only by that page, so there is nothing to enumerate: no
 //     callsigns, no registrations, no lists.
 //   - the token is a path segment, so a CDN that leaves query strings out of
 //     its cache key still cannot hand a signed answer to an unsigned URL.
 //   - an answer is the page's own HTML for the parts that change, plus the
 //     map's moving pieces: nothing the page does not already show.
-//   - answers are rendered per poll from one real-time lookup (never cached)
-//     and are never stored by a browser or the CDN.
+//   - answers are rendered per poll and never stored by a browser or the
+//     CDN. A flight's comes from one real-time lookup (never cached); an
+//     airport's from its boards, which the API client keeps for 60 seconds.
 //   - no CORS, a same-origin resource policy, noindex, and robots.txt.
 
 import (
@@ -31,6 +34,7 @@ import (
 	"time"
 
 	"github.com/mikedamm/bermuda/internal/api"
+	"github.com/mikedamm/bermuda/internal/geo"
 )
 
 const (
@@ -46,20 +50,40 @@ var flightIDRe = regexp.MustCompile(`^[A-Za-z0-9-]{4,64}$`)
 // is a template named flight-<part> in flight.html.
 var liveParts = []string{"status", "dock", "times", "track", "bar"}
 
+// airportParts are the airport page's: templates airport-<part> in airport.html.
+var airportParts = []string{"arrivals", "departures"}
+
+// What a signature is bound to. Each kind signs under its own label, so a
+// token for a flight can never pass for an airport whose code reads the same.
+const (
+	liveFlightKind  = "live"
+	liveAirportKind = "airport"
+)
+
 // liveURL signs a refresh URL for one flight. Expiry is rounded to the hour,
 // so every page rendered in the same hour carries the same URL.
 func (s *Server) liveURL(flightID string, now time.Time) string {
-	exp := strconv.FormatInt(now.Truncate(time.Hour).Add(liveTokenLife).Unix(), 36)
-	return Prefix + "/live/" + flightID + "/" + exp + "." + s.liveSig(flightID, exp)
+	exp := liveExpiry(now)
+	return Prefix + "/live/" + flightID + "/" + exp + "." + s.liveSig(liveFlightKind, flightID, exp)
 }
 
-func (s *Server) liveSig(flightID, exp string) string {
+// liveAirportURL signs a refresh URL for one airport's boards.
+func (s *Server) liveAirportURL(icao string, now time.Time) string {
+	exp := liveExpiry(now)
+	return Prefix + "/live/airport/" + icao + "/" + exp + "." + s.liveSig(liveAirportKind, icao, exp)
+}
+
+func liveExpiry(now time.Time) string {
+	return strconv.FormatInt(now.Truncate(time.Hour).Add(liveTokenLife).Unix(), 36)
+}
+
+func (s *Server) liveSig(kind, id, exp string) string {
 	m := hmac.New(sha256.New, s.cfg.LiveKey)
-	m.Write([]byte("live\x00" + flightID + "\x00" + exp))
+	m.Write([]byte(kind + "\x00" + id + "\x00" + exp))
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil)[:16])
 }
 
-func (s *Server) liveValid(flightID, token string, now time.Time) bool {
+func (s *Server) liveValid(kind, id, token string, now time.Time) bool {
 	exp, sig, ok := strings.Cut(token, ".")
 	if !ok {
 		return false
@@ -68,7 +92,7 @@ func (s *Server) liveValid(flightID, token string, now time.Time) bool {
 	if err != nil || now.Unix() >= t || t > now.Add(liveTokenLife+time.Hour).Unix() {
 		return false
 	}
-	return hmac.Equal([]byte(sig), []byte(s.liveSig(flightID, exp)))
+	return hmac.Equal([]byte(sig), []byte(s.liveSig(kind, id, exp)))
 }
 
 type liveAnswer struct {
@@ -83,13 +107,55 @@ func (s *Server) liveFlight(w http.ResponseWriter, r *http.Request) {
 	h.Set("X-Robots-Tag", "noindex")
 	h.Set("Cross-Origin-Resource-Policy", "same-origin")
 	id, now := r.PathValue("id"), time.Now()
-	if !flightIDRe.MatchString(id) || !s.liveValid(id, r.PathValue("token"), now) {
+	if !flightIDRe.MatchString(id) || !s.liveValid(liveFlightKind, id, r.PathValue("token"), now) {
 		s.write(w, r, resp{status: http.StatusForbidden, body: []byte(`{"error":"expired"}`), ctype: jsonType})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
 	a, err := s.liveFlightAnswer(ctx, id, now)
+	s.writeLive(w, r, a, err, "flight", id)
+}
+
+// liveAirport answers an airport page's poll with its two boards.
+func (s *Server) liveAirport(w http.ResponseWriter, r *http.Request) {
+	h := w.Header()
+	h.Set("X-Robots-Tag", "noindex")
+	h.Set("Cross-Origin-Resource-Policy", "same-origin")
+	code, now := r.PathValue("code"), time.Now()
+	a, ok := geo.LookupAirport(code)
+	if !ok || a.ICAO != code || !s.liveValid(liveAirportKind, code, r.PathValue("token"), now) {
+		s.write(w, r, resp{status: http.StatusForbidden, body: []byte(`{"error":"expired"}`), ctype: jsonType})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	ans, err := s.liveAirportAnswer(ctx, a, now)
+	s.writeLive(w, r, ans, err, "airport", code)
+}
+
+func (s *Server) liveAirportAnswer(ctx context.Context, a geo.Airport, now time.Time) (liveAnswer, error) {
+	v := AirportPageV{Airport: a, Code: a.Code()}
+	b, err := s.api.AirportBoards(ctx, a.ICAO)
+	if err != nil && !errors.Is(err, api.ErrNotFound) {
+		return liveAnswer{}, err // keep what the page shows; live.js backs off
+	}
+	if err == nil {
+		v.setBoards(b, now)
+	}
+	out := liveAnswer{Parts: map[string]string{}, Next: s.liveAirportURL(a.ICAO, now)}
+	for _, part := range airportParts {
+		var buf bytes.Buffer
+		if err := s.tpl["airport"].ExecuteTemplate(&buf, "airport-"+part, v); err != nil {
+			return liveAnswer{}, err
+		}
+		out.Parts[part] = buf.String()
+	}
+	return out, nil
+}
+
+// writeLive sends a refresh answer, or why there is none.
+func (s *Server) writeLive(w http.ResponseWriter, r *http.Request, a liveAnswer, err error, kind, id string) {
 	var b []byte
 	if err == nil {
 		b, err = json.Marshal(a)
@@ -98,7 +164,7 @@ func (s *Server) liveFlight(w http.ResponseWriter, r *http.Request) {
 		if r.Context().Err() != nil {
 			return // the page went away mid-poll
 		}
-		s.log.Warn("live refresh failed", "flight", id, "err", err)
+		s.log.Warn("live refresh failed", kind, id, "err", err)
 		s.write(w, r, resp{status: http.StatusServiceUnavailable, body: []byte(`{"error":"unavailable"}`), ctype: jsonType})
 		return
 	}

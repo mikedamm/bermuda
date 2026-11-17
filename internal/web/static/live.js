@@ -1,9 +1,10 @@
-// WingView flight pages: keeps a flight that is under way current while the
-// page is open. Every 30 seconds it asks the server for the parts of the
-// page that change (status, dock, times) and the map's moving pieces, and
-// swaps them in. It pauses while the tab is hidden, backs off when the
+// WingView live pages: keeps a flight that is under way, or an airport's
+// arrivals and departures boards, current while the page is open. Every 30
+// seconds it asks the server for the parts of the page that change (a
+// flight's status, dock and times and the map's moving pieces; an airport's
+// two boards) and swaps them in. It pauses while the tab is hidden, backs off when the
 // server struggles, and stops once the flight is over or its signed URL
-// lapses (a reload starts over).
+// lapses (a reload starts over). An airport's boards never finish.
 (() => {
 	"use strict";
 	let url = document.body.dataset.live;

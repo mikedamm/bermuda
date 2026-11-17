@@ -921,12 +921,15 @@ func TestAirportBoards(t *testing.T) {
 		t.Fatalf("boards out of order: arrivals %d, departures %d, parked %d, flying over %d", arr, dep, park, over)
 	}
 	arrivals := body[arr:dep]
-	rows := arrivals[strings.Index(arrivals, "<tbody>"):]
-	past, next := strings.Index(rows, `<tr class="is-past">`), strings.Index(rows, "<tr>")
+	rows := arrivals[strings.Index(arrivals, "<tbody"):]
+	past, next := strings.Index(rows, `<tr role="row" class="is-past">`), strings.Index(rows, `<tr role="row" class="is-air" style="--p:`)
 	if past < 0 || next < past {
-		t.Error("arrivals: want the landed flight first, then the inbound one")
+		t.Errorf("arrivals: want the landed flight first, then the inbound one filling its row:\n%s", rows)
 	}
-	if !strings.Contains(arrivals, ">Arrived<") || !strings.Contains(arrivals, ">En Route<") || !strings.Contains(arrivals, `title="SAN DIEGO INTL">SAN</`) && !strings.Contains(arrivals, ">SAN<") {
+	// the inbound flight is due ten minutes behind schedule: its status says
+	// so in place of "En Route"
+	if !strings.Contains(arrivals, ">Arrived<") || !strings.Contains(arrivals, `<span class="tag tag-air">ETA 10 min late</span>`) || strings.Contains(arrivals, "En Route") ||
+		!strings.Contains(arrivals, `title="SAN DIEGO INTL">SAN</`) && !strings.Contains(arrivals, ">SAN<") {
 		t.Errorf("arrivals board:\n%s", arrivals)
 	}
 	departures := body[dep:park]
@@ -950,6 +953,103 @@ func TestAirportBoards(t *testing.T) {
 	for _, want := range []string{`<div class="clock" data-clock="America/Los_Angeles">`, `<p class="vh">Local time `, `class="flap flap-wide" data-v="`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("clock lacks %s", want)
+		}
+	}
+}
+
+// The airport band condenses like the aircraft and flight pages': above
+// the stage, its bar keeping the clock and naming the field by its code.
+func TestAirportBandCondenses(t *testing.T) {
+	body := get(t, testServer(t), "/airport/KSEA").Body.String()
+	band, stage := strings.Index(body, `data-condense>`), strings.Index(body, `<div class="stage`)
+	if band < 0 || stage < 0 || band > stage {
+		t.Fatalf("band at %d, stage at %d: the band must come first, outside the stage", band, stage)
+	}
+	for _, want := range []string{`<div class="wrap band-bar band-bar-airport" aria-hidden="true">`, `<div class="clock clock-mini" data-clock="America/Los_Angeles">`,
+		`<span class="band-bar-reg">SEA</span>`, `<div class="stage stage-board">`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("airport band lacks %s", want)
+		}
+	}
+}
+
+// The airport page polls for its two boards: a signed URL bound to the
+// airport, answered with the boards' HTML and a renewed URL, never cached.
+func TestAirportLiveBoards(t *testing.T) {
+	s := newTestServer(t)
+	h := s.Handler()
+	page := get(t, h, "/airport/KSEA").Body.String()
+	m := regexp.MustCompile(`data-live="(/tracker/live/airport/KSEA/[^"]+)"`).FindStringSubmatch(page)
+	if m == nil {
+		t.Fatal("airport page carries no refresh URL")
+	}
+	for _, want := range []string{"/live.js", `<div data-part="arrivals">`, `<div data-part="departures">`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("airport page lacks %s", want)
+		}
+	}
+	rec := get(t, h, m[1])
+	if rec.Code != 200 || rec.Header().Get("Cache-Control") != "no-store" || rec.Header().Get("X-Robots-Tag") != "noindex" {
+		t.Fatalf("refresh: status %d, cache %q: %s", rec.Code, rec.Header().Get("Cache-Control"), rec.Body)
+	}
+	var a struct {
+		Parts map[string]string
+		Next  string
+		Done  bool
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+		t.Fatal(err)
+	}
+	if a.Done || !strings.HasPrefix(a.Next, "/tracker/live/airport/KSEA/") {
+		t.Errorf("done=%v next=%q", a.Done, a.Next)
+	}
+	if !strings.Contains(a.Parts["arrivals"], "ETA 10 min late") || !strings.Contains(a.Parts["departures"], `href="/flight/ASA15"`) {
+		t.Errorf("parts: %v", a.Parts)
+	}
+	// the parts are what the page drew
+	for _, part := range []string{"arrivals", "departures"} {
+		if !strings.Contains(page, `<div data-part="`+part+`">`+a.Parts[part]+`</div>`) {
+			t.Errorf("%s part differs from the page's", part)
+		}
+	}
+
+	tok := strings.TrimPrefix(m[1], "/tracker/live/airport/KSEA/")
+	bad := map[string]string{
+		"another airport":   "/tracker/live/airport/KPDX/" + tok,
+		"not the ICAO code": "/tracker/live/airport/SEA/" + tok,
+		"unknown code":      "/tracker/live/airport/ZZZZ/" + tok,
+		// a flight's token for an id that reads like the airport's code
+		"a flight's token": s.liveAirportURL("KSEA", time.Now())[:len("/tracker/live/airport/KSEA/")] +
+			strings.TrimPrefix(s.liveURL("KSEA", time.Now()), "/tracker/live/KSEA/"),
+		"expired": s.liveAirportURL("KSEA", time.Now().Add(-7*time.Hour)),
+	}
+	for name, u := range bad {
+		if rec := get(t, h, u); rec.Code != 403 || rec.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("%s: status %d, cache %q", name, rec.Code, rec.Header().Get("Cache-Control"))
+		}
+	}
+}
+
+func TestEtaStatus(t *testing.T) {
+	at := time.Date(2026, 11, 17, 10, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		min         float64
+		text, class string
+	}{
+		{0, "On time", "ok"}, {-4, "On time", "ok"}, {-5, "ETA 5 min early", "ok"}, {4, "ETA 4 min late", "air"},
+		{14.6, "ETA 15 min late", "late"}, {65, "ETA 1 hr 5 min late", "late"}, {120, "ETA 2 hr late", "late"},
+	} {
+		text, class := etaStatus(at.Add(time.Duration(c.min*float64(time.Minute))), at)
+		if text != c.text || class != c.class {
+			t.Errorf("%v min: %q %q, want %q %q", c.min, text, class, c.text, c.class)
+		}
+	}
+	if text, _ := etaStatus(time.Time{}, at); text != "" {
+		t.Errorf("no estimate: %q", text)
+	}
+	for at2, want := range map[time.Time]string{at.Add(12 * time.Minute): "ETD 12 min late", at.Add(-8 * time.Minute): "ETD 8 min early", at.Add(-2 * time.Minute): ""} {
+		if got := lateWords("ETD", at2, at); got != want {
+			t.Errorf("lateWords %v: %q, want %q", at2.Sub(at), got, want)
 		}
 	}
 }
@@ -997,5 +1097,29 @@ func TestBoardRowsDedupe(t *testing.T) {
 	}
 	if want := "[ASA285@12:02 AM CV1@12:59 AM KAL233@2:19 AM DAL375@3:13 AM]"; fmt.Sprint(got) != want {
 		t.Errorf("got %v\nwant %s", got, want)
+	}
+}
+
+// A row's fill: the leg's position where it has one, else the clock from
+// take-off to the estimate; none on the ground or before leaving.
+func TestBoardFill(t *testing.T) {
+	now := time.Date(2026, 11, 17, 10, 0, 0, 0, time.UTC)
+	fs := &api.FlightSummary{Phase: "en_route", Off: now.Add(-time.Hour), ETA: now.Add(3 * time.Hour)}
+	for _, c := range []struct {
+		name string
+		l    LegV
+		fs   *api.FlightSummary
+		want int
+	}{
+		{"by position", LegV{Phase: "en_route", Progress: 62}, fs, 62},
+		{"by the clock", LegV{Phase: "en_route"}, fs, 25},
+		{"overdue", LegV{Phase: "en_route"}, &api.FlightSummary{Off: now.Add(-3 * time.Hour), ETA: now.Add(-time.Minute)}, 99},
+		{"on the ground", LegV{Phase: "en_route", Progress: 99}, &api.FlightSummary{OnGround: true}, 0},
+		{"landed", LegV{Phase: "arrived", Progress: 100}, fs, 0},
+		{"no times", LegV{Phase: "en_route"}, &api.FlightSummary{}, 0},
+	} {
+		if got := boardFill(c.l, c.fs, now); got != c.want {
+			t.Errorf("%s: %d, want %d", c.name, got, c.want)
+		}
 	}
 }

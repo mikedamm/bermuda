@@ -1,61 +1,79 @@
 {{/* an arrivals or departures board as an airport's screens show it,
      earliest first: what has landed (or left), a line at now, then what
-     is on its way */}}
+     is on its way. A flight in the air fills its row as far as it has come.
+     The rows are laid out on a grid (site.css), so the roles keep the
+     table's meaning for screen readers that drop it from a restyled table. */}}
 {{define "fids"}}{{if .Rows}}
-<div class="table-scroll">
-<table class="grid fids">
-	<thead><tr>
-		<th scope="col">Time</th>
-		<th scope="col">Flight</th>
-		<th scope="col">{{.Col}}</th>
-		<th scope="col">Status</th>
+<table class="fids" role="table">
+	<thead role="rowgroup"><tr role="row">
+		<th scope="col" role="columnheader">Time{{with (index .Rows 0).At.Zone}} <small>{{.}}</small>{{end}}</th>
+		<th scope="col" role="columnheader">Flight</th>
+		<th scope="col" role="columnheader">{{.Col}}</th>
+		<th scope="col" role="columnheader">Status</th>
 	</tr></thead>
-	<tbody>{{range .Rows}}<tr{{if .Past}} class="is-past"{{end}}>
-		<td class="fids-time" data-label="Time">{{template "time" .At}}</td>
-		<td class="nowrap" data-label="Flight">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}</td>
-		<td data-label="{{$.Col}}">{{template "airport-inline" .Place}}{{with .Place.City}} <span class="dim">{{.}}</span>{{end}}</td>
-		<td data-label="Status"><span class="tag tag-{{.Class}}">{{.Status}}</span>{{with .Note}} <small class="fids-note">{{.}}</small>{{end}}</td>
+	<tbody role="rowgroup">{{range .Rows}}<tr role="row"{{with .RowClass}} class="{{.}}"{{end}}{{if .Fill}} style="--p:{{.Fill}}%"{{end}}>
+		<td role="cell" class="fids-time">{{if .At.Set}}<time datetime="{{.At.ISO}}">{{.At.Clock}}</time>{{else}}<span class="dim">&ndash;</span>{{end}}</td>
+		<td role="cell" class="fids-flight">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}</td>
+		<td role="cell" class="fids-place">{{template "airport-inline" .Place}}{{with .Place.City}} <span class="dim">{{.}}</span>{{end}}</td>
+		<td role="cell" class="fids-status"><span class="tag tag-{{.Class}}">{{.Status}}</span>{{with .Note}}<small class="fids-note">{{.}}</small>{{end}}{{if .Fill}}<span class="vh">, {{.Fill}}% of the way</span>{{end}}</td>
 	</tr>{{end}}</tbody>
 </table>
-</div>
 {{else}}<p class="panel-empty">{{.Empty}}</p>{{end}}{{end}}
 
+{{/* the two boards' bodies: the page draws them, and the live refresh
+     (live.go) sends them anew every 30 seconds */}}
+{{define "airport-arrivals"}}{{if .Boards}}{{template "fids" (fids .Arrivals "From" "No arrivals on the board right now.")}}{{else}}<p class="panel-empty">The arrivals board for {{.Code}} is not available right now.</p>{{end}}{{end}}
+{{define "airport-departures"}}{{if .Boards}}{{template "fids" (fids .Departures "To" "No departures on the board right now.")}}{{else}}<p class="panel-empty">The departures board for {{.Code}} is not available right now.</p>{{end}}{{end}}
+
 {{/* the airport's local time on split flaps; site.js turns them each minute */}}
+{{define "clock-face"}}<div class="clock-face" aria-hidden="true">
+	{{range $i, $d := .Digits}}{{if eq $i 2}}<span class="clock-colon">:</span>{{end}}<span class="flap" data-v="{{$d}}"><span class="flap-half flap-top"><b>{{$d}}</b></span><span class="flap-half flap-bot"><b>{{$d}}</b></span></span>{{end}}
+	<span class="flap flap-wide" data-v="{{.Period}}"><span class="flap-half flap-top"><b>{{.Period}}</b></span><span class="flap-half flap-bot"><b>{{.Period}}</b></span></span>
+</div>{{end}}
 {{define "flip-clock"}}<div class="clock" data-clock="{{.TZ}}">
 	<p class="vh">Local time {{.Label}}</p>
-	<div class="clock-face" aria-hidden="true">
-		{{range $i, $d := .Digits}}{{if eq $i 2}}<span class="clock-colon">:</span>{{end}}<span class="flap" data-v="{{$d}}"><span class="flap-half flap-top"><b>{{$d}}</b></span><span class="flap-half flap-bot"><b>{{$d}}</b></span></span>{{end}}
-		<span class="flap flap-wide" data-v="{{.Period}}"><span class="flap-half flap-top"><b>{{.Period}}</b></span><span class="flap-half flap-bot"><b>{{.Period}}</b></span></span>
-	</div>
+	{{template "clock-face" .}}
 	<p class="clock-zone" aria-hidden="true">Local time · {{.Zone}}</p>
 </div>{{end}}
 
+{{/* the band condensed: the WingView mark, the clock at a smaller size, the
+     airport's name and code at the right, as the tail sits on aircraft pages */}}
+{{define "airport-bar"}}<div class="wrap band-bar band-bar-airport" aria-hidden="true">
+	<a class="band-bar-home" href="/" tabindex="-1"><img class="band-bar-logo-full" src="{{static "wingview-header-dark.svg"}}" width="116" height="32" alt=""><img class="band-bar-logo-icon" src="{{static "wingview-icon.svg"}}" width="32" height="32" alt=""></a>
+	<div class="clock clock-mini" data-clock="{{.Clock.TZ}}">{{template "clock-face" .Clock}}</div>
+	<div class="band-bar-id"><span class="band-bar-code band-bar-name">{{.Airport.Name}}</span><span class="band-bar-reg">{{.Code}}</span></div>
+</div>{{end}}
+
 {{define "content"}}{{$v := .Body}}{{$a := $v.Airport}}
-<div class="stage stage-short{{if not $v.Map}} stage-bare{{end}}">
-	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
-	<div class="band">
-		<div class="wrap band-in">
-			<div class="band-id">
-				<h1>{{$a.Name}}</h1>
-				<p class="band-sub">
-					<span class="band-codes">{{if $a.IATA}}{{$a.IATA}} / {{end}}{{$a.ICAO}}</span>
-					<span>{{$a.Place}}{{if or (eq $a.Country "US") (eq $a.Country "CA") (eq $a.Country "AU")}}, {{$v.Country}}{{end}}</span>
-				</p>
-			</div>
-			{{template "flip-clock" $v.Clock}}
+{{/* The band sits above the stage so it can stick to the top of the page;
+     when the boards scroll up into it, it condenses (site.js, as on
+     aircraft and flight pages). */}}
+<div class="band band-sticky{{if $v.Map}} band-over{{end}}" data-condense>
+	<div class="wrap band-in">
+		<div class="band-id">
+			<h1>{{$a.Name}}</h1>
+			<p class="band-sub">
+				<span class="band-codes">{{if $a.IATA}}{{$a.IATA}} / {{end}}{{$a.ICAO}}</span>
+				<span>{{$a.Place}}{{if or (eq $a.Country "US") (eq $a.Country "CA") (eq $a.Country "AU")}}, {{$v.Country}}{{end}}</span>
+			</p>
 		</div>
+		{{template "flip-clock" $v.Clock}}
 	</div>
+	{{template "airport-bar" $v}}
+</div>
+<div class="stage stage-board{{if not $v.Map}} stage-bare{{end}}">
+	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
 </div>
 
 <div class="sheet">
 <div class="wrap cols cols-boards">
 	<section class="panel" id="arrivals" aria-labelledby="arr-h">
 		<h2 id="arr-h">Arrivals</h2>
-		{{if $v.Boards}}{{template "fids" (fids $v.Arrivals "From" "No arrivals on the board right now.")}}{{else}}<p class="panel-empty">The arrivals board for {{$v.Code}} is not available right now.</p>{{end}}
+		<div data-part="arrivals">{{template "airport-arrivals" $v}}</div>
 	</section>
 	<section class="panel" id="departures" aria-labelledby="dep-h">
 		<h2 id="dep-h">Departures</h2>
-		{{if $v.Boards}}{{template "fids" (fids $v.Departures "To" "No departures on the board right now.")}}{{else}}<p class="panel-empty">The departures board for {{$v.Code}} is not available right now.</p>{{end}}
+		<div data-part="departures">{{template "airport-departures" $v}}</div>
 	</section>
 
 	<section class="panel" id="parked" aria-labelledby="park-h">

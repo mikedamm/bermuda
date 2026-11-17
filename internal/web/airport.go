@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -46,7 +47,92 @@ type BoardRowV struct {
 	Class  string // the status tag's
 	Note   string // how late or early, when known
 	Past   bool   // it has landed or left; the first row that has not starts the "now" line
+	Fill   int    // how far along its route a flight in the air is, 1-99 (%); 0 draws no fill
 	t      time.Time
+}
+
+// RowClass is the board row's classes: is-past for what has landed or left,
+// is-air for a flight in the air, whose row fills with its progress.
+func (r BoardRowV) RowClass() string {
+	var c []string
+	if r.Past {
+		c = append(c, "is-past")
+	}
+	if r.Fill > 0 {
+		c = append(c, "is-air")
+	}
+	return strings.Join(c, " ")
+}
+
+// setBoards fills the arrivals and departures boards from the API's answer.
+func (v *AirportPageV) setBoards(b *api.AirportBoards, now time.Time) {
+	v.Boards = true
+	v.Arrivals = boardRows(b.Boards.Arrivals, b.Boards.Enroute, true, v.Airport.TZ, now)
+	v.Departures = boardRows(b.Boards.Departures, b.Boards.Scheduled, false, v.Airport.TZ, now)
+}
+
+// boardMins writes a number of minutes as a board does: 4 min, 1 hr 5 min, 2 hr.
+func boardMins(m int) string {
+	switch {
+	case m < 60:
+		return strconv.Itoa(m) + " min"
+	case m%60 == 0:
+		return strconv.Itoa(m/60) + " hr"
+	}
+	return fmt.Sprintf("%d hr %d min", m/60, m%60)
+}
+
+// etaStatus is an inbound flight's status in one phrase, its estimate against
+// its schedule: "On time", "ETA 4 min late", "ETA 12 min early". As fmtDelay
+// has it, up to five minutes early is on time. class is the tag's: ok, late
+// (15 minutes or more), or air for a few minutes behind.
+func etaStatus(est, sched time.Time) (text, class string) {
+	if est.IsZero() || sched.IsZero() {
+		return "", ""
+	}
+	m := int(math.Round(est.Sub(sched).Minutes()))
+	switch {
+	case m >= 15:
+		return "ETA " + boardMins(m) + " late", "late"
+	case m > 0:
+		return "ETA " + boardMins(m) + " late", "air"
+	case m <= -5:
+		return "ETA " + boardMins(-m) + " early", "ok"
+	}
+	return "On time", "ok"
+}
+
+// lateWords is a board note, "ETD 12 min late", or nothing when on time.
+func lateWords(lead string, at, sched time.Time) string {
+	if at.IsZero() || sched.IsZero() {
+		return ""
+	}
+	switch m := int(math.Round(at.Sub(sched).Minutes())); {
+	case m > 0:
+		return lead + " " + boardMins(m) + " late"
+	case m <= -5:
+		return lead + " " + boardMins(-m) + " early"
+	}
+	return ""
+}
+
+// boardFill is how far along its route a flight in the air is, for its
+// row's fill: by its position where the leg has one, else by the clock,
+// take-off to the estimate. Never 0 or 100, which would read as not yet
+// left or already down.
+func boardFill(l LegV, fs *api.FlightSummary, now time.Time) int {
+	if l.Phase != "en_route" || (fs != nil && fs.OnGround) {
+		return 0
+	}
+	p := float64(l.Progress)
+	if p <= 0 && fs != nil {
+		off, est := firstSet(fs.Off, fs.Out), firstSet(fs.ETA, fs.STA, fs.SchedArr)
+		if off.IsZero() || !est.After(off) {
+			return 0
+		}
+		p = float64(now.Sub(off)) / float64(est.Sub(off)) * 100
+	}
+	return int(math.Max(1, math.Min(99, math.Round(p))))
 }
 
 // ClockV is the band's split-flap clock: the airport's local time as four
@@ -138,9 +224,7 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 
 	var planes []mapPlane
 	if b := <-boards; b != nil {
-		v.Boards = true
-		v.Arrivals = boardRows(b.Boards.Arrivals, b.Boards.Enroute, true, a.TZ, now)
-		v.Departures = boardRows(b.Boards.Departures, b.Boards.Scheduled, false, a.TZ, now)
+		v.setBoards(b, now)
 		// the boards' flights in the air near the field go on the map
 		for _, r := range append(append([]BoardRowV(nil), v.Arrivals...), v.Departures...) {
 			if r.Airborne && r.HasPos && geo.DistanceMi(a.Lat, a.Lon, r.Pos.Lat, r.Pos.Lon) < 250 {
@@ -195,6 +279,7 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 	p.Section = "airports"
 	p.Query = a.Code()
 	p.AppURL = s.appLink("airport", a.Code())
+	p.Live = s.liveAirportURL(a.ICAO, now) // live.js keeps the boards current
 	p.Crumbs = []Crumb{{"Home", "/"}, {a.Name, ""}}
 	p.JSONLD = append(p.JSONLD, airportLD(a, s.cfg.SiteURL))
 	return s.html("airport", p, v)
@@ -239,11 +324,25 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 			return
 		}
 		r := BoardRowV{LegV: l, Past: past, Status: firstNonEmpty(l.PhaseWord, "Unknown"), Class: l.StatusClass, t: b.BoardTime}
+		r.Fill = boardFill(l, b.Live, now)
 		switch {
 		case arriving && past:
 			r.Place, r.At = l.Dep, firstCell(l.ArrIn, l.ArrOn, l.ArrEst)
 		case arriving:
-			r.Place, r.At, r.Note = l.Dep, firstCell(l.ArrEst, l.ArrPlanned), l.ArrDelay
+			r.Place, r.At = l.Dep, firstCell(l.ArrEst, l.ArrPlanned)
+			// inbound: "En Route" says less than when it gets here, so an
+			// airborne flight's status is its estimate against the schedule;
+			// one still to leave keeps its phase and notes the estimate
+			var eta, class string
+			if fs := b.Live; fs != nil {
+				eta, class = etaStatus(firstSet(fs.ETA, fs.STA), fs.SchedArr)
+			}
+			switch {
+			case l.Phase == "en_route" && eta != "":
+				r.Status, r.Class = eta, class
+			case eta != "On time":
+				r.Note = eta
+			}
 		default:
 			r.Place = l.Arr
 			if l.DivertedTo != nil {
@@ -255,7 +354,19 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 					r.Status = "Departed" // on a departures board, not "en route"
 				}
 			} else {
-				r.At, r.Note = l.DepPlanned, l.DepDelay
+				r.At = l.DepPlanned
+				// in the board's words: off the gate, else the slot it is held to
+				if fs := b.Live; fs != nil {
+					switch {
+					case !fs.Out.IsZero():
+						if l.Phase == "scheduled" {
+							r.Status, r.Class = "Left gate", "taxi" // off the gate before its phase moves on
+						}
+						r.Note = lateWords("Left", fs.Out, fs.SchedDep)
+					case !fs.EDCT.IsZero():
+						r.Note = lateWords("ETD", fs.EDCT, fs.SchedDep)
+					}
+				}
 			}
 		}
 		if !b.BoardTime.IsZero() {

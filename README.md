@@ -68,6 +68,11 @@ One Go binary, standard library only.
   same-origin`, `noindex`, and robots.txt disallows it. Polling pauses in
   hidden tabs, backs off on errors and stops when the flight arrives. The
   signing key is derived from `WV_API_TOKEN`, so every instance agrees.
+  Airport pages poll `/tracker/live/airport/{ICAO}/{signature}` the same way
+  for their arrivals and departures boards (signed under its own label, so a
+  flight's token never passes for an airport's). Each poll is a fresh render;
+  the boards behind it are an ordinary API answer, cached for 60 s like the
+  rest, so a board is at most about a minute and a half behind.
 - **Upstream protection.** At most 24 concurrent API calls, a 10 s timeout,
   one retry on 5xx, and every API answer cached for 60 s (in memory, then the
   shared store), except the real-time `/live` lookup, which is never cached.

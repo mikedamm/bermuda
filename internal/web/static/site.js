@@ -15,13 +15,12 @@
 	document.addEventListener("error", (e) => e.target.matches?.(logo) && hide(e.target), true);
 })();
 
-// The airport band's split-flap clock: the airport's local time, each
-// changed figure turning over as on an old departures board. The server
-// draws the time it rendered; this keeps it turning, on the minute.
-(() => {
+// The airport band's split-flap clocks (the band's, and the smaller one in
+// its condensed bar): the airport's local time, each changed figure turning
+// over as on an old departures board. The server draws the time it
+// rendered; this keeps them turning, on the minute.
+document.querySelectorAll("[data-clock]").forEach((el) => {
 	"use strict";
-	const el = document.querySelector("[data-clock]");
-	if (!el) return;
 	let fmt;
 	try {
 		fmt = new Intl.DateTimeFormat("en-US", { timeZone: el.dataset.clock, hour: "2-digit", minute: "2-digit", hour12: true });
@@ -71,20 +70,22 @@
 		setTimeout(tick, 60000 - (Date.now() % 60000) + 40); // just past the next minute
 	};
 	tick();
-})();
+});
 
-// The aircraft page's band: it sticks to the top, and when the dock scrolls
-// up and touches it the dock folds into it: this marks the band is-docked
-// and CSS quickly fades the dock out and condenses the band into a bar (the
-// WingView mark, the dock's one-line summary, the codes by the tail), and
-// reverses it on the way back down. The band keeps its height in the flow,
-// so nothing below it moves.
+// The aircraft, flight and airport pages' band: it sticks to the top, and
+// when the dock scrolls up and touches it the dock folds into it: this marks
+// the band is-docked and CSS quickly fades the dock out and condenses the
+// band into a bar (the WingView mark, the dock's one-line summary, the codes
+// by the tail), and reverses it on the way back down. A page with no dock
+// (airports) condenses when its first panel reaches the band. The band keeps
+// its height in the flow, so nothing below it moves.
 (() => {
 	"use strict";
 	const band = document.querySelector("[data-condense]");
 	if (!band) return;
 	const stage = band.nextElementSibling;
 	const dock = stage?.querySelector(".dock");
+	const panel = dock ? null : stage?.nextElementSibling?.querySelector(".panel");
 	const BAR = 56; // the condensed height
 	const SLACK = 6; // px past the line before it undocks, so it cannot flicker there
 	let height = 0;
@@ -98,11 +99,11 @@
 	// docked once the dock's top meets the full band's foot; undocked again
 	// only once it is back past the line by SLACK
 	const update = () => {
-		if (!dock) return;
+		if (!dock && !panel) return;
 		const foot = band.getBoundingClientRect().top + height;
 		// where the dock sits in the flow: its parent is never transformed,
 		// and offsetTop ignores the dock's own lift as it folds away
-		const top = dock.parentElement.getBoundingClientRect().top + dock.offsetTop;
+		const top = dock ? dock.parentElement.getBoundingClientRect().top + dock.offsetTop : panel.getBoundingClientRect().top;
 		const docked = band.classList.contains("is-docked") ? top < foot + SLACK : top <= foot;
 		band.classList.toggle("is-docked", docked);
 	};

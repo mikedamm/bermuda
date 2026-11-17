@@ -185,24 +185,55 @@ time, .num { font-variant-numeric: tabular-nums; }
 @keyframes flap-land { to { transform: rotateX(0deg); } }
 
 /* ---------- the airport page's boards ---------- */
-/* a shorter map: the boards are the page */
-@media (min-width: 900px) {
-	.stage.stage-short:not(.stage-bare) { min-height: calc(440px + var(--tuck)); }
-}
 @media (min-width: 1000px) {
 	/* two classes: over .cols, which sets the main column and the side rail */
 	.cols.cols-boards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.cols.cols-more { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
 }
 .cols-boards + .cols-more { padding-top: 0; }
-.fids .fids-time { white-space: nowrap; }
-.fids .fids-time time { font-weight: 700; color: var(--ink); }
-.fids .fids-note { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 500; color: var(--muted); }
+/* Each row is a grid on the board's columns (subgrid), not a table row, so
+   it can carry its own background in every browser: a flight in the air
+   fills its row from the left as far along its route as it is (--p), a pale
+   sky deepening to where the aircraft is now and stopping there, with no
+   line to cross the text or be mistaken for the line at now. */
+.fids {
+	display: grid; grid-template-columns: max-content max-content minmax(0, 1fr) max-content;
+	width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums;
+}
+.fids thead, .fids tbody { display: contents; }
+.fids tr { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; border-bottom: 1px solid var(--line-soft); }
+.fids tbody tr:last-child { border-bottom: 0; }
+.fids th, .fids td { padding: 8px 14px; text-align: left; }
+.fids td { align-self: center; min-width: 0; }
+.fids thead th { padding-block: 7px; background: var(--navy); font-size: 12px; font-weight: 600; color: #dce8f6; white-space: nowrap; }
+.fids thead th small { font-size: 11px; font-weight: 500; color: #9fb5d1; }
+.fids tbody tr:nth-child(even) { background-color: var(--zebra); }
+.fids a { font-weight: 600; }
+.fids-time time { font-weight: 700; color: var(--ink); white-space: nowrap; }
+.fids-flight { white-space: nowrap; }
+.fids-place { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fids-status .tag { display: block; }
+.fids-note { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.fids tr.is-air {
+	background-image: linear-gradient(90deg, rgb(34 156 248 / 0.04), rgb(34 156 248 / 0.22) var(--p), transparent var(--p));
+}
 /* the line at now: the first row still to land or leave */
-.fids tr.is-past + tr:not(.is-past) > td { border-top: 2px solid var(--sky); }
+.fids tr.is-past + tr:not(.is-past) { border-top: 2px solid var(--sky); }
 
-/* The aircraft page's band sticks to the top. When the dock scrolls up and
-   touches it, site.js marks it is-docked: the dock fades out quickly as it
+/* condensed, the airport band keeps its clock, smaller, in the middle; the
+   name and code sit at the right where aircraft pages put the tail */
+.clock-mini { justify-self: center; }
+.clock-mini .flap { --h: 28px; width: 20px; border-radius: 3px; box-shadow: 0 1px 2px rgb(0 10 30 / 0.45); }
+.clock-mini .flap-wide { width: 31px; margin-left: 4px; }
+.clock-mini .flap-half b { font-size: 18px; }
+.clock-mini .flap-wide b { font-size: 11.5px; }
+.clock-mini .clock-face { gap: 2px; }
+.clock-mini .clock-colon { padding-bottom: 2px; font-size: 17px; }
+.band-bar-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* The aircraft, flight and airport pages' band sticks to the top. When the
+   dock (an airport's first board) scrolls up and touches it, site.js marks
+   it is-docked: the dock fades out quickly as it
    lifts into the band, the band condenses to a 56px bar, and its full row
    gives way to band-bar: the WingView mark at the left, the dock's one-line
    summary in the middle, the airline's mark and the short codes by the tail
@@ -482,6 +513,8 @@ a.route-code:hover { color: var(--link); text-decoration: none; }
 .tag-landed { color: var(--ok); }
 .tag-air, .tag-taxi { color: var(--link); }
 .tag-alert { color: var(--bad); }
+.tag-ok { color: var(--ok); }
+.tag-late { color: var(--late); }
 
 .links { list-style: none; margin: 0; padding: 10px 14px; }
 .links a { font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -590,6 +623,8 @@ a.mk-plane-sm:hover { color: var(--link); }
 	.stage:not(.stage-bare) { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 320px auto; }
 	.stage:not(.stage-bare) > .band { grid-area: 1 / 1; align-self: start; }
 	.stage:not(.stage-bare) > .stage-wrap { grid-area: 3 / 1; margin-inline: 0; } /* auto margins would shrink a grid item to fit */
+	/* the airport's map is the page's lead: a little taller */
+	.stage-board:not(.stage-bare) { grid-template-rows: 380px; }
 	.stage-wrap { padding-inline: 0; }
 	.stage { min-height: 0; }
 	.stage-wrap { padding-block: 0; }
@@ -609,8 +644,13 @@ a.mk-plane-sm:hover { color: var(--link); }
 	.flap-half b { font-size: 21px; }
 	.flap-wide b { font-size: 13px; }
 	.clock-colon { font-size: 20px; }
-	/* the line at now on the boards' cards, which drop their cell borders */
-	.fids tr.is-past + tr:not(.is-past) { border-top: 2px solid var(--sky); }
+	/* the boards keep their four columns: tighter, the city left off */
+	.fids th, .fids td { padding-inline: 8px; }
+	.fids th:first-child, .fids td:first-child { padding-left: 14px; }
+	.fids th:last-child, .fids td:last-child { padding-right: 14px; }
+	.fids-place .dim { display: none; }
+	.fids { font-size: 13px; }
+	.band-bar-name { display: none; }
 	/* under the flight, not across from it: its own row past a faint rule,
 	   the airframe beside the tail number */
 	.band-tail {

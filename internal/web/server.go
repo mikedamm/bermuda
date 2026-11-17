@@ -255,6 +255,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET "+Prefix+"/sitemaps/{name}", s.page(s.sitemapFile))
 	mux.HandleFunc("GET "+Prefix+"/search", s.page(s.searchPage))
 	mux.HandleFunc("GET "+Prefix+"/live/{id}/{token}", s.liveFlight)
+	mux.HandleFunc("GET "+Prefix+"/live/airport/{code}/{token}", s.liveAirport)
 	// the build this server runs: open pages poll it and reload when it moves on
 	mux.HandleFunc("GET "+Prefix+"/version", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
