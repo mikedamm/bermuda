@@ -51,6 +51,43 @@ func timeCell(t time.Time, tz, country string) TimeCell {
 	return TimeCell{Clock: clock, Day: lt.Format("Mon 2 Jan"), Zone: zone, ISO: t.UTC().Format(time.RFC3339), Set: true}
 }
 
+// zoneLabel names a time zone as people read it: "PST · UTC−8", "GMT", or
+// just "UTC+3" where the zone has no letters. It is the zone in force at t, so
+// it follows daylight saving.
+func zoneLabel(tz string, t time.Time) string {
+	abbr, off := t.In(loadZone(tz)).Zone()
+	sign := "+"
+	if off < 0 {
+		sign, off = "−", -off
+	}
+	utc := fmt.Sprintf("UTC%s%d", sign, off/3600)
+	if m := off % 3600 / 60; m != 0 {
+		utc += fmt.Sprintf(":%02d", m)
+	}
+	if off == 0 {
+		utc = "UTC"
+	}
+	switch {
+	case abbr == "" || abbr[0] == '+' || abbr[0] == '-':
+		return utc
+	case off == 0:
+		return abbr // GMT, UTC
+	}
+	return abbr + " · " + utc
+}
+
+// fmtLatLon reads 47.4479° N, 122.3103° W.
+func fmtLatLon(lat, lon float64) string {
+	ns, ew := "N", "E"
+	if lat < 0 {
+		ns, lat = "S", -lat
+	}
+	if lon < 0 {
+		ew, lon = "W", -lon
+	}
+	return fmt.Sprintf("%.4f° %s, %.4f° %s", lat, ns, lon, ew)
+}
+
 func dateLabel(t time.Time, tz string) string {
 	if t.IsZero() {
 		return ""

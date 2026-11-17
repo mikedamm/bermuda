@@ -20,7 +20,7 @@
 
 {{define "time"}}{{if .Set}}<time datetime="{{.ISO}}">{{.Clock}}<small> {{.Zone}}</small></time>{{else}}<span class="dim">&ndash;</span>{{end}}{{end}}
 
-{{define "kv"}}{{if .}}<dl class="kv">{{range .}}<div><dt>{{.Label}}</dt><dd>{{if .URL}}<a href="{{.URL}}">{{.Value}}</a>{{else}}{{.Value}}{{end}}</dd></div>{{end}}</dl>{{end}}{{end}}
+{{define "kv"}}{{if .}}<dl class="kv">{{range .}}<div><dt>{{.Label}}</dt><dd>{{if .URL}}<a href="{{.URL}}">{{.Value}}</a>{{else}}{{.Value}}{{end}}{{with .Note}}<small>{{.}}</small>{{end}}</dd></div>{{end}}</dl>{{end}}{{end}}
 
 {{/* route: the codes, the track between them with the plane at its
      progress, and the two times that matter */}}

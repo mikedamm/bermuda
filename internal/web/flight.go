@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"regexp"
 	"sort"
@@ -32,7 +33,8 @@ type FlightPageV struct {
 	Updated     TimeCell // when the live parts were read
 }
 
-type Fact struct{ Label, Value, URL string }
+// Fact is one row of a key-value list; Note is a quieter line under the value.
+type Fact struct{ Label, Value, URL, Note string }
 
 type FlightLink struct {
 	Number, URL, Route string
@@ -182,7 +184,7 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 	v.Map = s.legMapV(featured, <-shape, fmt.Sprintf("Map of %s from %s to %s", v.Number, featured.Dep.City, featured.Arr.City))
 	all := append([]LegV{featured}, legs...)
 	v.Summary = flightSummary(v, all, now)
-	v.Facts = flightFacts(all)
+	v.Facts = flightFacts(featured, all, v.Days, now)
 	if featured.Dep.ICAO != "" && featured.Arr.ICAO != "" {
 		for _, f := range s.index.FlightsOnRoute(featured.Dep.ICAO, featured.Arr.ICAO, now.Add(-7*24*time.Hour), 13) {
 			if f.Ident == canon || flightURL(f.Ident) == "" {
@@ -284,45 +286,136 @@ func flightDescription(v FlightPageV) string {
 }
 
 // flightFacts summarises the history: usual aircraft, typical time aloft.
-func flightFacts(legs []LegV) []Fact {
+// flightFacts are what a traveller asks of a flight number, from the legs
+// that flew its featured route in the last days: when it usually leaves,
+// how long it takes, how far it goes and what flies it. Live status is the
+// dock's, so none of it is repeated here.
+func flightFacts(f LegV, legs []LegV, days int, now time.Time) []Fact {
 	var facts []Fact
-	types := map[string]int{}
-	name := map[string]string{}
+	on := routeLegs(f, legs)
+	if t := usualTakeoff(on, f.Dep.TZ, f.Dep.Country, now); t != "" {
+		facts = append(facts, Fact{Label: "Usual take-off", Value: t})
+	}
 	var durs []time.Duration
-	var dist float64
-	for _, l := range legs {
+	types, name, typed := map[string]int{}, map[string]string{}, 0
+	dist := f.DistMi
+	for _, l := range on {
+		if l.flightTime > 0 {
+			durs = append(durs, l.flightTime)
+		}
 		if l.Type != "" {
 			types[l.Type]++
+			typed++
 			if l.Model != "" {
 				name[l.Type] = l.Model
 			}
 		}
-		if l.DistMi > 0 {
+		if dist == 0 {
 			dist = l.DistMi
-		}
-		if l.flightTime > 0 {
-			durs = append(durs, l.flightTime)
 		}
 	}
 	if len(durs) > 0 {
 		sort.Slice(durs, func(i, j int) bool { return durs[i] < durs[j] })
 		facts = append(facts, Fact{Label: "Typical flight time", Value: fmtDuration(durs[len(durs)/2])})
 	}
-	if dist == 0 && len(legs) > 0 {
-		dist = legs[0].DistMi
-	}
 	if dist > 0 {
 		facts = append(facts, Fact{Label: "Distance", Value: fmtMiles(dist) + " (" + fmtKm(dist) + ")"})
 	}
 	if t, n := topKey(types); t != "" {
-		label := t
-		if nm := name[t]; nm != "" {
-			label = nm
+		fact := Fact{Label: "Usual aircraft", Value: firstNonEmpty(name[t], t)}
+		switch {
+		case typed > 1 && n == typed:
+			fact.Note = fmt.Sprintf("on all %d flights", typed)
+		case typed > 1:
+			fact.Note = fmt.Sprintf("on %d of %d flights", n, typed)
 		}
-		facts = append(facts, Fact{Label: "Usual aircraft", Value: fmt.Sprintf("%s, %d of %d flights", label, n, len(legs))})
+		facts = append(facts, fact)
 	}
-	facts = append(facts, Fact{Label: "Flights tracked", Value: fmt.Sprintf("%d in %d days", len(legs), flightHistoryDays)})
+	routes := map[string]bool{}
+	for _, l := range legs {
+		if l.Dep.Code != "" && l.Arr.Code != "" {
+			routes[l.Dep.Code+"-"+l.Arr.Code] = true
+		}
+	}
+	if len(routes) > 1 {
+		facts = append(facts, Fact{Label: "Routes flown", Value: fmt.Sprint(len(routes)), Note: fmt.Sprintf("in the last %d days", days)})
+	}
 	return facts
+}
+
+// routeLegs are the legs that flew the featured leg's route; all of them
+// when it has none.
+func routeLegs(f LegV, legs []LegV) []LegV {
+	if f.Dep.Code == "" || f.Arr.Code == "" {
+		return legs
+	}
+	var out []LegV
+	for _, l := range legs {
+		if l.Dep.Code == f.Dep.Code && l.Arr.Code == f.Arr.Code {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// usualTakeoff is the local time a route usually leaves, when it keeps to
+// one: the circular mean of its departures (so 11:50 PM and 12:10 AM
+// average to midnight), to five minutes. Empty with fewer than three, or
+// when they scatter by more than about 40 minutes.
+func usualTakeoff(legs []LegV, tz, country string, now time.Time) string {
+	loc := loadZone(tz)
+	var sx, sy float64
+	n := 0
+	for _, l := range legs {
+		if l.departed.IsZero() {
+			continue
+		}
+		t := l.departed.In(loc)
+		a := float64(t.Hour()*60+t.Minute()) / 1440 * 2 * math.Pi
+		sx, sy, n = sx+math.Cos(a), sy+math.Sin(a), n+1
+	}
+	if n < 3 || math.Hypot(sx, sy)/float64(n) < 0.985 {
+		return ""
+	}
+	m := math.Atan2(sy, sx) / (2 * math.Pi) * 1440
+	if m < 0 {
+		m += 1440
+	}
+	mins := int(math.Round(m/5)) * 5 % 1440
+	y, mo, d := now.In(loc).Date()
+	c := timeCell(time.Date(y, mo, d, mins/60, mins%60, 0, 0, loc), tz, country)
+	return c.Clock + " " + c.Zone
+}
+
+// frequency says how often a route flies, from the local days it left in
+// the window: "daily", "5 times a week", "weekly", or empty when the record
+// is under a week long or too thin to say.
+func frequency(legs []LegV, tz string, days int, now time.Time) string {
+	seen := map[string]bool{}
+	first := now
+	for _, l := range legs {
+		if l.departed.IsZero() || now.Sub(l.departed) > time.Duration(days)*24*time.Hour {
+			continue
+		}
+		seen[l.departed.In(loadZone(tz)).Format("2006-01-02")] = true
+		if l.departed.Before(first) {
+			first = l.departed
+		}
+	}
+	span := math.Ceil(now.Sub(first).Hours() / 24)
+	if span < 7 || len(seen) < 2 {
+		return ""
+	}
+	perWeek := float64(len(seen)) * 7 / span
+	switch k := int(math.Round(perWeek)); {
+	case perWeek >= 6.5:
+		return "daily"
+	case k >= 2:
+		return fmt.Sprintf("%d times a week", k)
+	case k == 1:
+		return "weekly"
+	}
+	return ""
 }
 
 func ptrs(ls []LegV) []*LegV {
@@ -343,46 +436,23 @@ func topKey(m map[string]int) (string, int) {
 	return best, n
 }
 
-// flightSummary writes the "about this flight" paragraph from the data.
+// flightSummary is the one sentence that opens the about panel: who flies
+// it, how often, and between which cities.
 func flightSummary(v FlightPageV, legs []LegV, now time.Time) []string {
 	f := v.Featured
-	var out []string
+	if f.Dep.Code == "" || f.Arr.Code == "" {
+		return nil
+	}
 	name := "Flight " + v.Number
 	if v.Airline != "" {
 		name = v.Airline + " flight " + v.Number
 	}
-	if f.Dep.Code != "" && f.Arr.Code != "" {
-		s := fmt.Sprintf("%s flies from %s (%s) to %s (%s)", name, f.Dep.Name, f.Dep.Code, f.Arr.Name, f.Arr.Code)
-		if f.DistMi > 0 {
-			s += fmt.Sprintf(", a distance of %s", fmtMiles(f.DistMi))
-		}
-		out = append(out, s+".")
+	s := name + " flies"
+	if fq := frequency(routeLegs(f, legs), f.Dep.TZ, v.Days, now); fq != "" {
+		s += " " + fq
 	}
-	routes := map[string]int{}
-	for _, l := range legs {
-		if l.Dep.Code != "" && l.Arr.Code != "" {
-			routes[l.Dep.Code+"–"+l.Arr.Code]++
-		}
-	}
-	if len(routes) > 1 {
-		out = append(out, fmt.Sprintf("Over the last %d days it flew %d different routes under this number.", v.Days, len(routes)))
-	}
-	switch {
-	case f.Live && f.Airborne && f.Alt != "":
-		s := fmt.Sprintf("Right now it is in the air at %s", f.Alt)
-		if f.LeftMi != "" {
-			s += fmt.Sprintf(", %s from %s", f.LeftMi, f.Arr.City)
-		}
-		if f.ArrEst.Set {
-			s += fmt.Sprintf(", and is expected to land at %s %s local time", f.ArrEst.Clock, f.ArrEst.Zone)
-		}
-		out = append(out, s+".")
-	case f.Phase == "arrived" || f.Phase == "landed":
-		if f.ArrOn.Set {
-			out = append(out, fmt.Sprintf("Its most recent flight landed in %s at %s %s on %s.", f.Arr.City, f.ArrOn.Clock, f.ArrOn.Zone, f.ArrOn.Day))
-		}
-	}
-	return out
+	place := func(a AirportV) string { return firstNonEmpty(a.City, a.Name) }
+	return []string{fmt.Sprintf("%s from %s (%s) to %s (%s).", s, place(f.Dep), f.Dep.Code, place(f.Arr), f.Arr.Code)}
 }
 
 func flightLD(v FlightPageV, site string) map[string]any {

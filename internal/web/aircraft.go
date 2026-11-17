@@ -190,13 +190,14 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 			*fs = append(*fs, Fact{Label: label, Value: val})
 		}
 	}
-	add(&v.Specs, "Type", strings.TrimSpace(a.Manufacturer+" "+a.Model))
+	// the model is in the title band and the opening sentence; the type code
+	// says only what the engines row does not (a helicopter, a seaplane)
 	if a.ICAOType != "" {
-		desc := a.ICAOType
-		if d := typeDescription(a.TypeDescription); d != "" {
-			desc += ", " + d
+		code := a.ICAOType
+		if k := typeKind(a.TypeDescription); k != "" && k != "landplane" {
+			code += ", " + k
 		}
-		add(&v.Specs, "ICAO type", desc)
+		add(&v.Specs, "Type code", code)
 	}
 	add(&v.Specs, "Engines", engines(a.Engines, a.EngineType))
 	if a.Seats > 0 {
@@ -210,8 +211,7 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 		add(&v.Specs, "Built", fmt.Sprintf("%d%s", a.YearBuilt, age))
 	}
 	add(&v.Specs, "Serial number", a.SerialNumber)
-	add(&v.Specs, "Mode S address", a.Hex)
-	add(&v.Specs, "Country of registration", a.Country.Name)
+	add(&v.Specs, "Registered in", a.Country.Name)
 	if a.Wake != "" {
 		add(&v.Specs, "Wake category", map[string]string{"L": "Light", "M": "Medium", "H": "Heavy", "J": "Super"}[a.Wake])
 	}
@@ -406,34 +406,28 @@ func aircraftName(a api.Aircraft) string {
 	return strings.TrimSpace(a.Manufacturer + " " + a.Model)
 }
 
-func typeDescription(code string) string {
-	if len(code) != 3 {
-		return ""
+// engines reads "Twin jet", "Single piston", "4 turboprops".
+func engines(n int, typ string) string {
+	typ = strings.ToLower(strings.TrimSpace(strings.ReplaceAll(typ, "_", " ")))
+	switch {
+	case n <= 0:
+		return sentence(typ)
+	case typ == "":
+		return fmt.Sprint(n)
+	case n == 1:
+		return "Single " + typ
+	case n == 2:
+		return "Twin " + typ
 	}
-	kind := map[byte]string{'L': "landplane", 'S': "seaplane", 'A': "amphibian", 'H': "helicopter", 'G': "gyrocopter", 'T': "tiltrotor"}[code[0]]
-	eng := map[byte]string{'J': "jet", 'T': "turboprop", 'P': "piston", 'E': "electric"}[code[2]]
-	n := code[1:2]
-	if kind == "" {
-		return ""
-	}
-	words := map[string]string{"1": "single", "2": "twin", "3": "three", "4": "four", "6": "six", "8": "eight"}
-	if w, ok := words[n]; ok && eng != "" {
-		if w == "single" || w == "twin" {
-			return fmt.Sprintf("%s-engine %s %s", w, eng, kind)
-		}
-		return fmt.Sprintf("%s-engine %s %s", w, eng, kind)
-	}
-	return kind
+	return fmt.Sprintf("%d %ss", n, typ)
 }
 
-func engines(n int, typ string) string {
-	if n <= 0 {
-		return sentence(typ)
+// typeKind is the airframe kind in an ICAO type description (L2J: landplane).
+func typeKind(code string) string {
+	if code == "" {
+		return ""
 	}
-	if typ == "" {
-		return fmt.Sprint(n)
-	}
-	return fmt.Sprintf("%d %s", n, typ)
+	return map[byte]string{'L': "landplane", 'S': "seaplane", 'A': "amphibian", 'H': "helicopter", 'G': "gyrocopter", 'T': "tiltrotor"}[code[0]]
 }
 
 func sentence(s string) string {
@@ -464,32 +458,32 @@ func firstNonEmpty(ss ...string) string {
 	return ""
 }
 
+// aircraftSummary is the one sentence that opens the about panel. Its
+// flying record has its own panel, so it says only what the aircraft is
+// and who flies it (and, for a LADD aircraft, why its flights are hidden).
 func aircraftSummary(v AircraftPageV, p0 *api.AircraftPage) []string {
-	var out []string
-	s := v.Registration + " is a " + firstNonEmpty(v.Name, "aircraft")
-	if a := p0.Aircraft; a.YearBuilt > 0 {
-		s += fmt.Sprintf(" built in %d", a.YearBuilt)
+	what := firstNonEmpty(v.Name, "aircraft")
+	if y := p0.Aircraft.YearBuilt; y > 0 {
+		what = fmt.Sprintf("%d %s", y, what)
 	}
+	s := fmt.Sprintf("%s is %s %s", v.Registration, article(what), what)
 	if v.Operator != "" {
-		s += ", flown by " + v.Operator
+		s += " flown by " + v.Operator
 	}
-	if v.Owner != "" && !strings.EqualFold(v.Owner, v.Operator) && !strings.HasPrefix(strings.ToLower(v.Owner), strings.ToLower(v.Operator)) {
-		s += " and registered to " + v.Owner
-	}
-	out = append(out, s+".")
+	out := []string{s + "."}
 	if v.LADD {
-		out = append(out, "Its owner has asked the FAA to limit public tracking of this aircraft (the LADD program), so flight details are not shown.")
-		return out
-	}
-	if st := p0.Stats; st.Flights > 0 {
-		s := fmt.Sprintf("In the last %d days it made %s", st.Days, plural(st.Flights, "flight", "flights"))
-		if st.Hours > 0 {
-			s += fmt.Sprintf(" totalling %.0f hours in the air", st.Hours)
-		}
-		if len(v.TopAirports) > 0 {
-			s += ", most often at " + v.TopAirports[0].Airport.Name
-		}
-		out = append(out, s+".")
+		out = append(out, "Its owner has opted out of public tracking (the FAA's LADD program), so its flights are not shown.")
 	}
 	return out
+}
+
+// article is "a" or "an" for a word or year ("an 1987", "an A320", "a 2026").
+func article(w string) string {
+	w = strings.ToLower(w)
+	for _, p := range []string{"8", "11", "18", "a", "e", "i", "o"} {
+		if strings.HasPrefix(w, p) && !strings.HasPrefix(w, "one") {
+			return "an"
+		}
+	}
+	return "a"
 }

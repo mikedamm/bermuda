@@ -135,9 +135,9 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 		}
 	}
 	add("Elevation", fmt.Sprintf("%s ft (%s m)", commas(a.ElevFt), commas(int(float64(a.ElevFt)*0.3048))))
-	add("Coordinates", fmt.Sprintf("%.4f, %.4f", a.Lat, a.Lon))
+	add("Coordinates", fmtLatLon(a.Lat, a.Lon))
 	if a.TZ != "" {
-		add("Time zone", strings.ReplaceAll(a.TZ, "_", " "))
+		add("Time zone", zoneLabel(a.TZ, now))
 	}
 	v.Summary = airportSummary(v)
 
@@ -411,25 +411,13 @@ func groundDetail(r TrafficRow) int {
 	return n
 }
 
+// airportSummary is the one sentence that opens the about panel. The live
+// counts are the dock's and the codes the title band's, so it says only
+// what the airport is and whom it serves.
 func airportSummary(v AirportPageV) []string {
 	a := v.Airport
-	var out []string
 	kind := map[byte]string{'L': "a major airport", 'M': "an airport", 'S': "a small airport"}[a.Size]
-	s := fmt.Sprintf("%s (%s) is %s serving %s", a.Name, codeSlash(a), kind, a.Place())
-	if a.ElevFt != 0 {
-		s += fmt.Sprintf(", at an elevation of %s ft", commas(a.ElevFt))
-	}
-	out = append(out, s+".")
-	if v.Live {
-		in, outN, g := len(v.Inbound), len(v.Outbound), v.GroundN
-		if in+outN+g > 0 {
-			out = append(out, fmt.Sprintf("Within %d miles right now there are %s inbound and %s outbound, with %s on the ground that just landed or are about to leave.",
-				v.RadiusMi, plural(in, "flight", "flights"), plural(outN, "flight", "flights"), plural(g, "more", "more")))
-		} else {
-			out = append(out, fmt.Sprintf("There are no flights arriving or departing within %d miles right now.", v.RadiusMi))
-		}
-	}
-	return out
+	return []string{fmt.Sprintf("%s is %s serving %s.", a.Name, firstNonEmpty(kind, "an airport"), a.Place())}
 }
 
 func airportLD(a geo.Airport, site string) map[string]any {

@@ -48,7 +48,6 @@
 					<div><dt>Overhead</dt><dd>{{len $v.Overhead}}</dd></div>
 				</dl>
 				{{end}}
-				{{template "kv" $v.Facts}}
 				<a class="btn btn-app btn-block" href="{{.AppURL}}">See {{$v.Code}} in 3D</a>
 			</div>
 		</div>
@@ -116,8 +115,9 @@
 	<aside class="col-side">
 		<section class="panel" aria-labelledby="about-h">
 			<h2 id="about-h">About {{$v.Code}}</h2>
-			<div class="panel-body prose">{{range $v.Summary}}<p>{{.}}</p>{{end}}
-			{{if $v.Wikipedia}}<p><a href="https://en.wikipedia.org/wiki/{{$v.Wikipedia}}" rel="nofollow noopener">{{$a.Name}} on Wikipedia</a></p>{{end}}</div>
+			<div class="panel-body prose">{{range $v.Summary}}<p>{{.}}</p>{{end}}</div>
+			{{template "kv" $v.Facts}}
+			{{if $v.Wikipedia}}<p class="panel-more"><a href="https://en.wikipedia.org/wiki/{{$v.Wikipedia}}" rel="nofollow noopener">{{$a.Name}} on Wikipedia</a></p>{{end}}
 		</section>
 		{{if $v.Airlines}}
 		<section class="panel" aria-labelledby="al-h">

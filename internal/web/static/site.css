@@ -229,6 +229,7 @@ a.route-code:hover { color: var(--link); text-decoration: none; }
 .kv > div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 8px 0; border-top: 1px solid var(--line-soft); font-size: 14px; }
 .kv dt { color: var(--muted); white-space: nowrap; }
 .kv dd { margin: 0; font-weight: 600; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kv dd small { display: block; margin-top: 1px; font-size: 12.5px; font-weight: 400; color: var(--muted); }
 .kv-dock { margin-top: 14px; }
 .kv-dock:empty { display: none; }
 .panel > .kv { padding: 0 14px 4px; }
@@ -263,6 +264,7 @@ a.route-code:hover { color: var(--link); text-decoration: none; }
 .panel-empty { padding: 14px; font-size: 14px; color: var(--muted); }
 .prose p { max-width: 70ch; font-size: 14.5px; line-height: 1.6; }
 .prose p + p { margin-top: 10px; }
+.panel-more { margin: 0; padding: 10px 14px 12px; border-top: 1px solid var(--line-soft); font-size: 14px; }
 .prose a { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgb(0 101 173 / 0.35); }
 .side-note { font-size: 13px; color: var(--muted); }
 
