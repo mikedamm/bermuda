@@ -136,7 +136,10 @@ time, .num { font-variant-numeric: tabular-nums; }
 .band-sub a:hover { color: #fff; }
 .band-codes { color: #fff; font-weight: 600; }
 .band-id:has(> .band-logo, > .band-mark) { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; align-items: center; }
-.band-logo, .band-mark { grid-row: span 2; }
+/* the mark spans the name and the line under it; a band with only a name
+   centres both on one row, the "Updated" time with them */
+.band-id:has(> .band-sub) > :first-child { grid-row: span 2; }
+.band-in:not(:has(.band-sub)) { align-items: center; }
 .band-mark { line-height: 0; border-radius: 6px; }
 .band-logo { width: 52px; height: 52px; padding: 6px; border-radius: 6px; background: #fff; object-fit: contain; }
 .op { display: inline-block; width: 20px; height: 20px; margin-right: 8px; vertical-align: -5px; object-fit: contain; }
