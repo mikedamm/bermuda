@@ -4,6 +4,64 @@
 // title band's "Updated" time up. Everything else on the page works
 // without this script.
 
+// The airport band's split-flap clock: the airport's local time, each
+// changed figure turning over as on an old departures board. The server
+// draws the time it rendered; this keeps it turning, on the minute.
+(() => {
+	"use strict";
+	const el = document.querySelector("[data-clock]");
+	if (!el) return;
+	let fmt;
+	try {
+		fmt = new Intl.DateTimeFormat("en-US", { timeZone: el.dataset.clock, hour: "2-digit", minute: "2-digit", hour12: true });
+	} catch {
+		return; // a zone the browser does not know: the rendered time stays
+	}
+	const flaps = [...el.querySelectorAll(".flap")];
+	const said = el.querySelector(".vh");
+	const zone = said?.textContent.trim().split(" ").pop() || "";
+	const still = matchMedia("(prefers-reduced-motion: reduce)");
+
+	// four figures, HH:MM, and AM or PM; the spoken time drops the leading zero
+	const read = () => {
+		const p = Object.fromEntries(fmt.formatToParts(new Date()).map((x) => [x.type, x.value]));
+		const h = p.hour.padStart(2, "0"), period = (p.dayPeriod || "").toUpperCase();
+		return { figures: [h[0], h[1], p.minute[0], p.minute[1], period], text: `${+h}:${p.minute} ${period}` };
+	};
+	const half = (cls, text) => {
+		const s = document.createElement("span");
+		s.className = `flap-half ${cls} flap-leaf`;
+		s.append(Object.assign(document.createElement("b"), { textContent: text }));
+		return s;
+	};
+	const turn = (flap, to) => {
+		const from = flap.dataset.v ?? "";
+		if (from === to) return;
+		flap.dataset.v = to;
+		const top = flap.querySelector(":scope > .flap-top b"), bot = flap.querySelector(":scope > .flap-bot b");
+		top.textContent = to; // under the falling leaf
+		if (still.matches) {
+			bot.textContent = to;
+			return;
+		}
+		flap.querySelectorAll(".flap-leaf").forEach((n) => n.remove()); // a turn still running
+		const fall = half("flap-top", from), land = half("flap-bot", to);
+		flap.append(fall, land);
+		land.addEventListener("animationend", () => {
+			bot.textContent = to;
+			fall.remove();
+			land.remove();
+		}, { once: true });
+	};
+	const tick = () => {
+		const now = read();
+		flaps.forEach((f, i) => turn(f, now.figures[i] ?? ""));
+		if (said) said.textContent = `Local time ${now.text} ${zone}`;
+		setTimeout(tick, 60000 - (Date.now() % 60000) + 40); // just past the next minute
+	};
+	tick();
+})();
+
 // The aircraft page's band: it sticks to the top, and when the dock scrolls
 // up and touches it the dock folds into it: this marks the band is-docked
 // and CSS quickly fades the dock out and condenses the band into a bar (the

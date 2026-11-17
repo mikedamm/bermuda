@@ -131,11 +131,11 @@ func (s *Server) funcs() template.FuncMap {
 		"add":     func(a, b int) int { return a + b },
 		"country": geo.CountryName,
 		"query":   url.QueryEscape,
-		"board": func(rows []TrafficRow, other string) any {
+		"fids": func(rows []BoardRowV, col, empty string) any {
 			return struct {
-				Rows  []TrafficRow
-				Other string
-			}{rows, other}
+				Rows       []BoardRowV
+				Col, Empty string
+			}{rows, col, empty}
 		},
 		"band": func(class, title, detail string) StatusBand { return StatusBand{class, title, detail} },
 		"timeGroups": func(depTitle string, dep []TimeRow, arrTitle string, arr []TimeRow) any {

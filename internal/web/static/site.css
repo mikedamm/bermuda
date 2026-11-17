@@ -92,11 +92,8 @@ time, .num { font-variant-numeric: tabular-nums; }
 	font: inherit; font-size: 14px; font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer;
 }
 .btn:hover { text-decoration: none; }
-.btn-app { background: var(--sky); border-color: var(--sky-edge); color: var(--navy); }
-.btn-app:hover { background: var(--sky-hover); color: var(--navy); }
 .btn-primary { background: var(--navy); color: #fff; }
 .btn-primary:hover { background: #0a3d7a; color: #fff; }
-.btn-block { display: flex; width: 100%; height: 42px; margin-top: 16px; }
 
 /* ---------- masthead ---------- */
 
@@ -157,6 +154,52 @@ time, .num { font-variant-numeric: tabular-nums; }
 .op { display: inline-block; width: 20px; height: 20px; margin-right: 8px; vertical-align: -5px; object-fit: contain; }
 /* "Updated 12 seconds ago": quiet, and steady as the seconds count */
 .band-meta { font-size: 13px; color: #b9cce4; font-variant-numeric: tabular-nums; }
+
+/* ---------- the airport band's split-flap clock ----------
+   Each flap is two halves of a dark tile split by a hinge. When a figure
+   changes, site.js lays two leaves over it: the old top half falls away to
+   show the new one, then the new bottom half lands on the old. */
+.clock { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.clock-face { display: flex; align-items: center; gap: 3px; }
+.clock-colon { padding: 0 1px 3px; font-size: 24px; font-weight: 700; line-height: 1; color: #dbe7f5; }
+.clock-zone { font-size: 12px; letter-spacing: 0.02em; color: #b9cce4; }
+.flap {
+	--h: 40px;
+	position: relative; width: 28px; height: var(--h);
+	border-radius: 4px; box-shadow: 0 2px 4px rgb(0 10 30 / 0.45);
+	perspective: 200px; font-variant-numeric: tabular-nums;
+}
+.flap-wide { width: 44px; margin-left: 6px; }
+.flap-half { position: absolute; left: 0; right: 0; height: calc(var(--h) / 2); overflow: hidden; backface-visibility: hidden; }
+.flap-half b { display: block; height: var(--h); font-size: 26px; font-weight: 700; line-height: var(--h); text-align: center; color: #f3f7fc; }
+.flap-wide b { font-size: 16px; letter-spacing: 0.04em; }
+.flap-top { top: 0; border-radius: 4px 4px 0 0; background: linear-gradient(#173158, #112747); transform-origin: 50% 100%; }
+.flap-bot { bottom: 0; border-radius: 0 0 4px 4px; background: linear-gradient(#0f2340, #0b1b33); transform-origin: 50% 0; }
+.flap-bot b { margin-top: calc(var(--h) / -2); }
+/* the hinge, above the leaves */
+.flap::after { content: ""; position: absolute; z-index: 3; left: 0; right: 0; top: calc(50% - 0.5px); height: 1px; background: rgb(0 8 24 / 0.7); }
+.flap-leaf { z-index: 2; }
+.flap-leaf.flap-top { animation: flap-fall 140ms ease-in forwards; }
+.flap-leaf.flap-bot { transform: rotateX(90deg); animation: flap-land 140ms ease-out 140ms forwards; }
+@keyframes flap-fall { to { transform: rotateX(-90deg); } }
+@keyframes flap-land { to { transform: rotateX(0deg); } }
+
+/* ---------- the airport page's boards ---------- */
+/* a shorter map: the boards are the page */
+@media (min-width: 900px) {
+	.stage.stage-short:not(.stage-bare) { min-height: calc(440px + var(--tuck)); }
+}
+@media (min-width: 1000px) {
+	/* two classes: over .cols, which sets the main column and the side rail */
+	.cols.cols-boards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.cols.cols-more { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+}
+.cols-boards + .cols-more { padding-top: 0; }
+.fids .fids-time { white-space: nowrap; }
+.fids .fids-time time { font-weight: 700; color: var(--ink); }
+.fids .fids-note { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 500; color: var(--muted); }
+/* the line at now: the first row still to land or leave */
+.fids tr.is-past + tr:not(.is-past) > td { border-top: 2px solid var(--sky); }
 
 /* The aircraft page's band sticks to the top. When the dock scrolls up and
    touches it, site.js marks it is-docked: the dock fades out quickly as it
@@ -355,7 +398,6 @@ a.route-code:hover { color: var(--link); text-decoration: none; }
 .cols { display: grid; gap: 20px; padding-block: 24px 48px; }
 @media (min-width: 1000px) { .cols { grid-template-columns: minmax(0, 1fr) 340px; } }
 .col-main, .col-side { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-.boards { display: flex; flex-direction: column; gap: 20px; }
 
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
 .panel > h2 {
@@ -560,6 +602,15 @@ a.mk-plane-sm:hover { color: var(--link); }
 
 @media (max-width: 640px) {
 	.band-logo { width: 44px; height: 44px; padding: 5px; }
+	/* the clock takes its own row under the name, smaller */
+	.clock { align-items: flex-start; }
+	.flap { --h: 32px; width: 23px; }
+	.flap-wide { width: 36px; margin-left: 4px; }
+	.flap-half b { font-size: 21px; }
+	.flap-wide b { font-size: 13px; }
+	.clock-colon { font-size: 20px; }
+	/* the line at now on the boards' cards, which drop their cell borders */
+	.fids tr.is-past + tr:not(.is-past) { border-top: 2px solid var(--sky); }
 	/* under the flight, not across from it: its own row past a faint rule,
 	   the airframe beside the tail number */
 	.band-tail {

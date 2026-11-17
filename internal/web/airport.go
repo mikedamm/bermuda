@@ -17,46 +17,72 @@ import (
 )
 
 type AirportPageV struct {
-	Airport        geo.Airport
-	Code           string
-	Region         string
-	Country        string
-	LocalTime      TimeCell
-	Map            *MapV
-	RadiusMi       int
-	Inbound        []TrafficRow
-	Outbound       []TrafficRow
-	Ground         []TrafficRow
-	Overhead       []TrafficRow
-	Parked         []TrafficRow
-	ParkedN        int
-	ParkedShown    int
-	GroundN        int
-	GroundHasReg   bool
-	GroundHasRoute bool
-	Airlines       []AirlineCountV
-	Nearby         []NearbyV
-	Live           bool
-	Summary        []string
-	Facts          []Fact
-	Wikipedia      string
+	Airport    geo.Airport
+	Code       string
+	Region     string
+	Country    string
+	Clock      ClockV
+	Map        *MapV
+	Boards     bool         // the arrivals and departures boards answered
+	Arrivals   []BoardRowV  // landed here lately, then inbound: earliest first
+	Departures []BoardRowV  // left here lately, then scheduled: earliest first
+	Live       bool         // the sweep of aircraft around the field answered
+	Parked     []TrafficRow // on the ground at the field
+	ParkedN    int
+	Overhead   []TrafficRow // passing within airportRadius, not landing or leaving here
+	Airlines   []AirlineCountV
+	Nearby     []NearbyV
+	Summary    []string
+	Facts      []Fact
+	Wikipedia  string
+}
+
+// BoardRowV is one line of an arrivals or departures board.
+type BoardRowV struct {
+	LegV
+	Place  AirportV // where it comes from (arrivals) or goes to (departures)
+	At     TimeCell // what happened, else what is expected, else the schedule
+	Status string
+	Class  string // the status tag's
+	Note   string // how late or early, when known
+	Past   bool   // it has landed or left; the first row that has not starts the "now" line
+}
+
+// ClockV is the band's split-flap clock: the airport's local time as four
+// digit flaps, HH:MM (01:46), and an AM/PM flap.
+type ClockV struct {
+	Digits [4]string
+	Period string
+	Zone   string // PST
+	TZ     string // IANA, for the script that keeps it turning
+	Label  string // 12:26 AM PST, for screen readers
+}
+
+func clockAt(t time.Time, tz string) ClockV {
+	if tz == "" {
+		tz = "UTC"
+	}
+	lt := t.In(loadZone(tz))
+	h, m := lt.Format("03"), lt.Format("04")
+	c := ClockV{Digits: [4]string{h[:1], h[1:], m[:1], m[1:]}, Period: lt.Format("PM"), Zone: timeCell(t, tz, "").Zone, TZ: tz}
+	c.Label = lt.Format("3:04 PM") + " " + c.Zone
+	return c
 }
 
 type TrafficRow struct {
 	Callsign, Number, URL string
 	Reg, RegURL           string
-	Other                 AirportV // origin for arrivals, destination for departures
+	From, To              AirportV // a passing flight's route, when found
 	Alt                   string
 	Dist                  string
-	Status                string
-	State                 string // on the ground: Landed, Departing
+	State                 string // parked: Parked, Just landed, Departing
+	StateClass            string
 	Type                  string // parked: aircraft type from the index
 	Airline               string
 	Op                    string // operator ICAO code, for its logo
 	distMi                float64
 	pos                   geo.LL // live position, when resolved
 	hdg                   float64
-	direction             string
 }
 
 type AirlineCountV struct {
@@ -68,7 +94,10 @@ type NearbyV struct {
 	Code, Name, URL, Dist string
 }
 
-const airportRadius = 50
+const (
+	airportRadius = 25 // miles: the sweep for what is parked at the field and what passes over it
+	fieldMi       = 3  // on the ground within this of the reference point is on the field
+)
 
 func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error) {
 	raw := r.PathValue("code")
@@ -80,12 +109,20 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 		return redirect("/airport/" + a.ICAO), nil
 	}
 	now := time.Now()
-	v := AirportPageV{Airport: a, Code: a.Code(), Country: geo.CountryName(a.Country), RadiusMi: airportRadius, Wikipedia: a.Wiki}
+	v := AirportPageV{Airport: a, Code: a.Code(), Country: geo.CountryName(a.Country), Wikipedia: a.Wiki, Clock: clockAt(now, a.TZ)}
 	if rn := geo.RegionName(a.Region); rn != "" {
 		v.Region = rn
 	}
-	v.LocalTime = timeCell(now, a.TZ, a.Country)
 
+	// the boards and the sweep around the field load together
+	boards := make(chan *api.AirportBoards, 1)
+	go func() {
+		b, err := s.api.AirportBoards(ctx, a.ICAO)
+		if err != nil {
+			b = nil // the page stands without its boards
+		}
+		boards <- b
+	}()
 	t, err := s.api.AirportTraffic(ctx, a.ICAO, airportRadius)
 	switch {
 	case errors.Is(err, api.ErrNotFound):
@@ -98,29 +135,39 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 		s.index.NoteSweep(a.ICAO, t, now)
 	}
 
+	var planes []mapPlane
+	if b := <-boards; b != nil {
+		v.Boards = true
+		v.Arrivals = boardRows(b.Boards.Arrivals, b.Boards.Enroute, true, now)
+		v.Departures = boardRows(b.Boards.Departures, b.Boards.Scheduled, false, now)
+		// the boards' flights in the air near the field go on the map
+		for _, r := range append(append([]BoardRowV(nil), v.Arrivals...), v.Departures...) {
+			if r.Airborne && r.HasPos && geo.DistanceMi(a.Lat, a.Lon, r.Pos.Lat, r.Pos.Lon) < 250 {
+				planes = append(planes, mapPlane{P: pt(r.Pos), H: math.Round(r.Hdg), L: r.Number, U: r.URL})
+			}
+		}
+	}
+
 	for _, n := range geo.NearbyAirports(a.Lat, a.Lon, 150, 8, a.ICAO) {
 		v.Nearby = append(v.Nearby, NearbyV{Code: n.Code(), Name: n.Name, URL: "/airport/" + n.ICAO,
 			Dist: fmtMiles(geo.DistanceMi(a.Lat, a.Lon, n.Lat, n.Lon))})
 	}
 
 	center := geo.LL{Lat: a.Lat, Lon: a.Lon}
-	close := geo.NearbyAirports(a.Lat, a.Lon, airportRadius+10, 6, a.ICAO)
+	close := geo.NearbyAirports(a.Lat, a.Lon, 40, 6, a.ICAO)
 	var closeV []AirportV
 	for _, n := range close {
 		closeV = append(closeV, airportV(n.ICAO, nil))
 	}
-	var planes []mapPlane
-	for _, rs := range [][]TrafficRow{v.Inbound, v.Outbound, v.Overhead} {
-		for _, r := range rs {
-			if r.pos.Valid() {
-				planes = append(planes, mapPlane{P: pt(r.pos), H: math.Round(r.hdg), L: r.Number, U: r.URL})
-			}
+	for _, r := range v.Overhead {
+		if r.pos.Valid() {
+			planes = append(planes, mapPlane{P: pt(r.pos), H: math.Round(r.hdg), L: r.Number, U: r.URL})
 		}
 	}
-	v.Map = s.placeMapV(center, a.Code(), "/airport/"+a.ICAO, []float64{25, airportRadius}, closeV, planes,
-		fmt.Sprintf("Map of the area within %d miles of %s", airportRadius, a.Name),
+	v.Map = s.placeMapV(center, a.Code(), "/airport/"+a.ICAO, nil, closeV, planes,
+		"Map of "+a.Name+" and the airports and traffic around it",
 		func() *geo.Map {
-			spec := geo.MapSpec{W: 960, H: 360, Center: &center, RadiusMi: airportRadius + 6, Rings: []float64{25, airportRadius},
+			spec := geo.MapSpec{W: 960, H: 360, Center: &center, RadiusMi: 40,
 				Pins: []geo.MapPin{{At: center, Label: a.Code(), Primary: true}}}
 			for _, n := range close {
 				spec.Pins = append(spec.Pins, geo.MapPin{At: geo.LL{Lat: n.Lat, Lon: n.Lon}, Label: n.Code()})
@@ -159,29 +206,63 @@ func codeSlash(a geo.Airport) string {
 	return a.ICAO
 }
 
-// classifyTraffic sorts live aircraft into the board's sections and fills in
-// the far end of each route from the index, then from the API for a few.
+// boardRows turns a board's recent rows (newest first) and its coming ones
+// (soonest first) into one list, earliest first, as an airport's screens
+// show it: what has landed (or left), then what is on its way. arriving says
+// which end of each flight is here.
+func boardRows(recent, coming []api.BoardRow, arriving bool, now time.Time) []BoardRowV {
+	var out []BoardRowV
+	add := func(b api.BoardRow, past bool) {
+		var l LegV
+		switch {
+		case b.Live != nil && !b.Live.LADDRedacted:
+			l = legFromLive(*b.Live, refs{}, now)
+		case b.Archived != nil && !b.Archived.LADDRedacted:
+			l = legFromHistory(*b.Archived, now)
+		default:
+			return
+		}
+		r := BoardRowV{LegV: l, Past: past, Status: firstNonEmpty(l.PhaseWord, "Unknown"), Class: l.StatusClass}
+		switch {
+		case arriving && past:
+			r.Place, r.At = l.Dep, firstCell(l.ArrIn, l.ArrOn, l.ArrEst)
+		case arriving:
+			r.Place, r.At, r.Note = l.Dep, firstCell(l.ArrEst, l.ArrPlanned), l.ArrDelay
+		default:
+			r.Place = l.Arr
+			if l.DivertedTo != nil {
+				r.Place = *l.DivertedTo
+			}
+			if past {
+				r.At = firstCell(l.DepOff, l.DepOut, l.DepPlanned)
+				if l.Phase == "en_route" {
+					r.Status = "Departed" // on a departures board, not "en route"
+				}
+			} else {
+				r.At, r.Note = l.DepPlanned, l.DepDelay
+			}
+		}
+		out = append(out, r)
+	}
+	for i := len(recent) - 1; i >= 0; i-- {
+		add(recent[i], true)
+	}
+	for _, b := range coming {
+		add(b, false)
+	}
+	return out
+}
+
+// classifyTraffic sorts the aircraft around the field into what is parked at
+// it and what passes over it, counts the airlines flying here now, and looks
+// up where the passing flights come from and go to.
 func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.AirportTraffic) {
 	airlines := map[string]int{}
-	var needRoute []*TrafficRow
 	for _, x := range t.Aircraft {
 		row := TrafficRow{
 			Callsign: x.Callsign, Number: x.Callsign, URL: flightURL(x.Callsign), Op: opCode("", x.Callsign),
 			Reg: x.Registration, RegURL: aircraftURL(x.Registration),
 			Alt: fmtAlt(x.AltFt, x.OnGround), Dist: fmtMiles(x.DistanceMi), distMi: x.DistanceMi,
-			Status: sentence(x.Status),
-		}
-		if row.Number == "" {
-			row.Number = x.Registration
-		}
-		row.direction = x.Direction
-		switch {
-		case x.Status == "landed" || x.Direction == "arriving":
-			row.State = "Landed"
-		case x.Direction == "departing":
-			row.State = "Departing"
-		default:
-			row.State = "On the ground"
 		}
 		if row.Dist == "" {
 			row.Dist = "0 mi"
@@ -195,101 +276,65 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 				row.Number = a.IATA + strings.TrimLeft(num, "0")
 			}
 		}
+		if f, ok := s.index.Flight(x.Callsign); ok && f.IATA != "" {
+			row.Number = f.IATA
+		}
 		// The feed's on_ground flag lags: an aircraft a couple of hundred
 		// feet above the field and next to it has landed or not yet left.
-		nearField := x.DistanceMi < 3 && x.AltFt-float64(v.Airport.ElevFt) < 250
+		nearField := x.DistanceMi < fieldMi && x.AltFt-float64(v.Airport.ElevFt) < 250
 		onGround := x.OnGround || x.Status == "landed" || nearField
-		if onGround && row.Alt != "On ground" {
-			row.Alt = "On ground"
-		}
-		if f, ok := s.index.Flight(x.Callsign); ok {
-			if f.IATA != "" {
-				row.Number = f.IATA
-			}
-			switch x.Direction {
-			case "arriving":
-				if f.Dep != "" && f.Arr == v.Airport.ICAO {
-					row.Other = airportV(f.Dep, nil)
-				}
-			case "departing":
-				if f.Arr != "" && f.Dep == v.Airport.ICAO {
-					row.Other = airportV(f.Arr, nil)
-				}
-			}
-		}
 		switch {
-		case x.Direction == "transit" && !onGround:
+		case onGround && x.DistanceMi <= fieldMi:
+			if row.RegURL == "" && row.URL == "" {
+				continue // nothing to name it by
+			}
+			switch {
+			case live && x.Direction == "departing":
+				row.State, row.StateClass = "Departing", "air"
+			case live && (x.Status == "landed" || x.Direction == "arriving"):
+				row.State, row.StateClass = "Just landed", "landed"
+			default:
+				row.State, row.StateClass = "Parked", "muted"
+				row.URL = "" // its callsign is the last flight's, not a flight under way
+			}
+			v.Parked = append(v.Parked, row)
+		case !onGround && (x.Direction == "transit" || x.Direction == "local"):
 			v.Overhead = append(v.Overhead, row)
-		case x.Status == "completed":
-			v.ParkedN++
-			if row.RegURL != "" {
-				v.Parked = append(v.Parked, row)
-			}
-		case onGround && live:
-			if row.URL != "" || row.RegURL != "" {
-				v.Ground = append(v.Ground, row)
-			}
-		case x.Direction == "arriving" && live:
-			v.Inbound = append(v.Inbound, row)
-		case x.Direction == "departing" && live:
-			v.Outbound = append(v.Outbound, row)
 		}
-	}
-	byDist := func(rs []TrafficRow) {
-		sort.SliceStable(rs, func(i, j int) bool { return rs[i].distMi < rs[j].distMi })
-	}
-	byDist(v.Inbound)
-	byDist(v.Outbound)
-	byDist(v.Overhead)
-	if len(v.Overhead) > 25 {
-		v.Overhead = v.Overhead[:25]
 	}
 	for i := range v.Parked {
 		if a, ok := s.index.AircraftByReg(v.Parked[i].Reg); ok {
-			v.Parked[i].Type = a.Model
-			if v.Parked[i].Type == "" {
-				v.Parked[i].Type = a.Type
-			}
+			v.Parked[i].Type = firstNonEmpty(a.Model, a.Type)
 			if al, ok := s.index.Airline(a.Airline); ok {
 				v.Parked[i].Airline, v.Parked[i].Op = al.Name, a.Airline
 			}
 		}
 	}
-	// parked aircraft with an identity first, then by registration
+	// moving first (leaving, then just in), then parked aircraft the index
+	// can name, then by registration
+	rank := map[string]int{"Departing": 0, "Just landed": 1, "Parked": 2}
 	sort.SliceStable(v.Parked, func(i, j int) bool {
-		if (v.Parked[i].Type != "") != (v.Parked[j].Type != "") {
-			return v.Parked[i].Type != ""
+		a, b := v.Parked[i], v.Parked[j]
+		if rank[a.State] != rank[b.State] {
+			return rank[a.State] < rank[b.State]
 		}
-		return v.Parked[i].Reg < v.Parked[j].Reg
+		if (a.Type != "") != (b.Type != "") {
+			return a.Type != ""
+		}
+		return a.Reg < b.Reg
 	})
-	// ground rows that carry more than a flight number first; parked
-	// aircraft are listed only when the index can say what they are (the
-	// heading keeps the full count)
-	sort.SliceStable(v.Ground, func(i, j int) bool { return groundDetail(v.Ground[i]) > groundDetail(v.Ground[j]) })
-	v.GroundN = len(v.Ground)
-	v.Ground = v.Ground[:min(len(v.Ground), 30)]
-	for _, g := range v.Ground {
-		v.GroundHasReg = v.GroundHasReg || g.RegURL != ""
-		v.GroundHasRoute = v.GroundHasRoute || g.Other.Code != ""
-	}
-	known := v.Parked[:0]
-	for _, p := range v.Parked {
-		if p.Type != "" {
-			known = append(known, p)
+	v.ParkedN = len(v.Parked)
+	v.Parked = v.Parked[:min(len(v.Parked), 20)]
+
+	sort.SliceStable(v.Overhead, func(i, j int) bool { return v.Overhead[i].distMi < v.Overhead[j].distMi })
+	v.Overhead = v.Overhead[:min(len(v.Overhead), 20)]
+	var passing []*TrafficRow
+	for i := range v.Overhead {
+		if v.Overhead[i].Callsign != "" {
+			passing = append(passing, &v.Overhead[i])
 		}
 	}
-	v.Parked = known[:min(len(known), 30)]
-	v.ParkedShown = len(v.Parked)
-	// every airborne row gets a live lookup (cached, shared): its position for
-	// the map, and the far end of its route when the index does not know it
-	for _, rs := range [][]TrafficRow{v.Inbound, v.Outbound, v.Overhead} {
-		for i := range rs {
-			if rs[i].Callsign != "" {
-				needRoute = append(needRoute, &rs[i])
-			}
-		}
-	}
-	s.resolveLive(ctx, v.Airport.ICAO, needRoute, 36)
+	s.resolveLive(ctx, passing)
 
 	for icao, n := range airlines {
 		name := icao
@@ -315,20 +360,16 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 // the caches, so the next render has them.
 const liveLookupBudget = 3500 * time.Millisecond
 
-// resolveLive looks up up to n airborne rows in parallel (cached, shared):
-// each one's position for the map, its IATA number, and the far end of its
-// route when the index does not know it. Results that arrive after the
-// budget are ignored for this render.
-func (s *Server) resolveLive(ctx context.Context, here string, rows []*TrafficRow, n int) {
-	if len(rows) > n {
-		rows = rows[:n]
-	}
+// resolveLive looks up the passing flights in parallel (cached, shared):
+// each one's position for the map, its IATA number and its route. Results
+// that arrive after the budget are left out of this render.
+func (s *Server) resolveLive(ctx context.Context, rows []*TrafficRow) {
 	type found struct {
-		ok     bool
-		number string
-		other  string
-		pos    geo.LL
-		hdg    float64
+		ok       bool
+		number   string
+		dep, arr string
+		pos      geo.LL
+		hdg      float64
 	}
 	results := make([]found, len(rows))
 	var mu sync.Mutex
@@ -336,7 +377,7 @@ func (s *Server) resolveLive(ctx context.Context, here string, rows []*TrafficRo
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 8)
 	for i, row := range rows {
-		callsign, reg, transit := row.Callsign, row.Reg, row.direction == "transit"
+		callsign, reg := row.Callsign, row.Reg
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -351,18 +392,9 @@ func (s *Server) resolveLive(ctx context.Context, here string, rows []*TrafficRo
 					continue
 				}
 				s.index.NoteLive(*x.Live)
-				f := found{ok: true, number: x.Live.IATAFlight, hdg: x.Live.Hdg}
+				f := found{ok: true, number: x.Live.IATAFlight, dep: x.Live.Dep, arr: x.Live.Arr, hdg: x.Live.Hdg}
 				if p := (geo.LL{Lat: x.Live.Lat, Lon: x.Live.Lon}); p.Valid() && !x.Live.OnGround {
 					f.pos = p
-				}
-				if !transit {
-					f.other = x.Live.Dep
-					if f.other == here {
-						f.other = x.Live.Arr
-					}
-					if f.other == here {
-						f.other = ""
-					}
 				}
 				mu.Lock()
 				if !closed {
@@ -394,21 +426,13 @@ func (s *Server) resolveLive(ctx context.Context, here string, rows []*TrafficRo
 		if f.pos.Valid() {
 			row.pos, row.hdg = f.pos, f.hdg
 		}
-		if row.Other.Code == "" && f.other != "" {
-			row.Other = airportV(f.other, nil)
+		if f.dep != "" {
+			row.From = airportV(f.dep, nil)
+		}
+		if f.arr != "" {
+			row.To = airportV(f.arr, nil)
 		}
 	}
-}
-
-func groundDetail(r TrafficRow) int {
-	n := 0
-	if r.RegURL != "" {
-		n++
-	}
-	if r.Other.Code != "" {
-		n++
-	}
-	return n
 }
 
 // airportSummary is the one sentence that opens the about panel. The live

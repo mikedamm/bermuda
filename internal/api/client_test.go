@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -139,5 +140,24 @@ func TestFlightLiveUncached(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // a background write would land by now
 	if store.has("/flights/f-1/live") {
 		t.Fatal("live state was written to the shared store")
+	}
+}
+
+// An airport board mixes live flights (codes) with archived ones (airport
+// references); each row decodes as what it is.
+func TestBoardRows(t *testing.T) {
+	var b AirportBoards
+	err := json.Unmarshal([]byte(`{"code":"KSEA","counts":{"arrivals":2},"boards":{"arrivals":[
+		{"flight_id":"a","callsign":"ASA1","dep":"KPDX","arr":"KSEA","phase":"landed","board_time":"2026-11-17T01:00:00Z"},
+		{"flight_id":"b","callsign":"ASA2","dep":{"icao":"KSFO"},"arr":{"icao":"KSEA"},"phase":"arrived","first_seen":"2026-11-16T20:00:00Z","board_time":"2026-11-17T00:30:00Z"}]}}`), &b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := b.Boards.Arrivals
+	if len(rows) != 2 || rows[0].Live == nil || rows[0].Live.Dep != "KPDX" || rows[1].Archived == nil || rows[1].Archived.Dep.ICAO != "KSFO" {
+		t.Fatalf("rows: %+v", rows)
+	}
+	if b.Counts.Arrivals != 2 || rows[1].BoardTime.IsZero() {
+		t.Errorf("counts %+v, board time %v", b.Counts, rows[1].BoardTime)
 	}
 }

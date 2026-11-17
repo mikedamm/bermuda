@@ -234,6 +234,55 @@ type AircraftPage struct {
 }
 
 // FlightsPage is GET /aircraft/{key}/flights.
+// AirportBoards is the part of GET /airports/{code} this site reads: the
+// four boards' sizes and first ten rows each. arrivals and departures are
+// newest first (flights that landed here, flights that left here, airborne
+// ones included); enroute (in the air bound here) and scheduled (plans from
+// here that have not left) are soonest first.
+type AirportBoards struct {
+	Code   string `json:"code"`
+	Counts struct {
+		Arrivals   int `json:"arrivals"`
+		Departures int `json:"departures"`
+		Enroute    int `json:"enroute"`
+		Scheduled  int `json:"scheduled"`
+	} `json:"counts"`
+	Boards struct {
+		Arrivals   []BoardRow `json:"arrivals"`
+		Departures []BoardRow `json:"departures"`
+		Enroute    []BoardRow `json:"enroute"`
+		Scheduled  []BoardRow `json:"scheduled"`
+	} `json:"boards"`
+}
+
+// BoardRow is one row of an airport board: a live flight (a flight summary,
+// its dep and arr codes) or an archived one (a history entry, its dep and arr
+// airport references), with the time the board sorts it by.
+type BoardRow struct {
+	Live      *FlightSummary
+	Archived  *HistoryEntry
+	BoardTime time.Time
+}
+
+func (r *BoardRow) UnmarshalJSON(b []byte) error {
+	var probe struct {
+		Dep, Arr  json.RawMessage
+		FirstSeen json.RawMessage `json:"first_seen"`
+		BoardTime time.Time       `json:"board_time"`
+	}
+	if err := json.Unmarshal(b, &probe); err != nil {
+		return err
+	}
+	r.BoardTime = probe.BoardTime
+	obj := func(m json.RawMessage) bool { return len(m) > 0 && m[0] == '{' }
+	if obj(probe.Dep) || obj(probe.Arr) || (len(probe.FirstSeen) > 0 && string(probe.FirstSeen) != "null") {
+		r.Archived = new(HistoryEntry)
+		return json.Unmarshal(b, r.Archived)
+	}
+	r.Live = new(FlightSummary)
+	return json.Unmarshal(b, r.Live)
+}
+
 // OperatorFlights is GET /operators/{code}/flights: rows are flight
 // summaries.
 type OperatorFlights struct {

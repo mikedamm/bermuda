@@ -189,10 +189,38 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		}
 	})
 	mux.HandleFunc("GET /airports/{code}/aircraft", func(w http.ResponseWriter, r *http.Request) {
-		write(w, map[string]any{"airport": r.PathValue("code"), "radius_mi": 50, "aircraft": []any{
+		write(w, map[string]any{"airport": r.PathValue("code"), "radius_mi": 25, "aircraft": []any{
 			map[string]any{"callsign": "ASA14", "direction": "arriving", "registration": "N527AS", "alt_ft": 9000, "status": "active", "distance_mi": 30},
-			map[string]any{"callsign": "SLOW1", "direction": "arriving", "alt_ft": 8000, "status": "active", "distance_mi": 20},
+			map[string]any{"callsign": "SLOW1", "direction": "transit", "alt_ft": 8000, "status": "active", "distance_mi": 20},
+			// parked at the field, and on the ground at Boeing Field next door (not this field's)
+			map[string]any{"callsign": "ASA13", "direction": "local", "registration": "N2PARK", "on_ground": true, "alt_ft": 430, "status": "completed", "distance_mi": 0.6},
+			map[string]any{"callsign": "", "direction": "local", "registration": "N9BFI", "on_ground": true, "alt_ft": 20, "status": "completed", "distance_mi": 5.2},
 		}})
+	})
+	// the airport page's boards: landed, inbound, left, scheduled
+	mux.HandleFunc("GET /airports/{code}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("code") != "KSEA" {
+			w.WriteHeader(404)
+			write(w, map[string]any{"error": "no such airport"})
+			return
+		}
+		arrived := map[string]any{}
+		for k, v := range hist {
+			arrived[k] = v
+		}
+		arrived["board_time"] = ts(-25 * time.Hour)
+		inbound := map[string]any{"board_time": ts(40 * time.Minute)}
+		for k, v := range live {
+			inbound[k] = v
+		}
+		write(w, map[string]any{"code": "KSEA",
+			"counts": map[string]any{"arrivals": 1, "departures": 1, "enroute": 1, "scheduled": 1},
+			"boards": map[string]any{
+				"arrivals":   []any{arrived},
+				"enroute":    []any{inbound},
+				"departures": []any{landed},
+				"scheduled":  []any{nextLeg},
+			}})
 	})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer test-token" {
@@ -254,7 +282,7 @@ func TestPages(t *testing.T) {
 		{"/aircraft/a6a300", 301, "/aircraft/N527AS", nil},
 		{"/aircraft/N0NE", 404, "", nil},
 		{"/airport/SEA", 301, "/airport/KSEA", nil},
-		{"/airport/KSEA", 200, "", []string{`"@type":"Airport"`, "Seattle–Tacoma International Airport", ">Arrivals <", `href="/flight/ASA14"`}},
+		{"/airport/KSEA", 200, "", []string{`"@type":"Airport"`, "Seattle–Tacoma International Airport", `<h2 id="arr-h">Arrivals</h2>`, `href="/flight/ASA14"`}},
 		{"/airport/XXXX", 404, "", nil},
 		{"/tracker/", 200, "", []string{`action="/tracker/search"`}},
 		{"/", 301, "/tracker/", nil},
@@ -877,6 +905,71 @@ func TestFlightBandCondenses(t *testing.T) {
 		`>Alaska Airlines Flight 14</h1>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("flight band lacks %s", want)
+		}
+	}
+}
+
+// The airport page: arrivals and departures as an airport's screens show
+// them (earliest first, a line at now), what is parked at the field (not the
+// next one over) and what flies over, and a split-flap clock. No 50-mile
+// box, no 3D button.
+func TestAirportBoards(t *testing.T) {
+	body := get(t, testServer(t), "/airport/KSEA").Body.String()
+	at := func(s string) int { return strings.Index(body, s) }
+	arr, dep, park, over := at(`id="arr-h"`), at(`id="dep-h"`), at(`id="park-h"`), at(`id="over-h"`)
+	if arr < 0 || dep < arr || park < dep || over < park {
+		t.Fatalf("boards out of order: arrivals %d, departures %d, parked %d, flying over %d", arr, dep, park, over)
+	}
+	arrivals := body[arr:dep]
+	rows := arrivals[strings.Index(arrivals, "<tbody>"):]
+	past, next := strings.Index(rows, `<tr class="is-past">`), strings.Index(rows, "<tr>")
+	if past < 0 || next < past {
+		t.Error("arrivals: want the landed flight first, then the inbound one")
+	}
+	if !strings.Contains(arrivals, ">Arrived<") || !strings.Contains(arrivals, ">En Route<") || !strings.Contains(arrivals, `title="SAN DIEGO INTL">SAN</`) && !strings.Contains(arrivals, ">SAN<") {
+		t.Errorf("arrivals board:\n%s", arrivals)
+	}
+	departures := body[dep:park]
+	for _, want := range []string{`href="/flight/ASA13"`, `href="/flight/ASA15"`, ">Scheduled<"} {
+		if !strings.Contains(departures, want) {
+			t.Errorf("departures board lacks %s", want)
+		}
+	}
+	parked := body[park:over]
+	if !strings.Contains(parked, `href="/aircraft/N2PARK"`) || !strings.Contains(parked, ">Parked<") || strings.Contains(parked, "N9BFI") {
+		t.Errorf("parked board: want N2PARK, not Boeing Field's N9BFI:\n%s", parked)
+	}
+	if !strings.Contains(body[over:], ">SLOW1<") {
+		t.Error("flying over lacks the passing flight")
+	}
+	for _, gone := range []string{"Within 50 miles", "in 3D</a>", "Live traffic"} {
+		if strings.Contains(body, gone) {
+			t.Errorf("airport page still has %q", gone)
+		}
+	}
+	for _, want := range []string{`<div class="clock" data-clock="America/Los_Angeles">`, `<p class="vh">Local time `, `class="flap flap-wide" data-v="`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("clock lacks %s", want)
+		}
+	}
+}
+
+// The clock reads HH:MM on its flaps, with a leading zero.
+func TestClockAt(t *testing.T) {
+	seattle := func(h, m int) ClockV {
+		return clockAt(time.Date(2026, 11, 17, h+8, m, 0, 0, time.UTC), "America/Los_Angeles")
+	}
+	for _, c := range []struct {
+		got    ClockV
+		digits [4]string
+		period string
+	}{
+		{seattle(9, 5), [4]string{"0", "9", "0", "5"}, "AM"},
+		{seattle(14, 5), [4]string{"0", "2", "0", "5"}, "PM"},
+		{seattle(12, 30), [4]string{"1", "2", "3", "0"}, "PM"},
+	} {
+		if c.got.Digits != c.digits || c.got.Period != c.period || c.got.Zone != "PST" {
+			t.Errorf("%+v: want %v %s PST", c.got, c.digits, c.period)
 		}
 	}
 }

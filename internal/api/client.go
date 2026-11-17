@@ -98,6 +98,12 @@ func (c *Client) Search(ctx context.Context, q string, limit int) (*Search, erro
 	return get[Search](ctx, c, "/search/aircraft", v)
 }
 
+// AirportBoards is the airport's arrivals, departures, inbound and scheduled
+// boards, ten rows each (the gateway builds the page every 15 seconds).
+func (c *Client) AirportBoards(ctx context.Context, code string) (*AirportBoards, error) {
+	return get[AirportBoards](ctx, c, "/airports/"+url.PathEscape(code), nil)
+}
+
 func (c *Client) AirportTraffic(ctx context.Context, code string, radiusMi int) (*AirportTraffic, error) {
 	v := url.Values{"radius_mi": {strconv.Itoa(radiusMi)}}
 	return get[AirportTraffic](ctx, c, "/airports/"+url.PathEscape(code)+"/aircraft", v)
