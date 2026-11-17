@@ -1,6 +1,7 @@
 {{/* an arrivals or departures board as an airport's screens show it,
      earliest first: what has landed (or left), a line at now, then what
-     is on its way. A flight in the air fills its row as far as it has come.
+     is on its way. A flight fills its row as far as it has come: in the air by its progress,
+     98% landed, all of it at the gate.
      The rows are laid out on a grid (site.css), so the roles keep the
      table's meaning for screen readers that drop it from a restyled table. */}}
 {{define "fids"}}{{if .Rows}}
@@ -15,7 +16,7 @@
 		<td role="cell" class="fids-time">{{if .At.Set}}<time datetime="{{.At.ISO}}">{{.At.Clock}}</time>{{else}}<span class="dim">&ndash;</span>{{end}}</td>
 		<td role="cell" class="fids-flight">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}</td>
 		<td role="cell" class="fids-place">{{template "airport-inline" .Place}}{{with .Place.City}} <span class="dim">{{.}}</span>{{end}}</td>
-		<td role="cell" class="fids-status"><span class="tag tag-{{.Class}}">{{.Status}}</span>{{with .Note}}<small class="fids-note">{{.}}</small>{{end}}{{if .Fill}}<span class="vh">, {{.Fill}}% of the way</span>{{end}}</td>
+		<td role="cell" class="fids-status"><span class="tag tag-{{.Class}}">{{.Status}}</span>{{with .Note}}<small class="fids-note">{{.}}</small>{{end}}{{if .Air}}<span class="vh">, {{.Fill}}% of the way</span>{{end}}</td>
 	</tr>{{end}}</tbody>
 </table>
 {{else}}<p class="panel-empty">{{.Empty}}</p>{{end}}{{end}}

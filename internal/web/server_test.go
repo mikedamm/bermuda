@@ -209,6 +209,7 @@ func fakeAPI(t *testing.T) *httptest.Server {
 			arrived[k] = v
 		}
 		arrived["board_time"] = ts(-25 * time.Hour)
+		arrived["arr_gate"] = "b4"
 		inbound := map[string]any{"board_time": ts(40 * time.Minute)}
 		for k, v := range live {
 			inbound[k] = v
@@ -922,13 +923,13 @@ func TestAirportBoards(t *testing.T) {
 	}
 	arrivals := body[arr:dep]
 	rows := arrivals[strings.Index(arrivals, "<tbody"):]
-	past, next := strings.Index(rows, `<tr role="row" class="is-past">`), strings.Index(rows, `<tr role="row" class="is-air" style="--p:`)
+	past, next := strings.Index(rows, `<tr role="row" class="is-past is-filled" style="--p:100%">`), strings.Index(rows, `<tr role="row" class="is-filled" style="--p:`)
 	if past < 0 || next < past {
 		t.Errorf("arrivals: want the landed flight first, then the inbound one filling its row:\n%s", rows)
 	}
 	// the inbound flight is due ten minutes behind schedule: its status says
 	// so in place of "En Route"
-	if !strings.Contains(arrivals, ">Arrived<") || !strings.Contains(arrivals, `<span class="tag tag-air">ETA 10 min late</span>`) || strings.Contains(arrivals, "En Route") ||
+	if !strings.Contains(arrivals, ">Arrived Gate B4<") || !strings.Contains(arrivals, `<span class="tag tag-air">ETA 10 min late</span>`) || strings.Contains(arrivals, "En Route") ||
 		!strings.Contains(arrivals, `title="SAN DIEGO INTL">SAN</`) && !strings.Contains(arrivals, ">SAN<") {
 		t.Errorf("arrivals board:\n%s", arrivals)
 	}
@@ -1100,8 +1101,9 @@ func TestBoardRowsDedupe(t *testing.T) {
 	}
 }
 
-// A row's fill: the leg's position where it has one, else the clock from
-// take-off to the estimate; none on the ground or before leaving.
+// A row's fill: all of it at the gate, 98% landed; in the air the leg's
+// position where it has one, else the clock from take-off to the estimate,
+// never past 97; none before leaving.
 func TestBoardFill(t *testing.T) {
 	now := time.Date(2026, 11, 17, 10, 0, 0, 0, time.UTC)
 	fs := &api.FlightSummary{Phase: "en_route", Off: now.Add(-time.Hour), ETA: now.Add(3 * time.Hour)}
@@ -1112,14 +1114,28 @@ func TestBoardFill(t *testing.T) {
 		want int
 	}{
 		{"by position", LegV{Phase: "en_route", Progress: 62}, fs, 62},
+		{"nearly there", LegV{Phase: "en_route", Progress: 99}, fs, 97},
 		{"by the clock", LegV{Phase: "en_route"}, fs, 25},
-		{"overdue", LegV{Phase: "en_route"}, &api.FlightSummary{Off: now.Add(-3 * time.Hour), ETA: now.Add(-time.Minute)}, 99},
+		{"overdue", LegV{Phase: "en_route"}, &api.FlightSummary{Off: now.Add(-3 * time.Hour), ETA: now.Add(-time.Minute)}, 97},
 		{"on the ground", LegV{Phase: "en_route", Progress: 99}, &api.FlightSummary{OnGround: true}, 0},
-		{"landed", LegV{Phase: "arrived", Progress: 100}, fs, 0},
+		{"landed", LegV{Phase: "landed", Progress: 100}, fs, 98},
+		{"at the gate", LegV{Phase: "arrived", Progress: 100}, nil, 100},
+		{"scheduled", LegV{Phase: "scheduled"}, fs, 0},
+		{"taxiing out", LegV{Phase: "taxiing"}, fs, 0},
 		{"no times", LegV{Phase: "en_route"}, &api.FlightSummary{}, 0},
 	} {
 		if got := boardFill(c.l, c.fs, now); got != c.want {
 			t.Errorf("%s: %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+// A gate prints as boards print it; anything that does not read like one is
+// left off rather than shown.
+func TestGateName(t *testing.T) {
+	for in, want := range map[string]string{"B4": "B4", " n12 ": "N12", "C-17": "C-17", "37A": "37A", "": "", "TBD gate": "", "<b>": "", "ABCDEFGH": ""} {
+		if got := gateName(in); got != want {
+			t.Errorf("gateName(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

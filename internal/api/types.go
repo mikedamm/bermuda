@@ -69,6 +69,8 @@ type FlightSummary struct {
 	SchedDep     time.Time `json:"sched_dep"`
 	SchedArr     time.Time `json:"sched_arr"`
 	Runway       string    `json:"runway"`
+	DepGate      string    `json:"dep_gate"` // not sent yet: the gate fields are coming to the API
+	ArrGate      string    `json:"arr_gate"`
 	Squawk       string    `json:"squawk"`
 	LADDRedacted bool      `json:"ladd_redacted"`
 }
@@ -98,6 +100,8 @@ type HistoryEntry struct {
 	On            time.Time   `json:"on"`
 	Out           time.Time   `json:"out"`
 	In            time.Time   `json:"in"`
+	DepGate       string      `json:"dep_gate"` // not sent yet, as on FlightSummary
+	ArrGate       string      `json:"arr_gate"`
 	DurationS     int64       `json:"duration_s"`
 	DurationBasis string      `json:"duration_basis"`
 	LADDRedacted  bool        `json:"ladd_redacted"`

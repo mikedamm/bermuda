@@ -112,6 +112,7 @@ type LegV struct {
 	DepDelay, DepDelayClass    string
 	ArrDelay, ArrDelayClass    string
 	Runway                     string
+	DepGate, ArrGate           string // gate numbers, once the API sends them
 
 	Duration   string
 	flightTime time.Duration
@@ -180,6 +181,7 @@ func legFromLive(fs api.FlightSummary, r refs, now time.Time) LegV {
 	if runwayRe.MatchString(fs.Runway) {
 		l.Runway = fs.Runway
 	}
+	l.DepGate, l.ArrGate = gateName(fs.DepGate), gateName(fs.ArrGate)
 	if fs.ActualArr != "" && fs.ActualArr != fs.Arr {
 		d := r.airport(fs.ActualArr)
 		l.DivertedTo = &d
@@ -273,6 +275,7 @@ func legFromHistory(h api.HistoryEntry, now time.Time) LegV {
 		Phase: h.Phase, PhaseWord: h.PhaseWord,
 		Reg: h.Registration, RegURL: aircraftURL(h.Registration), Type: h.Type,
 	}
+	l.DepGate, l.ArrGate = gateName(h.DepGate), gateName(h.ArrGate)
 	if h.ActualArr != nil && (h.Arr == nil || h.ActualArr.ICAO != h.Arr.ICAO) {
 		d := airportV("", h.ActualArr)
 		l.DivertedTo = &d
@@ -326,6 +329,18 @@ func flightTime(off, on, out, in time.Time) time.Duration {
 }
 
 var runwayRe = regexp.MustCompile(`^(0?[1-9]|[12][0-9]|3[0-6])[LRCW]?$`)
+
+// gateRe is what a gate reads like on a screen: B4, N12, 37A, C-17.
+var gateRe = regexp.MustCompile(`^[A-Z0-9][A-Z0-9-]{0,5}$`)
+
+// gateName is a gate as boards print it, or nothing for a value that does
+// not read like one.
+func gateName(g string) string {
+	if g = strings.ToUpper(strings.TrimSpace(g)); gateRe.MatchString(g) {
+		return g
+	}
+	return ""
+}
 
 func firstSet(ts ...time.Time) time.Time {
 	for _, t := range ts {

@@ -47,19 +47,20 @@ type BoardRowV struct {
 	Class  string // the status tag's
 	Note   string // how late or early, when known
 	Past   bool   // it has landed or left; the first row that has not starts the "now" line
-	Fill   int    // how far along its route a flight in the air is, 1-99 (%); 0 draws no fill
+	Fill   int    // how much of its row fills (%): its progress in the air (1-97), 98 landed, 100 at the gate; 0 none
+	Air    bool   // the fill is a flight in the air's progress
 	t      time.Time
 }
 
 // RowClass is the board row's classes: is-past for what has landed or left,
-// is-air for a flight in the air, whose row fills with its progress.
+// is-filled for a row that fills with the flight's progress.
 func (r BoardRowV) RowClass() string {
 	var c []string
 	if r.Past {
 		c = append(c, "is-past")
 	}
 	if r.Fill > 0 {
-		c = append(c, "is-air")
+		c = append(c, "is-filled")
 	}
 	return strings.Join(c, " ")
 }
@@ -116,12 +117,18 @@ func lateWords(lead string, at, sched time.Time) string {
 	return ""
 }
 
-// boardFill is how far along its route a flight in the air is, for its
-// row's fill: by its position where the leg has one, else by the clock,
-// take-off to the estimate. Never 0 or 100, which would read as not yet
-// left or already down.
+// boardFill is how much of a flight's row fills: all of it once it is at
+// the gate (arrived), 98% once it is down and taxiing in (landed), and in
+// the air how far along its route it is, by its position where the leg has
+// one, else by the clock, take-off to the estimate. In the air it stays
+// between 1 and 97, so it never reads as not yet left or already down.
 func boardFill(l LegV, fs *api.FlightSummary, now time.Time) int {
-	if l.Phase != "en_route" || (fs != nil && fs.OnGround) {
+	switch {
+	case l.Phase == "arrived":
+		return 100
+	case l.Phase == "landed":
+		return 98
+	case l.Phase != "en_route" || (fs != nil && fs.OnGround):
 		return 0
 	}
 	p := float64(l.Progress)
@@ -132,7 +139,7 @@ func boardFill(l LegV, fs *api.FlightSummary, now time.Time) int {
 		}
 		p = float64(now.Sub(off)) / float64(est.Sub(off)) * 100
 	}
-	return int(math.Max(1, math.Min(99, math.Round(p))))
+	return int(math.Max(1, math.Min(97, math.Round(p))))
 }
 
 // ClockV is the band's split-flap clock: the airport's local time as four
@@ -325,9 +332,13 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 		}
 		r := BoardRowV{LegV: l, Past: past, Status: firstNonEmpty(l.PhaseWord, "Unknown"), Class: l.StatusClass, t: b.BoardTime}
 		r.Fill = boardFill(l, b.Live, now)
+		r.Air = l.Phase == "en_route" && r.Fill > 0
 		switch {
 		case arriving && past:
 			r.Place, r.At = l.Dep, firstCell(l.ArrIn, l.ArrOn, l.ArrEst)
+			if l.Phase == "arrived" && l.ArrGate != "" {
+				r.Status = "Arrived Gate " + l.ArrGate // once the API sends gates
+			}
 		case arriving:
 			r.Place, r.At = l.Dep, firstCell(l.ArrEst, l.ArrPlanned)
 			// inbound: "En Route" says less than when it gets here, so an
