@@ -85,7 +85,7 @@ func (s *Server) render(name string, p Page, body any) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (s *Server) html(name string, p Page, body any, maxAge time.Duration) (resp, error) {
+func (s *Server) html(name string, p Page, body any) (resp, error) {
 	b, err := s.render(name, p, body)
 	if err != nil {
 		return resp{}, err
@@ -93,7 +93,7 @@ func (s *Server) html(name string, p Page, body any, maxAge time.Duration) (resp
 	if p.Status == 0 {
 		p.Status = http.StatusOK
 	}
-	return resp{status: p.Status, body: b, maxAge: maxAge}, nil
+	return resp{status: p.Status, body: b}, nil
 }
 
 type notFoundView struct {
@@ -109,7 +109,7 @@ func (s *Server) notFound(msg, query string) resp {
 	if err != nil {
 		b = []byte(msg)
 	}
-	return resp{status: http.StatusNotFound, body: b, maxAge: 5 * time.Minute}
+	return resp{status: http.StatusNotFound, body: b}
 }
 
 func (s *Server) funcs() template.FuncMap {

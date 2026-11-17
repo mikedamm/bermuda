@@ -120,7 +120,7 @@ func (s *Server) airlinePage(ctx context.Context, r *http.Request) (resp, error)
 		ld["iataCode"] = al.IATA
 	}
 	p.JSONLD = append(p.JSONLD, ld)
-	return s.html("airline", p, v, 5*time.Minute)
+	return s.html("airline", p, v)
 }
 
 // airlineMap draws the week's routes, busiest strongest.
@@ -234,7 +234,7 @@ func (s *Server) homePage(ctx context.Context, r *http.Request) (resp, error) {
 			"potentialAction": map[string]any{"@type": "SearchAction", "target": s.cfg.SiteURL + Prefix + "/search?q={query}", "query-input": "required name=query"}},
 		map[string]any{"@context": "https://schema.org", "@type": "Organization", "name": "WingView", "url": s.cfg.SiteURL + "/",
 			"logo": "https://i.wvcdn.com/brand/wingview-icon.svg"})
-	return s.html("home", p, v, time.Minute)
+	return s.html("home", p, v)
 }
 
 // livePlanes looks up where each listed flight is now (cached lookups),
@@ -302,7 +302,7 @@ func (s *Server) searchPage(ctx context.Context, r *http.Request) (resp, error) 
 	p.NoIndex = true
 	p.Query = q
 	if q == "" {
-		return s.html("search", p, SearchV{}, time.Minute)
+		return s.html("search", p, SearchV{})
 	}
 	// results below depend on the query string: never let a shared cache keep them
 	// airport codes first: three letters (IATA) or four (ICAO) that we know
@@ -339,11 +339,9 @@ func (s *Server) searchPage(ctx context.Context, r *http.Request) (resp, error) 
 		if al, ok := s.index.Airline(q); ok && al.Name != "" {
 			return redirect302("/airline/" + al.ICAO), nil
 		}
-		nf := s.notFound("Nothing matched "+q+". Try a flight number like UA1275, a registration like N527AS, or an airport code like SEA.", q)
-		nf.maxAge = 0
-		return nf, nil
+		return s.notFound("Nothing matched "+q+". Try a flight number like UA1275, a registration like N527AS, or an airport code like SEA.", q), nil
 	}
-	return s.html("search", p, SearchV{Query: q, Results: rows}, 0)
+	return s.html("search", p, SearchV{Query: q, Results: rows})
 }
 
 // redirect302 answers a search. It is never stored by a shared cache: a CDN

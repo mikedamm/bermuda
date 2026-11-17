@@ -11,7 +11,7 @@
 		</div>
 	</div>
 	<section class="wrap stage-wrap" aria-label="Where {{$v.Number}} is now">
-		<div class="dock" data-rendered="{{$v.Updated.ISO}}">
+		<div class="dock">
 			<div data-part="status">{{template "flight-status" $v}}</div>
 			{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Featured.Reg}}"></iframe>{{end}}
 			<div data-part="dock">{{template "flight-dock" $v}}</div>

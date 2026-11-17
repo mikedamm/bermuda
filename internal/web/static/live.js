@@ -14,9 +14,7 @@
 	for (const el of document.querySelectorAll("[data-part]")) parts[el.dataset.part] = el;
 	const map = document.querySelector("[data-map]");
 	let timer = 0, wait = EVERY, busy = false, stopped = false;
-	// a cached page can already be older than one interval: then refresh at once
-	const rendered = Date.parse(document.querySelector("[data-rendered]")?.dataset.rendered);
-	let last = Number.isNaN(rendered) ? Date.now() : Math.min(rendered, Date.now());
+	let last = Date.now();
 
 	const schedule = (ms) => {
 		clearTimeout(timer);

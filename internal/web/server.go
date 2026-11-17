@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/mikedamm/bermuda/internal/api"
-	"github.com/mikedamm/bermuda/internal/cache"
 	"github.com/mikedamm/bermuda/internal/store"
 )
 
@@ -75,7 +74,6 @@ type Server struct {
 	cfg           Config
 	log           *slog.Logger
 	tpl           map[string]*template.Template
-	pages         *cache.Cache
 	assets        map[string]asset // path under /static/ → content
 	host          string           // canonical host
 	tilesOrigin   string           // scheme://host of MapTiles, for the CSP
@@ -102,7 +100,7 @@ func New(a *api.Client, idx *store.Index, cfg Config, log *slog.Logger) (*Server
 		cfg.LiveKey = make([]byte, 32)
 		rand.Read(cfg.LiveKey)
 	}
-	s := &Server{api: a, index: idx, cfg: cfg, log: log, pages: cache.New(5000), host: u.Host,
+	s := &Server{api: a, index: idx, cfg: cfg, log: log, host: u.Host,
 		logoBase: strings.TrimRight(cfg.LogoBase, "/"), imgSrc: "'self' https://i.wvcdn.com"}
 	if cfg.LogoBase != "" {
 		l, err := url.Parse(cfg.LogoBase)
@@ -285,7 +283,6 @@ func (s *Server) Handler() http.Handler {
 
 func redirectTo(to func(*http.Request) string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=86400")
 		http.Redirect(w, r, to(r), http.StatusMovedPermanently)
 	}
 }
@@ -295,36 +292,28 @@ type resp struct {
 	status   int
 	body     []byte
 	ctype    string
-	maxAge   time.Duration // CDN and browser freshness; 0 means no-store
-	cache    string        // Cache-Control as given, instead of the one maxAge builds
 	redirect string
 }
 
 func redirect(to string) resp {
-	return resp{status: http.StatusMovedPermanently, redirect: to, maxAge: time.Hour}
+	return resp{status: http.StatusMovedPermanently, redirect: to}
 }
 
 type handlerFunc func(ctx context.Context, r *http.Request) (resp, error)
 
-// page caches rendered responses in-process for their max-age, so the CDN's
-// many edge locations missing at once cost one render, not one each.
+// page renders on every request; nothing rendered is kept. The API client
+// caches the answers pages are built from (and runs one upstream call for
+// any number of concurrent misses), so a render costs template time and a
+// visitor never sees data older than its endpoint's TTL.
 func (s *Server) page(h handlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		key := r.URL.Path + "?" + r.URL.RawQuery // bodies never depend on Host; headers do, and are set per request
-		out, err := cache.Do(s.pages, key, func() (resp, time.Duration, error) {
-			ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 25*time.Second)
-			defer cancel()
-			o, err := h(ctx, r)
-			if err != nil {
-				return o, 0, err
-			}
-			ttl := o.maxAge
-			if o.status >= 500 {
-				ttl = 0
-			}
-			return o, ttl, nil
-		})
+		ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+		defer cancel()
+		out, err := h(ctx, r)
 		if err != nil {
+			if r.Context().Err() != nil {
+				return // the visitor left; there is no one to answer
+			}
 			out = s.failure(err)
 		}
 		s.write(w, r, out)
@@ -348,16 +337,6 @@ func (s *Server) failure(err error) resp {
 
 func (s *Server) write(w http.ResponseWriter, r *http.Request, o resp) {
 	h := w.Header()
-	if o.cache != "" {
-		h.Set("Cache-Control", o.cache)
-	} else if o.maxAge > 0 {
-		sec := int(o.maxAge.Seconds())
-		// stale-while-revalidate keeps the CDN serving instantly while it refreshes;
-		// stale-if-error rides out an API outage on the last good page.
-		h.Set("Cache-Control", fmt.Sprintf("public, max-age=%d, stale-while-revalidate=%d, stale-if-error=86400", sec, sec*5))
-	} else {
-		h.Set("Cache-Control", "no-store")
-	}
 	if o.status == http.StatusServiceUnavailable {
 		h.Set("Retry-After", "60")
 	}
@@ -396,7 +375,7 @@ func (s *Server) canonicalHost(r *http.Request) bool {
 }
 
 func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
-	name, cacheFor := r.PathValue("path"), "public, max-age=300"
+	name, cacheFor := r.PathValue("path"), "no-store"
 	if strings.HasPrefix(name, "vendor/") { // versioned by folder name
 		cacheFor = "public, max-age=31536000, immutable"
 	}
@@ -405,7 +384,7 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 			name = rest
 			if a.hash == hash { // exact version: cache forever
 				cacheFor = "public, max-age=31536000, immutable"
-			} // an old hash after a deploy gets today's file, briefly cached
+			} // an old hash after a deploy gets today's file, not kept
 		}
 	}
 	a, ok := s.assets[name]
@@ -432,6 +411,10 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		// Nothing this server sends may be kept by a browser or a CDN: every
+		// request for a page is a fresh render. The one exception is a static
+		// file at its exact content hash (serveStatic), which cannot go stale.
+		h.Set("Cache-Control", "no-store")
 		// MapLibre runs from our own origin (module scripts, a blob: module
 		// worker), reads tiles from the PMTiles host by range requests and
 		// fetches elevation tiles from the terrain host.

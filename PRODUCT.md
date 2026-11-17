@@ -24,7 +24,7 @@ The pages sit on WingView's own live tracking data and lead into a 3D globe and 
 
 - Entry is almost always a search engine result page; the first screen must answer the query that brought the visitor.
 - Served from www.wingview.com under `/flight/`, `/aircraft/`, `/airport/`, `/airline/` and `/tracker/`, routed by the main site to a Go container; the rest of www.wingview.com is a separate site.
-- Pages are server-rendered HTML cached at the CDN for 60 s (live) to 5 min (archive); they must be complete without JavaScript, for crawlers and fast first paint.
+- Pages are server-rendered HTML, rendered fresh on every request (never cached; only the API answers behind them are); they must be complete without JavaScript, for crawlers and fast first paint.
 - Times are shown in each airport's local time.
 
 ## Capabilities and Constraints

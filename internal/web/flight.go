@@ -222,11 +222,7 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 	p.Crumbs = append(p.Crumbs, Crumb{v.Number, ""})
 	p.JSONLD = append(p.JSONLD, flightLD(v, s.cfg.SiteURL))
 
-	maxAge := 60 * time.Second
-	if live == nil {
-		maxAge = 5 * time.Minute
-	}
-	return s.html("flight", p, v, maxAge)
+	return s.html("flight", p, v)
 }
 
 // callsignHistory pages through each airframe that flew the callsign and

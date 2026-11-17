@@ -221,10 +221,11 @@ func TestPages(t *testing.T) {
 				t.Errorf("%s: body lacks %q", c.path, want)
 			}
 		}
+		// nothing rendered is kept by a browser or a CDN: one request, one render
+		if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+			t.Errorf("%s: Cache-Control %q, want no-store", c.path, cc)
+		}
 		if c.status == 200 && strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") {
-			if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "max-age=") || !strings.Contains(cc, "stale-while-revalidate") {
-				t.Errorf("%s: Cache-Control %q", c.path, cc)
-			}
 			if xr := rec.Header().Get("X-Robots-Tag"); xr != "" {
 				t.Errorf("%s: unexpected X-Robots-Tag %q (would noindex the proxied site)", c.path, xr)
 			}
@@ -391,7 +392,7 @@ func TestLiveRefresh(t *testing.T) {
 	if !strings.Contains(page.Body.String(), "/live.js") {
 		t.Error("live flight page does not load live.js")
 	}
-	for _, part := range []string{`data-rendered="`, `data-part="status"`, `data-part="dock"`, `data-part="times"`, `data-part="track"`} {
+	for _, part := range []string{`data-part="status"`, `data-part="dock"`, `data-part="times"`, `data-part="track"`} {
 		if !strings.Contains(page.Body.String(), part) {
 			t.Errorf("page lacks %s", part)
 		}
@@ -401,7 +402,7 @@ func TestLiveRefresh(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("refresh: status %d %s", rec.Code, rec.Body)
 	}
-	for k, want := range map[string]string{"Content-Type": "application/json", "Cache-Control": "public, max-age=10", "X-Robots-Tag": "noindex", "Cross-Origin-Resource-Policy": "same-origin"} {
+	for k, want := range map[string]string{"Content-Type": "application/json", "Cache-Control": "no-store", "X-Robots-Tag": "noindex", "Cross-Origin-Resource-Policy": "same-origin"} {
 		if got := rec.Header().Get(k); got != want {
 			t.Errorf("%s = %q, want %q", k, got, want)
 		}

@@ -34,7 +34,8 @@ The GHCR package is private. Bunny pulls it through the registry entry
 exists. Everything except the image tag is defined there: env vars, probes on
 `/healthz`, a 1 GB volume at `/data` for the discovery index, the CDN endpoint
 on port 8080, and 1 instance. One instance keeps one index, so sitemaps stay
-consistent; the CDN serves stale pages through restarts.
+consistent. The CDN endpoint is for development; pages pass through it
+uncached (they are `no-store`).
 
 ```sh
 BUNNYNET_API_KEY=… WV_API_TOKEN=… WV_API_BASE=https://…/internal/v1 \
@@ -80,19 +81,17 @@ without it. Then:
 - leave `/robots.txt` on the main site; the container's own robots.txt
   disallows everything, so its hostname never gets indexed
 
-Responses carry `Cache-Control: public, max-age=60…300,
-stale-while-revalidate=…, stale-if-error=86400`; search answers are
-`no-store`; static assets are versioned by path (`/tracker/static/<hash>/…`)
-and immutable. For the www pull zone, match what `provision.sh` sets on the
-app's own zone:
+Every response is `Cache-Control: no-store` (pages, redirects, sitemaps,
+live-refresh answers): one request is one fresh render from the container,
+built from cached API answers. The only exception is static assets at their
+exact content hash (`/tracker/static/<hash>/…`), which are immutable. For the
+www pull zone:
 
 | setting | value | why |
 |---|---|---|
-| Cache expiration time | respect origin Cache-Control | pages set their own freshness (60 s live, 5 min archive) |
+| Cache expiration time | respect origin Cache-Control | keeps pages out of the cache; static assets still cache |
 | Browser cache expiration | match server | |
-| Ignore query strings | off | `/tracker/search?q=` must not share one cache entry |
-| Smart cache | off | it skips HTML, which is most of what this site serves |
-| Stale cache: while updating, while origin offline | on | instant pages during refresh, last good page during an API outage |
+| Ignore query strings | off | `/tracker/search?q=` must reach the container with its query |
 
 ## Operating it
 

@@ -18,7 +18,6 @@ const sitemapChunk = 40000
 
 func (s *Server) robots(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
 	if !s.canonicalHost(r) {
 		fmt.Fprint(w, "User-agent: *\nDisallow: /\n")
 		return
@@ -48,7 +47,7 @@ func xmlResp(v any) (resp, error) {
 	if err != nil {
 		return resp{}, err
 	}
-	return resp{status: http.StatusOK, body: append([]byte(xml.Header), b...), ctype: "application/xml; charset=utf-8", maxAge: time.Hour}, nil
+	return resp{status: http.StatusOK, body: append([]byte(xml.Header), b...), ctype: "application/xml; charset=utf-8"}, nil
 }
 
 func day(t time.Time) string {

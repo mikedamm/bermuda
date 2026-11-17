@@ -80,6 +80,7 @@ const (
 	ttlMissing  = 5 * time.Minute
 	ttlPlan     = 2 * time.Minute  // a live flight's route, amendments included
 	ttlTrail    = 10 * time.Second // a live flight's trail, memory only
+	ttlLive     = 5 * time.Second  // a flight's live state, memory only: every poller in this window shares one lookup
 	ttlArchive  = 6 * time.Hour    // a closed flight's plan or track never changes
 )
 
@@ -104,19 +105,27 @@ func (c *Client) AirportTraffic(ctx context.Context, code string, radiusMi int) 
 }
 
 // FlightLive is one flight's real-time state, read from the gateway's
-// memory in milliseconds. It is not cached here (the caller shares what it
-// renders from it) and never written to the shared store: it is stale in
-// seconds. A closed flight is ErrNotFound.
+// memory in milliseconds. It is kept in memory for a few seconds, so every
+// page polling one flight shares a lookup, and never written to the shared
+// store: it is stale in seconds. A closed flight is ErrNotFound.
 func (c *Client) FlightLive(ctx context.Context, flightID string) (*LiveAnswer, error) {
-	body, err := c.fetch(ctx, "/flights/"+url.PathEscape(flightID)+"/live")
-	if err != nil {
-		return nil, err
-	}
-	var out LiveAnswer
-	if err := json.Unmarshal(body, &out); err != nil {
-		return nil, fmt.Errorf("%w: decode: %v", ErrUpstream, err)
-	}
-	return &out, nil
+	path := "/flights/" + url.PathEscape(flightID) + "/live"
+	return cache.Do(c.cache, path, func() (*LiveAnswer, time.Duration, error) {
+		lctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Second)
+		defer cancel()
+		body, err := c.fetch(lctx, path)
+		switch {
+		case errors.Is(err, ErrNotFound), errors.Is(err, ErrBadRequest):
+			return nil, ttlLive, err
+		case err != nil:
+			return nil, 0, err
+		}
+		var out LiveAnswer
+		if err := json.Unmarshal(body, &out); err != nil {
+			return nil, 0, fmt.Errorf("%w: decode: %v", ErrUpstream, err)
+		}
+		return &out, ttlLive, nil
+	})
 }
 
 // FlightPlan is the route in force for one flight, resolved to positions.

@@ -16,13 +16,14 @@ live under the main site:
 
 One Go binary, standard library only.
 
-- **Pages render on request and cache.** Every page is complete HTML (no
-  client-side rendering), sent with `Cache-Control: max-age` plus
-  `stale-while-revalidate`, so the CDN serves it instantly and refreshes it in
-  the background. A small in-process cache collapses concurrent misses into
-  one render. Live pages keep 60 s, archives 5 min. Pre-generating files at
-  build time does not fit: positions change every minute, and the API has no
-  "list everything" endpoint to generate from.
+- **Every request is a fresh render; only API answers are cached.** Every
+  page is complete HTML (no client-side rendering), rendered on each request
+  from the API client's cached answers and sent `Cache-Control: no-store`, as
+  are redirects, sitemaps and live-refresh answers. Nothing rendered is kept
+  in the process, a browser or a CDN; the only cacheable responses are static
+  files at their exact content hash. Pre-generating files at build time does
+  not fit: positions change every minute, and the API has no "list
+  everything" endpoint to generate from.
 - **Discovery.** A background crawler sweeps the ~1,200 large airports
   (`/airports/{code}/aircraft`), backing off from airports that come back
   empty, and resolves routes for flights it saw with one end known. What it

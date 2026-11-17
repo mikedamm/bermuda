@@ -305,11 +305,7 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 		p.Crumbs = append(p.Crumbs, Crumb{v.Operator, v.OperatorURL})
 	}
 	p.Crumbs = append(p.Crumbs, Crumb{v.Registration, ""})
-	maxAge := 2 * time.Minute
-	if v.Live == nil {
-		maxAge = 5 * time.Minute
-	}
-	return s.html("aircraft", p, v, maxAge)
+	return s.html("aircraft", p, v)
 }
 
 // visibleFlights drops everything LADD withholds: all of it for a listed

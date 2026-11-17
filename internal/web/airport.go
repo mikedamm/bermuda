@@ -149,7 +149,7 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 	p.AppURL = s.appLink("airport", a.Code())
 	p.Crumbs = []Crumb{{"Home", "/"}, {a.Name, ""}}
 	p.JSONLD = append(p.JSONLD, airportLD(a, s.cfg.SiteURL))
-	return s.html("airport", p, v, time.Minute)
+	return s.html("airport", p, v)
 }
 
 func codeSlash(a geo.Airport) string {

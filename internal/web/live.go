@@ -12,8 +12,9 @@ package web
 //     its cache key still cannot hand a signed answer to an unsigned URL.
 //   - an answer is the page's own HTML for the parts that change, plus the
 //     map's moving pieces: nothing the page does not already show.
-//   - one render per flight answers every poller for a few seconds and the
-//     CDN shares it for a few more, so more viewers cost the API nothing.
+//   - answers are rendered per poll and never stored by the CDN; the API
+//     client shares one live lookup per flight among every poller for a few
+//     seconds, so more viewers cost the API nothing.
 //   - no CORS, a same-origin resource policy, noindex, and robots.txt.
 
 import (
@@ -24,7 +25,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -32,15 +32,12 @@ import (
 	"time"
 
 	"github.com/mikedamm/bermuda/internal/api"
-	"github.com/mikedamm/bermuda/internal/cache"
 )
 
 const (
 	// liveTokenLife is how long a signed URL works. Every answer carries a
 	// renewed one, so a page left open on a long flight never runs out.
 	liveTokenLife = 6 * time.Hour
-	liveShare     = 5 * time.Second // one render answers every poller this long
-	liveCDN       = 10              // seconds the CDN may reuse an answer
 	jsonType      = "application/json"
 )
 
@@ -50,9 +47,8 @@ var flightIDRe = regexp.MustCompile(`^[A-Za-z0-9-]{4,64}$`)
 // is a template named flight-<part> in flight.html.
 var liveParts = []string{"status", "dock", "times", "track"}
 
-// liveURL signs a refresh URL for one flight. Expiry is rounded to the hour
-// so every page rendered in the same hour polls the same URL and shares the
-// CDN's copy.
+// liveURL signs a refresh URL for one flight. Expiry is rounded to the hour,
+// so every page rendered in the same hour carries the same URL.
 func (s *Server) liveURL(flightID string, now time.Time) string {
 	exp := strconv.FormatInt(now.Truncate(time.Hour).Add(liveTokenLife).Unix(), 36)
 	return Prefix + "/live/" + flightID + "/" + exp + "." + s.liveSig(flightID, exp)
@@ -92,24 +88,22 @@ func (s *Server) liveFlight(w http.ResponseWriter, r *http.Request) {
 		s.write(w, r, resp{status: http.StatusForbidden, body: []byte(`{"error":"expired"}`), ctype: jsonType})
 		return
 	}
-	out, err := cache.Do(s.pages, "live "+id, func() (resp, time.Duration, error) {
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 8*time.Second)
-		defer cancel()
-		a, err := s.liveFlightAnswer(ctx, id, now)
-		if err != nil {
-			return resp{}, 0, err
-		}
-		b, err := json.Marshal(a)
-		if err != nil {
-			return resp{}, 0, err
-		}
-		return resp{status: http.StatusOK, body: b, ctype: jsonType, cache: fmt.Sprintf("public, max-age=%d", liveCDN)}, liveShare, nil
-	})
-	if err != nil {
-		s.log.Warn("live refresh failed", "flight", id, "err", err)
-		out = resp{status: http.StatusServiceUnavailable, body: []byte(`{"error":"unavailable"}`), ctype: jsonType}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	a, err := s.liveFlightAnswer(ctx, id, now)
+	var b []byte
+	if err == nil {
+		b, err = json.Marshal(a)
 	}
-	s.write(w, r, out)
+	if err != nil {
+		if r.Context().Err() != nil {
+			return // the page went away mid-poll
+		}
+		s.log.Warn("live refresh failed", "flight", id, "err", err)
+		s.write(w, r, resp{status: http.StatusServiceUnavailable, body: []byte(`{"error":"unavailable"}`), ctype: jsonType})
+		return
+	}
+	s.write(w, r, resp{status: http.StatusOK, body: b, ctype: jsonType}) // no max-age: no-store
 }
 
 // liveFlightAnswer renders the changing parts of the flight page from the

@@ -111,3 +111,40 @@ func TestSharedStore(t *testing.T) {
 		t.Fatalf("store failure must fall back to the API: %v", err)
 	}
 }
+
+// Every page polling one flight shares a live lookup for a few seconds;
+// live state never reaches the shared store.
+func TestFlightLiveShared(t *testing.T) {
+	var calls atomic.Int32
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		io.WriteString(w, `{"key":"f-1","kind":"flight","live":true}`)
+	}))
+	defer up.Close()
+	store := &memStore{rows: map[string]struct {
+		status  int
+		body    []byte
+		expires time.Time
+	}{}}
+	c := New(up.URL, "t", 2, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	c.UseStore(store)
+
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if a, err := c.FlightLive(context.Background(), "f-1"); err != nil || !a.Live {
+				t.Errorf("live: %+v %v", a, err)
+			}
+		}()
+	}
+	wg.Wait()
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("20 pollers made %d upstream calls, want 1", n)
+	}
+	time.Sleep(50 * time.Millisecond) // a background write would land by now
+	if store.has("/flights/f-1/live") {
+		t.Fatal("live state was written to the shared store")
+	}
+}
