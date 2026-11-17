@@ -157,6 +157,43 @@ time, .num { font-variant-numeric: tabular-nums; }
 .op { display: inline-block; width: 20px; height: 20px; margin-right: 8px; vertical-align: -5px; object-fit: contain; }
 /* "Updated 12 seconds ago": quiet, and steady as the seconds count */
 .band-meta { font-size: 13px; color: #b9cce4; font-variant-numeric: tabular-nums; }
+
+/* The aircraft page's band sticks to the top and condenses into a 56px bar
+   as the page scrolls; the dock folds into it as its summary. site.js sets
+   --cp (0 to 1: condensing over the first 100px past the top), --sp (the
+   summary fading in as the dock slides under) and the measured --cut,
+   --lift-id, --lift-tail and --sum-inset. The band keeps its height in the
+   flow, so nothing below moves: it clips its foot and scales its names. */
+.band-sticky {
+	--shrink: 0.36; /* the names lose this much; site.js reads it to place the summary */
+	position: sticky; top: 0; z-index: 5;
+	clip-path: inset(0 0 calc(var(--cut, 0px) * var(--cp, 0)) 0);
+}
+/* over the map: 80% navy, near solid once condensed over the panels (the navy, as rgb for the calc'd alpha) */
+.band-sticky.band-over { background: rgb(0 47 100 / calc(0.8 + 0.18 * var(--cp, 0))); }
+.band-sticky .band-in { position: relative; }
+.band-sticky .band-id, .band-sticky .band-tail { will-change: transform; }
+.band-sticky .band-id {
+	transform-origin: left center;
+	transform: translateY(calc(var(--lift-id, 0px) * -1 * var(--cp, 0))) scale(calc(1 - var(--shrink) * var(--cp, 0)));
+}
+.band-sticky .band-tail {
+	transform-origin: right center;
+	transform: translateY(calc(var(--lift-tail, 0px) * -1 * var(--cp, 0))) scale(calc(1 - var(--shrink) * var(--cp, 0)));
+}
+/* the airframe would shrink past reading size: it fades, and the tail
+   number alone is centred in the bar (--lift-tail is measured on it) */
+.band-sticky .band-type { opacity: calc(1 - var(--cp, 0)); }
+.band-sum {
+	position: absolute; top: 0; left: var(--sum-inset, 0px); right: var(--sum-inset, 0px); height: 56px;
+	display: flex; align-items: center; justify-content: center; gap: 14px;
+	opacity: var(--sp, 0); transform: translateY(calc(6px * (1 - var(--sp, 0)))); pointer-events: none;
+	font-size: 14px; white-space: nowrap;
+}
+.band-chip { flex: none; padding: 3px 9px; border-radius: 4px; font-size: 13px; font-weight: 700; color: #fff; }
+.band-sum-route { flex: none; display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: 0.01em; color: #fff; }
+.band-sum-track { width: 112px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--sky) var(--p, 0%), rgb(255 255 255 / 0.28) var(--p, 0%)); }
+.band-sum-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: #b9cce4; }
 .band-meta time:not([data-ago]) { color: #dbe7f5; }
 /* on a page with a map the band is the top of the stage, and the map runs
    on under it through 80% navy */
@@ -204,6 +241,8 @@ time, .num { font-variant-numeric: tabular-nums; }
 @media (min-width: 900px) {
 	:root { --tuck: 120px; } /* how far the panels rise into the map; the stage and the sheet both read it */
 	.stage:not(.stage-bare) { min-height: calc(var(--stage) + var(--tuck)); }
+	/* the aircraft band sits above its stage, not in it: take its ~90px back */
+	.band-sticky + .stage:not(.stage-bare) { min-height: calc(var(--stage) + var(--tuck) - 90px); }
 	.stage:not(.stage-bare) .stage-wrap { padding-bottom: calc(44px + var(--tuck)); }
 	.stage:not(.stage-bare) + .sheet {
 		margin-top: calc(-1 * var(--tuck));
@@ -506,6 +545,11 @@ a.mk-plane-sm:hover { color: var(--link); }
 	}
 	.band-tail:first-child { padding-top: 0; border-top: 0; }
 	.band-tail .band-type { margin-top: 0; }
+	/* condensed, the tail's own row fades and is clipped away: the bar keeps
+	   the flight and, at its right, the status */
+	.band-sticky .band-tail { transform: none; opacity: calc(1 - var(--cp, 0)); }
+	.band-sum { left: auto; right: var(--gutter); justify-content: flex-end; }
+	.band-sum-route, .band-sum-detail { display: none; }
 	.route-code { font-size: 28px; }
 	.cols { padding-inline: 0; gap: 16px; }
 	.panel { border-radius: 0; border-inline: 0; }

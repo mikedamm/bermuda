@@ -829,3 +829,21 @@ func parkedAtFar() struct {
 		last api.LastPosition
 	}{LegV{Arr: airportV("KSEA", nil), Progress: 100}, api.LastPosition{Lat: 46.0, Lon: -122.3}}
 }
+
+// The aircraft band sits above the stage (so it can stick to the top of the
+// whole page) and carries the dock's one-line summary it condenses into.
+func TestAircraftBandCondenses(t *testing.T) {
+	body := get(t, testServer(t), "/aircraft/N527AS").Body.String()
+	band, stage := strings.Index(body, `data-condense>`), strings.Index(body, `<div class="stage`)
+	if band < 0 || stage < 0 || band > stage {
+		t.Fatalf("band at %d, stage at %d: the band must come first, outside the stage", band, stage)
+	}
+	for _, want := range []string{`<div class="band-sum" aria-hidden="true">`, `<span class="band-chip s-`, `<b>SAN</b><span class="band-sum-track" style="--p:`, `</span><b>SEA</b>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("band lacks %s", want)
+		}
+	}
+	if strings.Contains(get(t, testServer(t), "/aircraft/N1LADD").Body.String(), "band-sum") {
+		t.Error("a LADD aircraft's band summarises a flight")
+	}
+}

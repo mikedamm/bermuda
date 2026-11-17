@@ -1,16 +1,25 @@
 {{define "content"}}{{$v := .Body}}
+{{/* The band sits above the stage, not in it, so it can stick to the top
+     of the whole page. As the page scrolls it condenses into a bar, and the
+     dock folds into it: band-sum, its one-line summary, fades in as the
+     dock slides under (site.js drives both). */}}
+<div class="band band-sticky{{if $v.Map}} band-over{{end}}" data-condense>
+	<div class="wrap band-in">
+		{{with $v.Hero}}{{if .URL}}<a class="band-id band-hero" href="{{.URL}}">{{template "band-logo" .Logo}}<span class="band-name">{{.Name}}</span></a>
+		{{else}}<div class="band-id">{{template "band-logo" .Logo}}<span class="band-name">{{.Name}}</span></div>{{end}}{{end}}
+		<div class="band-tail">
+			<h1>{{$v.Registration}}</h1>
+			{{with $v.Name}}<p class="band-type">{{.}}</p>{{end}}
+		</div>
+		{{with or $v.Live $v.Latest}}<div class="band-sum" aria-hidden="true">
+			<span class="band-chip s-{{$v.Band.Class}}">{{$v.Band.Title}}</span>
+			<span class="band-sum-route"><b>{{.Dep.Code}}</b><span class="band-sum-track" style="--p:{{.Progress}}%"></span><b>{{if .DivertedTo}}{{.DivertedTo.Code}}{{else}}{{.Arr.Code}}{{end}}</b></span>
+			{{with $v.Band.Detail}}<span class="band-sum-detail">{{.}}</span>{{end}}
+		</div>{{end}}
+	</div>
+</div>
 <div class="stage{{if not $v.Map}} stage-bare{{end}}">
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
-	<div class="band">
-		<div class="wrap band-in">
-			{{with $v.Hero}}{{if .URL}}<a class="band-id band-hero" href="{{.URL}}">{{template "band-logo" .Logo}}<span class="band-name">{{.Name}}</span></a>
-			{{else}}<div class="band-id">{{template "band-logo" .Logo}}<span class="band-name">{{.Name}}</span></div>{{end}}{{end}}
-			<div class="band-tail">
-				<h1>{{$v.Registration}}</h1>
-				{{with $v.Name}}<p class="band-type">{{.}}</p>{{end}}
-			</div>
-		</div>
-	</div>
 	<section class="wrap stage-wrap" aria-label="Where {{$v.Registration}} is now">
 		<div class="dock">
 			{{template "band-status" $v.Band}}

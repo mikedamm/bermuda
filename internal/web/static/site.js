@@ -4,6 +4,81 @@
 // title band's "Updated" time up. Everything else on the page works
 // without this script.
 
+// The aircraft page's band: it sticks to the top and condenses into a bar
+// as the page scrolls, and the dock folds into it: as the dock slides under
+// the band, the band's one-line summary of it fades in. CSS draws it all
+// from the numbers this sets on the band; the band keeps its height in the
+// flow, so nothing below it moves.
+(() => {
+	"use strict";
+	const band = document.querySelector("[data-condense]");
+	if (!band) return;
+	const stage = band.nextElementSibling;
+	const dock = stage?.querySelector(".dock");
+	const inner = band.querySelector(".band-in");
+	const id = band.querySelector(".band-id"), tail = band.querySelector(".band-tail"), sum = band.querySelector(".band-sum");
+	const BAR = 56, RUN = 100; // the condensed height; the scroll it takes to get there
+	const clamp = (v) => Math.min(1, Math.max(0, v));
+	const ease = (t) => t * t * (3 - 2 * t);
+	let top0 = 0, height = 0, cut = 0;
+
+	// offset metrics ignore transforms, so this reads the band as laid out
+	// whatever state it is drawn in
+	const measure = () => {
+		height = band.offsetHeight;
+		cut = Math.max(0, height - BAR);
+		top0 = stage.getBoundingClientRect().top + scrollY - height; // where it sits before it sticks
+		const k = 1 - parseFloat(getComputedStyle(band).getPropertyValue("--shrink") || "0.36"); // the names' condensed scale
+		// an element's middle, from the band's top (whichever ancestor offsetTop counts from)
+		const mid = (el) => {
+			let top = 0;
+			for (let n = el; n && n !== inner; n = n.offsetParent) top += n.offsetTop;
+			return top + el.offsetHeight / 2;
+		};
+		band.style.setProperty("--cut", cut + "px");
+		// each block scales about its own middle, then rises to the bar's
+		if (id) band.style.setProperty("--lift-id", mid(id) - BAR / 2 + "px");
+		if (tail) {
+			// the tail number alone is centred (the airframe under it fades),
+			// and the block scales about its middle, not the number's
+			const reg = tail.querySelector("h1") || tail, t = mid(tail);
+			band.style.setProperty("--lift-tail", t + (mid(reg) - t) * k - BAR / 2 + "px");
+		}
+		if (sum && inner) {
+			// the summary takes the bar's middle, clear of the condensed names
+			const left = id ? id.offsetLeft + id.offsetWidth * k : 0;
+			const right = tail ? inner.clientWidth - (tail.offsetLeft + tail.offsetWidth * (1 - k)) : 0;
+			band.style.setProperty("--sum-inset", Math.round(Math.max(left, right) + 24) + "px");
+		}
+	};
+	const update = () => {
+		const cp = clamp((scrollY - top0) / RUN);
+		let sp = 0;
+		if (dock && sum) {
+			const bottom = band.getBoundingClientRect().top + height - cut * cp; // the band's drawn foot
+			const r = dock.getBoundingClientRect();
+			const under = clamp((bottom - r.top) / r.height); // how much of the dock has slid under
+			sp = Math.min(cp, ease(clamp((under - 0.3) / 0.45)));
+		}
+		band.style.setProperty("--cp", cp.toFixed(3));
+		band.style.setProperty("--sp", sp.toFixed(3));
+	};
+	let frame = 0;
+	addEventListener("scroll", () => {
+		frame ||= requestAnimationFrame(() => {
+			frame = 0;
+			update();
+		});
+	}, { passive: true });
+	const again = () => {
+		measure();
+		update();
+	};
+	addEventListener("resize", again);
+	document.fonts?.ready.then(again); // Inter's widths, once it has loaded
+	again();
+})();
+
 // "Updated 12 seconds ago": the band's time counts up from when the page's
 // data was read. The server writes the clock time, which stays for readers
 // without this script and becomes the tooltip.
@@ -100,8 +175,11 @@
 			const dock = stage?.querySelector(".dock");
 			const box = el.getBoundingClientRect();
 			const y = window.scrollY;
+			// the route goes under the title band: in the stage, or above it
+			// (aircraft pages, where it sticks), where the stage's top is its foot
 			const band = stage?.querySelector(":scope > .band");
-			const under = band ? Math.max(0, band.getBoundingClientRect().bottom + y - box.top) : 0;
+			const foot = band ? band.getBoundingClientRect().bottom + y : stage ? stage.getBoundingClientRect().top + y : box.top;
+			const under = Math.max(0, foot - box.top);
 			const over = dock && matchMedia("(min-width: 900px)").matches;
 			const wrap = stage?.querySelector(":scope > .stage-wrap");
 			const cover = !over && wrap?.offsetHeight ? wrap : stage?.nextElementSibling;
