@@ -219,10 +219,13 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 		current, past = &past[0], past[1:]
 		v.Latest = current
 	}
+	// Where it is may be shown only when neither the aircraft nor its
+	// current flight is withheld at the owner's request (LADD).
+	posVisible := !v.LADD && (st.Flight == nil || !st.Flight.LADDRedacted)
 	// Parked after its latest flight landed, on that flight's field: on the
 	// ground there, whatever the last report's ground flag says (MLAT and
 	// some transponders never set it), not "not tracked".
-	if ap, ok := parkedAt(v.Latest, st.Last); ok && !v.LADD {
+	if ap, ok := parkedAt(v.Latest, st.Last); ok && posVisible {
 		at := relTime(st.Last.At, now)
 		v.Status, v.StatusClass = "On the ground", "landed"
 		v.StatusDetail = fmt.Sprintf("Last seen at %s (%s), %s", ap.Name, ap.Code, at)
@@ -231,7 +234,7 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 	}
 	if !v.LADD {
 		var parked *mapPlane
-		if last := p0.Status.Last; v.Live == nil && last != nil && (st.Flight == nil || !st.Flight.LADDRedacted) {
+		if last := p0.Status.Last; v.Live == nil && last != nil && posVisible {
 			if pos := (geo.LL{Lat: last.Lat, Lon: last.Lon}); pos.Valid() {
 				parked = &mapPlane{P: pt(pos), H: math.Round(last.Hdg)}
 			}

@@ -158,6 +158,19 @@ func fakeAPI(t *testing.T) *httptest.Server {
 			park["status"] = map[string]any{"phase": "unknown", "flight": nil, "upcoming": []any{},
 				"last": map[string]any{"live": false, "lat": 47.455, "lon": -122.305, "hdg": 160, "at": ts(-50 * time.Minute), "on_ground": false}}
 			write(w, park)
+		case "N3HIDE":
+			// not listed itself, but its current flight is withheld: the
+			// parked-on-the-field reading must not reveal where it is
+			hide := map[string]any{}
+			for k, v := range aircraft {
+				hide[k] = v
+			}
+			hide["key"], hide["airframe_id"] = "N3HIDE", "af-8"
+			hide["aircraft"] = map[string]any{"registration": "N3HIDE", "name": "Boeing 737-890"}
+			hide["status"] = map[string]any{"phase": "unknown", "upcoming": []any{},
+				"flight": map[string]any{"flight_id": "f-hidden", "ladd_redacted": true},
+				"last":   map[string]any{"live": true, "lat": 47.455, "lon": -122.305, "at": ts(-5 * time.Minute), "on_ground": false}}
+			write(w, hide)
 		case "N1LADD":
 			// a listed aircraft whose answer still carries flights and a
 			// position: the page must not show them regardless
@@ -796,6 +809,10 @@ func TestParkedAircraft(t *testing.T) {
 	}
 	if strings.Contains(body, "Not tracked now") {
 		t.Error("an aircraft parked at its arrival airport reads as not tracked")
+	}
+	hidden := get(t, testServer(t), "/aircraft/N3HIDE").Body.String()
+	if !strings.Contains(hidden, "<strong>Tracking limited</strong>") || strings.Contains(hidden, "At SEA") || strings.Contains(hidden, `"plane":`) {
+		t.Error("a withheld flight's aircraft shows where it is")
 	}
 	far := parkedAtFar()
 	if _, ok := parkedAt(&far.leg, &far.last); ok {
