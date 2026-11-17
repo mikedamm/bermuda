@@ -13,6 +13,8 @@
 //	BUNNY_DATABASE_URL, BUNNY_DATABASE_AUTH_TOKEN
 //	              shared cache for API answers (set by Bunny on the app; optional)
 //	MAP_TILES     PMTiles basemap for the interactive maps           (default https://i.wvcdn.com/v4.pmtiles; "off" draws SVG maps)
+//	TERRAIN       elevation tiles shaded under the maps, a {z}/{x}/{y} template of Terrarium tiles
+//	              (default https://tiles.mapterhorn.com/{z}/{x}/{y}.webp; "off" draws flat maps)
 //	LOGOS         operator logos, {LOGOS}/{ICAO}/icon.png            (default https://i.wvcdn.com/logos; "off" shows none)
 package main
 
@@ -132,11 +134,15 @@ func run(log *slog.Logger) error {
 	if tiles == "off" {
 		tiles = ""
 	}
+	terrain := env("TERRAIN", "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp")
+	if terrain == "off" {
+		terrain = ""
+	}
 	logos := env("LOGOS", "https://i.wvcdn.com/logos")
 	if logos == "off" {
 		logos = ""
 	}
-	srv, err := web.New(client, idx, web.Config{SiteURL: site, AppURL: env("APP_URL", "https://app.wingview.com"), Version: version, MapTiles: tiles, LiveKey: liveKey(token), LogoBase: logos}, log)
+	srv, err := web.New(client, idx, web.Config{SiteURL: site, AppURL: env("APP_URL", "https://app.wingview.com"), Version: version, MapTiles: tiles, MapTerrain: terrain, LiveKey: liveKey(token), LogoBase: logos}, log)
 	if err != nil {
 		return err
 	}

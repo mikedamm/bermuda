@@ -30,7 +30,8 @@ One Go binary, standard library only.
   sitemaps, airline pages and internal links. The index is snapshotted to
   `DATA_DIR` (a persistent volume) every 5 minutes and on shutdown.
 - **Maps** are fixed MapLibre GL JS maps (no pan, zoom or controls; pins
-  and aircraft link to their pages) over WingView's own
+  and aircraft link to their pages), shaded with Mapterhorn elevation
+  (`TERRAIN`), over WingView's own
   Protomaps basemap, a PMTiles archive the browser reads by HTTP range
   requests (`MAP_TILES`, default `https://i.wvcdn.com/v4.pmtiles`). MapLibre,
   the pmtiles protocol and the label glyphs are self-hosted under
@@ -92,6 +93,7 @@ go test ./...
 | `APP_URL` | the app, for "open live" deep links (default `https://app.wingview.com`) |
 | `MAP_TILES` | PMTiles basemap for the maps (default `https://i.wvcdn.com/v4.pmtiles`; `off` draws SVG maps) |
 | `BUNNY_DATABASE_URL`, `BUNNY_DATABASE_AUTH_TOKEN` | shared API cache (Bunny Database, libSQL); optional |
+| `TERRAIN` | elevation shaded under the maps, a `{z}/{x}/{y}` template of Terrarium tiles (default `https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`; `off` draws flat maps) |
 | `LOGOS` | operator logos as `{LOGOS}/{ICAO}/icon.png`, one per ICAO-assigned operator (default `https://i.wvcdn.com/logos`; `off` shows none) |
 | `DATA_DIR` | snapshot directory for the discovery index (optional) |
 | `CRAWL=0` | disable the crawler; `CRAWL_GAP_MS` (1200) and `RESOLVE_GAP_MS` (2500) set its pace |

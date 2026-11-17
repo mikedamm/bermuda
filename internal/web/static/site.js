@@ -11,7 +11,7 @@
 	if (/bot|crawl|spider|slurp|facebookexternalhit|embedly|whatsapp|preview/i.test(navigator.userAgent)) return;
 
 	const C = { flown: "#0065ad", ahead: "#229cf8", net: "#0065ad", ring: "#0065ad", navy: "#002f64" };
-	const FONT = ["Noto Sans Medium"];
+	const FONT = ["Inter SemiBold"]; // Inter, as on the page: glyphs built with its cv11 and ss01 forms
 	const PLANE = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1.6c.9 0 1.5 1 1.5 2.3v5.3l8 4.6v2.1l-8-2.4v4.6l2.4 1.8v1.7L12 20.6l-3.9 1v-1.7l2.4-1.8v-4.6l-8 2.4v-2.1l8-4.6V3.9c0-1.3.6-2.3 1.5-2.3Z"/></svg>';
 	// the same airliner as an icon for the map's own symbol layer: navy with a white edge
 	const PLANE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><path fill="#002f64" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round" paint-order="stroke" d="M12 1.6c.9 0 1.5 1 1.5 2.3v5.3l8 4.6v2.1l-8-2.4v4.6l2.4 1.8v1.7L12 20.6l-3.9 1v-1.7l2.4-1.8v-4.6l-8 2.4v-2.1l8-4.6V3.9c0-1.3.6-2.3 1.5-2.3Z"/></svg>';
@@ -32,6 +32,12 @@
 		.then(([ml, , style]) => {
 			ml.addProtocol("pmtiles", new pmtiles.Protocol().tile);
 			style.sources.protomaps.url = "pmtiles://" + cfg.mapTiles;
+			// elevation shading: Terrarium tiles, or a flat map without them
+			if (cfg.mapTerrain && style.sources.terrain) style.sources.terrain.tiles = [cfg.mapTerrain];
+			else {
+				delete style.sources.terrain;
+				style.layers = style.layers.filter((l) => l.source !== "terrain");
+			}
 			style.glyphs = location.origin + cfg.mapGlyphs;
 			maps.forEach((el) => draw(ml, style, el));
 		})

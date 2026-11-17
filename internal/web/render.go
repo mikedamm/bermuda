@@ -38,7 +38,7 @@ type Page struct {
 
 // MapAssets is what the page's script needs to draw maps.
 type MapAssets struct {
-	Tiles, TilesOrigin, Style, Lib, CSS, PMTiles, Glyphs string
+	Tiles, TilesOrigin, Terrain, TerrainOrigin, Style, Lib, CSS, PMTiles, Glyphs string
 }
 
 func (s *Server) mapAssets() *MapAssets {
@@ -46,7 +46,7 @@ func (s *Server) mapAssets() *MapAssets {
 		return nil
 	}
 	return &MapAssets{
-		Tiles: s.cfg.MapTiles, TilesOrigin: s.tilesOrigin,
+		Tiles: s.cfg.MapTiles, TilesOrigin: s.tilesOrigin, Terrain: s.cfg.MapTerrain, TerrainOrigin: s.terrainOrigin,
 		Style: s.staticURL("map-style.json"), Lib: s.staticURL(mapLibreJS), CSS: s.staticURL(mapLibreCSS),
 		PMTiles: s.staticURL(pmtilesJS), Glyphs: Prefix + "/static/" + glyphsPath,
 	}

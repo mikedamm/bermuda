@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -249,7 +250,8 @@ func TestMapLibreMaps(t *testing.T) {
 	up := fakeAPI(t)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	s, err := New(api.New(up.URL, "test-token", 4, log), store.NewIndex(),
-		Config{SiteURL: "https://www.wingview.com", AppURL: "https://app.wingview.com", MapTiles: "https://i.wvcdn.com/v4.pmtiles"}, log)
+		Config{SiteURL: "https://www.wingview.com", AppURL: "https://app.wingview.com", MapTiles: "https://i.wvcdn.com/v4.pmtiles",
+			MapTerrain: "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"}, log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,13 +259,14 @@ func TestMapLibreMaps(t *testing.T) {
 	rec := get(t, h, "/flight/ASA14")
 	body := rec.Body.String()
 	for _, want := range []string{`data-map-tiles="https://i.wvcdn.com/v4.pmtiles"`, `data-map-lib="/tracker/static/vendor/maplibre-gl-6.16.0/maplibre-gl.mjs`,
-		`data-map role="region"`, `"k":"flown"`, `"k":"ahead"`, `"plane":`, "/site.js", `<link rel="preconnect" href="https://i.wvcdn.com"`} {
+		`data-map role="region"`, `"k":"flown"`, `"k":"ahead"`, `"plane":`, "/site.js", `<link rel="preconnect" href="https://i.wvcdn.com"`,
+		`data-map-terrain="https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"`, `<link rel="preconnect" href="https://tiles.mapterhorn.com"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("map page lacks %q", want)
 		}
 	}
 	csp := rec.Header().Get("Content-Security-Policy")
-	for _, want := range []string{"connect-src 'self' https://i.wvcdn.com", "worker-src 'self' blob:", "script-src 'self';"} {
+	for _, want := range []string{"connect-src 'self' https://i.wvcdn.com https://tiles.mapterhorn.com;", "worker-src 'self' blob:", "script-src 'self';"} {
 		if !strings.Contains(csp, want) {
 			t.Errorf("CSP lacks %q: %q", want, csp)
 		}
@@ -276,13 +279,36 @@ func TestMapLibreMaps(t *testing.T) {
 	if lib.Code != 200 || !strings.Contains(lib.Header().Get("Content-Type"), "javascript") || !strings.Contains(lib.Header().Get("Cache-Control"), "immutable") {
 		t.Errorf("worker module: %d %q %q", lib.Code, lib.Header().Get("Content-Type"), lib.Header().Get("Cache-Control"))
 	}
-	glyph := get(t, h, "/tracker/static/vendor/glyphs/Noto%20Sans%20Medium/0-255.pbf")
-	if glyph.Code != 200 || glyph.Body.Len() < 1000 {
-		t.Errorf("glyphs: %d, %d bytes", glyph.Code, glyph.Body.Len())
-	}
 	style := get(t, h, "/tracker/static/map-style.json")
-	if style.Code != 200 || !strings.Contains(style.Body.String(), `"pmtiles://TILES"`) {
+	if style.Code != 200 || !strings.Contains(style.Body.String(), `"pmtiles://TILES"`) || !strings.Contains(style.Body.String(), `"raster-dem"`) {
 		t.Errorf("style: %d", style.Code)
+	}
+	// every font the style and site.js name is served as glyphs
+	var st struct {
+		Layers []struct {
+			Layout map[string]any `json:"layout"`
+		} `json:"layers"`
+	}
+	if err := json.Unmarshal(style.Body.Bytes(), &st); err != nil {
+		t.Fatal(err)
+	}
+	fonts := map[string]bool{"Inter SemiBold": true} // site.js draws pins and aircraft labels in it
+	for _, l := range st.Layers {
+		if fs, ok := l.Layout["text-font"].([]any); ok {
+			for _, f := range fs {
+				fonts[f.(string)] = true
+			}
+		}
+	}
+	for f := range fonts {
+		glyph := get(t, h, "/tracker/static/vendor/glyphs/"+url.PathEscape(f)+"/0-255.pbf")
+		if glyph.Code != 200 || glyph.Body.Len() < 1000 {
+			t.Errorf("glyphs for %q: %d, %d bytes", f, glyph.Code, glyph.Body.Len())
+		}
+	}
+	if _, err := New(api.New(up.URL, "test-token", 4, log), store.NewIndex(),
+		Config{SiteURL: "https://www.wingview.com", MapTiles: "https://i.wvcdn.com/v4.pmtiles", MapTerrain: "https://tiles.example.com/terrain.webp"}, log); err == nil {
+		t.Error("a terrain URL without {z}/{x}/{y} was accepted")
 	}
 	plain := get(t, testServer(t), "/flight/ASA14").Body.String()
 	if strings.Contains(plain, "site.js") || !strings.Contains(plain, "map-svg") {

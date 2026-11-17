@@ -50,6 +50,9 @@ type Config struct {
 	// basemap); the browser reads it with HTTP range requests, so its host
 	// must send CORS headers. Empty means maps are drawn server-side as SVG.
 	MapTiles string
+	// MapTerrain is a {z}/{x}/{y} template for Terrarium-encoded elevation
+	// tiles (Mapterhorn), shaded under the maps; empty means flat maps.
+	MapTerrain string
 	// LiveKey signs the flight pages' live-refresh URLs. Every instance
 	// needs the same key; empty means a random one (a single instance).
 	LiveKey []byte
@@ -67,17 +70,18 @@ const (
 )
 
 type Server struct {
-	api         *api.Client
-	index       *store.Index
-	cfg         Config
-	log         *slog.Logger
-	tpl         map[string]*template.Template
-	pages       *cache.Cache
-	assets      map[string]asset // path under /static/ → content
-	host        string           // canonical host
-	tilesOrigin string           // scheme://host of MapTiles, for the CSP
-	logoBase    string           // operator logos, no trailing slash; empty means none
-	imgSrc      string           // the CSP's img-src origins
+	api           *api.Client
+	index         *store.Index
+	cfg           Config
+	log           *slog.Logger
+	tpl           map[string]*template.Template
+	pages         *cache.Cache
+	assets        map[string]asset // path under /static/ → content
+	host          string           // canonical host
+	tilesOrigin   string           // scheme://host of MapTiles, for the CSP
+	terrainOrigin string           // and of MapTerrain
+	logoBase      string           // operator logos, no trailing slash; empty means none
+	imgSrc        string           // the CSP's img-src origins
 }
 
 type asset struct {
@@ -114,6 +118,15 @@ func New(a *api.Client, idx *store.Index, cfg Config, log *slog.Logger) (*Server
 			return nil, fmt.Errorf("bad MAP_TILES %q", cfg.MapTiles)
 		}
 		s.tilesOrigin = t.Scheme + "://" + t.Host
+		if cfg.MapTerrain != "" {
+			e, err := url.Parse(cfg.MapTerrain)
+			if err != nil || e.Host == "" || !strings.Contains(cfg.MapTerrain, "{z}") {
+				return nil, fmt.Errorf("bad TERRAIN %q", cfg.MapTerrain)
+			}
+			if o := e.Scheme + "://" + e.Host; o != s.tilesOrigin {
+				s.terrainOrigin = o
+			}
+		}
 	}
 	if err := s.loadAssets(); err != nil {
 		return nil, err
@@ -416,10 +429,11 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		// MapLibre runs from our own origin (module scripts, a blob: module
-		// worker) and reads tiles from the PMTiles host by range requests.
+		// worker), reads tiles from the PMTiles host by range requests and
+		// fetches elevation tiles from the terrain host.
 		h.Set("Content-Security-Policy", "default-src 'self'; img-src "+s.imgSrc+" data: blob:; "+
 			"style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; "+
-			"connect-src 'self' "+s.tilesOrigin+"; worker-src 'self' blob:; child-src blob:; "+
+			"connect-src 'self' "+strings.TrimSpace(s.tilesOrigin+" "+s.terrainOrigin)+"; worker-src 'self' blob:; child-src blob:; "+
 			"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		rec := &statusRecorder{ResponseWriter: w, status: 200}
