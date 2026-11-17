@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -183,6 +184,9 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 	for _, h := range recent {
 		v.Recent = append(v.Recent, legFromHistory(h, now))
 	}
+	for _, f := range s.landedFlights(ctx, p0, recent) {
+		v.Recent = append(v.Recent, legFromLive(f, rf, now))
+	}
 	for _, u := range upcoming {
 		v.Upcoming = append(v.Upcoming, legFromLive(u, rf, now))
 	}
@@ -344,6 +348,47 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 
 // visibleFlights drops everything LADD withholds: all of it for a listed
 // aircraft, and any individually redacted row otherwise.
+// landedFlights is what the airframe has flown and landed that its recent
+// flights do not hold yet. A flight stays live in the gateway until it
+// closes, hours after it lands; once the aircraft starts its next leg that
+// flight is neither the aircraft's live flight nor in its archive, and the
+// map and the Flights panel would skip it. Its operator's list of arrived
+// flights still has it.
+func (s *Server) landedFlights(ctx context.Context, p0 *api.AircraftPage, archived []api.HistoryEntry) []api.FlightSummary {
+	if p0.AirframeID == "" || p0.LADD.Listed {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, h := range archived {
+		seen[h.FlightID] = true
+	}
+	var codes []string
+	add := func(c string) {
+		if c != "" && !slices.Contains(codes, c) {
+			codes = append(codes, c)
+		}
+	}
+	add(p0.Operator.ICAO)
+	if f := p0.Status.Flight; f != nil {
+		seen[f.FlightID] = true
+		add(f.Operator.ICAO)
+	}
+	var out []api.FlightSummary
+	for _, code := range codes {
+		of, err := s.api.OperatorFlights(ctx, code, "arrived", 2000)
+		if err != nil {
+			continue
+		}
+		for _, f := range of.Flights {
+			if f.AirframeID == p0.AirframeID && !seen[f.FlightID] && !f.LADDRedacted {
+				seen[f.FlightID] = true
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}
+
 // aircraftMapLabel describes the map for screen readers.
 func aircraftMapLabel(reg string, flying bool, prev int) string {
 	which := "latest"

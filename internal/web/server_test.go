@@ -50,6 +50,13 @@ func fakeAPI(t *testing.T) *httptest.Server {
 	nextASA14 := planned("f-next", "ASA14", "AS14", "KSAN", "KSEA", 20*time.Hour)
 	otherASA := planned("f-140", "ASA140", "AS140", "KSEA", "KSAN", 3*time.Hour)
 	nextLeg := planned("f-leg", "ASA15", "AS15", "KSEA", "KSAN", 2*time.Hour)
+	// landed hours ago and still live in the gateway (not archived yet),
+	// while the aircraft flies its next leg
+	landed := map[string]any{"flight_id": "f-landed", "airframe_id": "af-1", "callsign": "ASA13", "iata_flight": "AS13", "operator": op,
+		"registration": "N527AS", "type": "B738", "dep": "KSEA", "arr": "KSAN", "status": "landed", "phase": "arrived", "phase_word": "Arrived",
+		"sched_dep": ts(-6 * time.Hour), "out": ts(-6 * time.Hour), "off": ts(-350 * time.Minute), "on": ts(-200 * time.Minute), "in": ts(-195 * time.Minute)}
+	otherAirframe := map[string]any{"flight_id": "f-x", "airframe_id": "af-2", "callsign": "ASA99", "iata_flight": "AS99", "operator": op,
+		"dep": "KSEA", "arr": "KPDX", "status": "landed", "phase": "arrived", "phase_word": "Arrived", "off": ts(-2 * time.Hour), "on": ts(-time.Hour)}
 	aircraft := map[string]any{
 		"key": "N527AS", "airframe_id": "af-1", "days": 30,
 		"aircraft": map[string]any{"icao_type": "B738", "manufacturer": "Boeing", "model": "737-890", "name": "Boeing 737-890",
@@ -120,11 +127,16 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		write(w, map[string]any{"key": "f-live", "kind": "flight_id", "live": true, "flight": moved})
 	})
 	mux.HandleFunc("GET /operators/{code}/flights", func(w http.ResponseWriter, r *http.Request) {
-		if r.PathValue("code") != "ASA" || r.URL.Query().Get("status") != "scheduled" {
+		switch {
+		case r.PathValue("code") != "ASA":
 			write(w, map[string]any{"flights": []any{}})
-			return
+		case r.URL.Query().Get("status") == "scheduled":
+			write(w, map[string]any{"code": "ASA", "count": 2, "total": 2, "flights": []any{otherASA, nextASA14}})
+		case r.URL.Query().Get("status") == "arrived":
+			write(w, map[string]any{"code": "ASA", "count": 2, "total": 2, "flights": []any{otherAirframe, landed}})
+		default:
+			write(w, map[string]any{"flights": []any{}})
 		}
-		write(w, map[string]any{"code": "ASA", "count": 2, "total": 2, "flights": []any{otherASA, nextASA14}})
 	})
 	mux.HandleFunc("GET /aircraft/{key}/flights", func(w http.ResponseWriter, r *http.Request) {
 		write(w, map[string]any{"key": r.PathValue("key"), "flights": []any{hist}})
@@ -295,10 +307,10 @@ func TestMapLibreMaps(t *testing.T) {
 		}
 	}
 	// the aircraft page draws its current flight as the flight page does and
-	// the flight before it (no track on record: a great circle) in the
-	// darkest gray, under it
+	// the two before it (the landed one the archive lacks, then the archived
+	// one; no tracks on record: great circles) in gray under it
 	ac := get(t, h, "/aircraft/N527AS").Body.String()
-	for _, want := range []string{`"k":"flown"`, `"k":"past","w":1}`, `aria-label="Map of N527AS&#39;s current flight and the one before it"`} {
+	for _, want := range []string{`"k":"flown"`, `"k":"past","w":2}`, `"k":"past","w":1}`, `aria-label="Map of N527AS&#39;s current flight and the two before it"`} {
 		if !strings.Contains(ac, want) {
 			t.Errorf("aircraft map lacks %s", want)
 		}
@@ -680,7 +692,12 @@ func TestFlightsPanel(t *testing.T) {
 		`<h2 id="flights-h">Flights</h2>`, "<th scope=\"col\">Flight</th>",
 		`<tr class="fl-future">`, `href="/flight/ASA15"`,
 		`<tr class="fl-current" aria-current="true">`, `href="/flight/ASA14"`, " <small class=\"est\">est.</small>",
-		`<tr class="fl-past">`)
+		// landed, still live in the gateway, not archived: it must not go missing
+		`<tr class="fl-past">`, `href="/flight/ASA13"`,
+		`<tr class="fl-past">`, `href="/flight/ASA14"`)
+	if strings.Contains(aircraft, "ASA99") {
+		t.Error("another airframe's arrival is listed")
+	}
 	for _, gone := range []string{"Recent flights", "Planned flights"} {
 		if strings.Contains(aircraft, gone) {
 			t.Errorf("aircraft page still has %q", gone)
