@@ -408,6 +408,7 @@ a.mk-plane-sm:hover { color: var(--link); }
 	.stage-wrap { padding-block: 0; }
 	.dock, .dock-search { width: auto; border-radius: 0; box-shadow: none; border-bottom: 1px solid var(--line); }
 	.stage-bare .dock { margin: 0; max-width: none; border-inline: 0; }
+	.model { border-radius: 0; }
 	.foot-in { grid-template-columns: 1fr; }
 	.foot-mark { display: none; }
 	.foot-small { grid-column: auto; }
