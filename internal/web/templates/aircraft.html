@@ -22,6 +22,9 @@
 				<p class="dock-flight">Flying {{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}{{if .Airline}} for {{.Airline}}{{end}}</p>
 				{{template "route" .}}
 				{{if .HasPos}}{{template "telemetry" .}}{{end}}
+				{{end}}{{else if $v.Latest}}{{with $v.Latest}}
+				<p class="dock-flight">Last flew {{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}{{if .Airline}} for {{.Airline}}{{end}}</p>
+				{{template "route" .}}
 				{{end}}{{else}}
 				{{template "kv" $v.LastSeen}}
 				{{end}}

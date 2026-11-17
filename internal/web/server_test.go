@@ -145,6 +145,19 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		switch strings.ToUpper(r.PathValue("key")) {
 		case "N527AS", "A6A300":
 			write(w, aircraft)
+		case "N2PARK":
+			// parked at SEA after its flight from SAN arrived; the last report
+			// sits on the field but its ground flag is off (MLAT, some
+			// transponders)
+			park := map[string]any{}
+			for k, v := range aircraft {
+				park[k] = v
+			}
+			park["key"], park["airframe_id"] = "N2PARK", "af-9"
+			park["aircraft"] = map[string]any{"registration": "N2PARK", "name": "Boeing 737-890", "icao_type": "B738"}
+			park["status"] = map[string]any{"phase": "unknown", "flight": nil, "upcoming": []any{},
+				"last": map[string]any{"live": false, "lat": 47.455, "lon": -122.305, "hdg": 160, "at": ts(-50 * time.Minute), "on_ground": false}}
+			write(w, park)
 		case "N1LADD":
 			// a listed aircraft whose answer still carries flights and a
 			// position: the page must not show them regardless
@@ -768,4 +781,34 @@ func TestPastLinesAges(t *testing.T) {
 	if len(d.Pins) != 4 {
 		t.Errorf("%d minor pins, want SEA SAN PDX LAX", len(d.Pins))
 	}
+}
+
+// Parked on the field its latest flight arrived at: on the ground there,
+// even when the last report's ground flag is off, and the dock shows that
+// flight as the map and the Flights panel do.
+func TestParkedAircraft(t *testing.T) {
+	body := get(t, testServer(t), "/aircraft/N2PARK").Body.String()
+	for _, want := range []string{"<strong>On the ground</strong>", "At SEA, ", `Last flew <a href="/flight/ASA14">AS14</a> for Alaska Airlines`,
+		`<tr class="fl-current" aria-current="true">`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("parked page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "Not tracked now") {
+		t.Error("an aircraft parked at its arrival airport reads as not tracked")
+	}
+	far := parkedAtFar()
+	if _, ok := parkedAt(&far.leg, &far.last); ok {
+		t.Error("a last report 100 miles from the arrival field counts as parked there")
+	}
+}
+
+func parkedAtFar() struct {
+	leg  LegV
+	last api.LastPosition
+} {
+	return struct {
+		leg  LegV
+		last api.LastPosition
+	}{LegV{Arr: airportV("KSEA", nil), Progress: 100}, api.LastPosition{Lat: 46.0, Lon: -122.3}}
 }

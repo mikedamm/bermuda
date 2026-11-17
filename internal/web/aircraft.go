@@ -32,6 +32,7 @@ type AircraftPageV struct {
 	Band         StatusBand
 	LastSeen     []Fact // where and when it was last seen, when not flying
 	Live         *LegV
+	Latest       *LegV // not flying: the flight it last flew, which the dock, map and Flights panel lead with
 	LiveURL      string
 	Map          *MapV
 	Specs        []Fact
@@ -216,6 +217,17 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 		current = v.Live
 	case len(past) > 0:
 		current, past = &past[0], past[1:]
+		v.Latest = current
+	}
+	// Parked after its latest flight landed, on that flight's field: on the
+	// ground there, whatever the last report's ground flag says (MLAT and
+	// some transponders never set it), not "not tracked".
+	if ap, ok := parkedAt(v.Latest, st.Last); ok && !v.LADD {
+		at := relTime(st.Last.At, now)
+		v.Status, v.StatusClass = "On the ground", "landed"
+		v.StatusDetail = fmt.Sprintf("Last seen at %s (%s), %s", ap.Name, ap.Code, at)
+		v.Band = StatusBand{"idle", "On the ground", "At " + ap.Code + ", " + at}
+		v.LastSeen = []Fact{{Label: "Last seen at", Value: ap.Name, URL: ap.URL}, {Label: "Last position", Value: at}}
 	}
 	if !v.LADD {
 		var parked *mapPlane
@@ -388,6 +400,28 @@ func (s *Server) landedFlights(ctx context.Context, p0 *api.AircraftPage, archiv
 	}
 	return out
 }
+
+// parkedAt is the airport a parked aircraft sits at: where its latest
+// flight arrived, when the last position on record is on that field.
+func parkedAt(latest *LegV, last *api.LastPosition) (AirportV, bool) {
+	if latest == nil || last == nil || latest.Progress < 100 {
+		return AirportV{}, false
+	}
+	ap := latest.Arr
+	if latest.DivertedTo != nil {
+		ap = *latest.DivertedTo
+	}
+	pos := geo.LL{Lat: last.Lat, Lon: last.Lon}
+	if !ap.LL.Valid() || !pos.Valid() || geo.DistanceMi(pos.Lat, pos.Lon, ap.LL.Lat, ap.LL.Lon) > parkedRadiusMi {
+		return AirportV{}, false
+	}
+	return ap, true
+}
+
+// parkedRadiusMi is how far from an airport's reference point a last
+// report still counts as on its field: the largest airports run to about
+// three miles from it.
+const parkedRadiusMi = 5
 
 // aircraftMapLabel describes the map for screen readers.
 func aircraftMapLabel(reg string, flying bool, prev int) string {
