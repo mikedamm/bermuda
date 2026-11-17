@@ -31,7 +31,7 @@
 				{{end}}
 			</div>
 		</div>
-		{{with $v.ModelURL}}<div class="model" data-model="{{.}}" data-title="3D model of {{$v.Registration}}"></div>{{end}}
+		{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Registration}}"></iframe>{{end}}
 	</div>
 </section>
 

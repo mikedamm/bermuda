@@ -18,8 +18,7 @@
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
 	<div class="wrap stage-wrap">
 		<div class="dock" data-part="dock">{{template "flight-dock" $v}}</div>
-		{{/* the aircraft's 3D model, floated over the map under the dock; site.js adds the frame */}}
-		{{with $v.ModelURL}}<div class="model" data-model="{{.}}" data-title="3D model of {{$v.Featured.Reg}}"></div>{{end}}
+		{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Featured.Reg}}"></iframe>{{end}}
 	</div>
 </section>
 

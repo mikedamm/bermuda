@@ -5,28 +5,10 @@
 (() => {
 	"use strict";
 	const cfg = document.body.dataset;
-	// crawlers read the page; the map and the model are for people
-	const bot = /bot|crawl|spider|slurp|facebookexternalhit|embedly|whatsapp|preview/i.test(navigator.userAgent);
-
-	// the aircraft's 3D model (the app's transparent embed), floated over the
-	// map under the dock. Added once the page has loaded, so it never holds
-	// up the page or the map, and only on wide screens, where it overlays
-	// the map; on a phone the dock sits below the map and there is no room.
-	const slot = document.querySelector("[data-model]");
-	if (slot && !bot && matchMedia("(min-width: 900px)").matches) {
-		const add = () => {
-			const f = document.createElement("iframe");
-			f.src = slot.dataset.model;
-			f.title = slot.dataset.title;
-			f.tabIndex = -1; // a view, not a control: keep it out of the tab order
-			slot.append(f);
-		};
-		if (document.readyState === "complete") add();
-		else addEventListener("load", add, { once: true });
-	}
-
 	const maps = [...document.querySelectorAll("[data-map]")];
-	if (!cfg.mapTiles || !maps.length || bot) return;
+	if (!cfg.mapTiles || !maps.length) return;
+	// crawlers read the page; the map is for people
+	if (/bot|crawl|spider|slurp|facebookexternalhit|embedly|whatsapp|preview/i.test(navigator.userAgent)) return;
 
 	const C = { flown: "#0065ad", ahead: "#229cf8", net: "#0065ad", ring: "#0065ad", navy: "#002f64" };
 	const FONT = ["Inter SemiBold"]; // Inter, as on the page: glyphs built with its cv11 and ss01 forms
