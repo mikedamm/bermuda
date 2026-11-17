@@ -1,29 +1,23 @@
 {{define "content"}}{{$v := .Body}}{{$f := $v.Featured}}
-<div class="band">
-	<div class="wrap band-in">
-		<div class="band-id">
-			{{template "band-logo" $v.AirlineICAO}}
-			<h1>{{$v.Number}}</h1>
-			<p class="band-sub">
-				{{if $v.AirlineURL}}<a href="{{$v.AirlineURL}}">{{$v.Airline}}</a>{{else if $v.Airline}}<span>{{$v.Airline}}</span>{{end}}
-				{{if ne $v.Number $v.Ident}}<span>Callsign {{$v.Ident}}</span>{{end}}
-				{{if $f.Date}}<span>{{$f.Date}}</span>{{end}}
-			</p>
-		</div>
-		<p class="band-meta" data-part="meta">{{template "flight-meta" $v}}</p>
-	</div>
-</div>
-
-<section class="stage{{if not $v.Map}} stage-bare{{end}}" aria-label="Where {{$v.Number}} is now">
+<div class="stage{{if not $v.Map}} stage-bare{{end}}">
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
-	<div class="wrap stage-wrap">
+	<div class="band">
+		<div class="wrap band-in">
+			<div class="band-id">
+				{{if $v.AirlineURL}}<a class="band-mark" href="{{$v.AirlineURL}}" aria-label="{{$v.Airline}}">{{template "band-logo" $v.AirlineICAO}}</a>{{else}}{{template "band-logo" $v.AirlineICAO}}{{end}}
+				<h1>{{$v.Heading}}</h1>
+			</div>
+			<p class="band-meta" data-part="meta">{{template "flight-meta" $v}}</p>
+		</div>
+	</div>
+	<section class="wrap stage-wrap" aria-label="Where {{$v.Number}} is now">
 		<div class="dock">
 			<div data-part="status">{{template "flight-status" $v}}</div>
 			{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Featured.Reg}}"></iframe>{{end}}
 			<div data-part="dock">{{template "flight-dock" $v}}</div>
 		</div>
-	</div>
-</section>
+	</section>
+</div>
 
 <div class="wrap cols">
 	<div class="col-main">
@@ -57,7 +51,7 @@
 {{/* The parts below change while a flight is under way; the live refresh
      (live.go) renders them again with the same templates. */}}
 
-{{define "flight-meta"}}{{with .Featured.Band}}<span class="band-state s-{{.Class}}">{{.Title}}</span>{{end}} Updated <time datetime="{{.Updated.ISO}}">{{.Updated.Clock}} UTC</time>{{end}}
+{{define "flight-meta"}}Updated <time datetime="{{.Updated.ISO}}" data-ago>{{.Updated.Clock}} UTC</time>{{end}}
 
 {{define "flight-status"}}{{template "band-status" .Featured.Band}}{{end}}
 

@@ -20,22 +20,21 @@
 {{end}}
 
 {{define "content"}}{{$v := .Body}}{{$a := $v.Airport}}
-<div class="band">
-	<div class="wrap band-in">
-		<div class="band-id">
-			<h1>{{$a.Name}}</h1>
-			<p class="band-sub">
-				<span class="band-codes">{{if $a.IATA}}{{$a.IATA}} / {{end}}{{$a.ICAO}}</span>
-				<span>{{$a.Place}}{{if or (eq $a.Country "US") (eq $a.Country "CA") (eq $a.Country "AU")}}, {{$v.Country}}{{end}}</span>
-			</p>
-		</div>
-		{{if $v.LocalTime.Set}}<p class="band-meta">Local time <time datetime="{{$v.LocalTime.ISO}}">{{$v.LocalTime.Clock}} {{$v.LocalTime.Zone}}</time></p>{{end}}
-	</div>
-</div>
-
-<section class="stage{{if not $v.Map}} stage-bare{{end}}" aria-label="{{$v.Code}} and the area around it">
+<div class="stage{{if not $v.Map}} stage-bare{{end}}">
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
-	<div class="wrap stage-wrap">
+	<div class="band">
+		<div class="wrap band-in">
+			<div class="band-id">
+				<h1>{{$a.Name}}</h1>
+				<p class="band-sub">
+					<span class="band-codes">{{if $a.IATA}}{{$a.IATA}} / {{end}}{{$a.ICAO}}</span>
+					<span>{{$a.Place}}{{if or (eq $a.Country "US") (eq $a.Country "CA") (eq $a.Country "AU")}}, {{$v.Country}}{{end}}</span>
+				</p>
+			</div>
+			{{if $v.LocalTime.Set}}<p class="band-meta">Local time <time datetime="{{$v.LocalTime.ISO}}">{{$v.LocalTime.Clock}} {{$v.LocalTime.Zone}}</time></p>{{end}}
+		</div>
+	</div>
+	<section class="wrap stage-wrap" aria-label="{{$v.Code}} and the area around it">
 		<div class="dock">
 			{{if $v.Live}}{{template "band-status" (band "live" "Live traffic" (printf "Within %d miles" $v.RadiusMi))}}
 			{{else}}{{template "band-status" (band "idle" "No live traffic data" "")}}{{end}}
@@ -51,8 +50,8 @@
 				<a class="btn btn-app btn-block" href="{{.AppURL}}">See {{$v.Code}} in 3D</a>
 			</div>
 		</div>
-	</div>
-</section>
+	</section>
+</div>
 
 <div class="wrap cols">
 	<div class="col-main">

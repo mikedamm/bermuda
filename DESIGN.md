@@ -179,7 +179,7 @@ The identity is WingView's own, bound by the brand: the window-and-wing logo, na
 Density is high and deliberate. Type stays between 12px and 32px; the largest thing on a page is a three-letter airport code. The map is the only image, and it is tinted into the palette rather than left in the basemap's defaults.
 
 **Key Characteristics:**
-- White masthead, navy title band, full-bleed map stage, paper ground below.
+- White masthead, then a full-bleed map stage whose top is the title band in 80% navy, the map running on under it; paper ground below.
 - One docked flight panel with a status band welded to its top edge.
 - Panels with pale header bars; data grids with navy column headers and zebra rows.
 - Every number tabular; every time carries its local zone in small muted type.
@@ -190,7 +190,7 @@ Density is high and deliberate. Type stays between 12px and 32px; the largest th
 A two-blue brand on cool neutrals, with three solid state colours that do all the signalling.
 
 ### Primary
-- **WingView Navy** (`navy`): the structural colour. Title band, data-grid column headers, airport codes, headline times, masthead nav text, the plane glyph, pin rings. Deepened to `navy-deep` for the footer and lifted to `navy-hover` on the primary button.
+- **WingView Navy** (`navy`): the structural colour. Title band, data-grid column headers, airport codes, headline times, the plane glyph, pin rings. Deepened to `navy-deep` for the footer and lifted to `navy-hover` on the primary button.
 
 ### Secondary
 - **Sky** (`sky`): live and forward. The route still ahead on the map, the subject airport's fill, the main airport pins, focus rings, and the app button (always with navy text and a `sky-edge` border, as in the app itself). `sky-hover` is its hover.
@@ -244,10 +244,11 @@ A two-blue brand on cool neutrals, with three solid state colours that do all th
 
 A single content column, max 1240px with a 20px gutter (16px under 900px), set between full-bleed bands.
 
-- **Shell, top to bottom:** white masthead (64px: logo at 140px, search up to 460px, nav and the app button pushed right), navy title band (name, airline or owner line, codes; status label and update time aligned to the bottom right), map stage, paper content area, white breadcrumb bar, deep-navy footer.
+- **Shell, top to bottom:** white masthead (64px: logo at 168px on the left, search up to 460px at the page's centre, the App Store and Google Play badges on the right), title band (name, airline or owner line, codes; a quiet "Updated 12 seconds ago" at the bottom right), map stage, paper content area, white breadcrumb bar, deep-navy footer. The masthead is a three-column grid whose side columns are equal and never narrower than the two badges, so the search stays centred and gives up its own width first (256px at 900px).
+- **Title band:** on pages with a map it is the top of the stage, 80% navy over the map, and the map is framed below it; elsewhere it is solid navy. On flight pages it is only the airline's mark (linked to the airline) and the flight as people say it, "United Airlines Flight 7" (the IATA number without the airline's code, else the callsign's); the status lives in the dock, the date in the flight times panel. The "Updated" time counts up in the browser from when the page's data was read ("just now", "12 seconds ago", "3 minutes ago"); the server's clock time stays for readers without script and becomes its tooltip.
 - **Stage:** the map fills the stage absolutely (min 560px); the dock sits in normal flow inside the content column, 20px from the top, so the stage grows with the dock and nothing in it is ever clipped or scrolled. 360px wide for flights, 400px for search. On flight and aircraft pages the dock carries only what a glance needs (status, route, times, distance flown and to go, altitude, ground speed); the aircraft, heading, squawk and position age sit in a side panel that refreshes with it. The aircraft's 3D model from the app sits in the dock under the status band, above the route, full width and 16:9 on the panel-heading tint (`head`, so a white airframe keeps its edges): a plain iframe of the app's embed (it draws nothing when the app has no model for the aircraft). On flight pages the band and the route are separate live parts with the model between them, so it never reloads. The map is fixed: no pan, zoom or controls, framed by the server between the dock and the right edge of the content column; pins and aircraft link to their pages. At 900px and up the panels below rise 56px into the stage, and the map's last 176px fade into the paper behind them (no hairline under the stage); the map credit sits above the overlap.
 - **Below the stage:** a main column plus a 340px side column at 1000px and up; 20px gaps between panels; 24px above (at 900px and up, 56px into the stage's fade instead), 48px below.
-- **Under 900px:** the masthead wraps and the search takes a full row; secondary nav links hide, the app button stays (34px). The map becomes a 320px block in flow and the dock drops below it, full width, square-cornered, no shadow, divided by a bottom rule.
+- **Under 900px:** the logo and badges share the masthead's first row, scaled with the screen (logo 37vw, badges 7vw tall, both capped at their desktop size), and the search takes a full row. The stage stacks: the title band over the map's top, then 320px of map, then the dock, full width, square-cornered, no shadow, divided by a bottom rule.
 - **Under 640px:** panels go edge to edge (no side borders, no radius). Data grids drop their header row and reflow each row into a small labelled grid: four columns, or three for five-field rows; only times, durations, altitude, distance and last-seen get an 11px muted caption, since date, aircraft, route and status read on their own. The scheduled-versus-actual table keeps its table form at 12.5px.
 - **Rhythm:** 8px row padding, 14px cell and panel insets, 16px dock inset, 20px gutters and gaps, 24px section breaks.
 
@@ -270,7 +271,8 @@ Small, square-ish corners and hairline rules. Panels, the dock, buttons and inpu
 
 ### Buttons
 Compact and solid, 600 weight at 14px, 38px tall, 4px corners.
-- **App button:** sky fill, navy text, `sky-edge` border; lighter sky on hover. Used for "Open WingView 3D" and "Follow this flight live" in the masthead, and full-width (42px) at the foot of the airport dock.
+- **App button:** sky fill, navy text, `sky-edge` border; lighter sky on hover. Used full-width (42px) at the foot of the airport dock.
+- **Store badges:** Apple's "Download on the App Store" and Google's "Get it on Google Play" artwork, unaltered, both 135 x 40, 8px apart, linking to www.wingview.com/ios and /android.
 - **Primary:** navy fill, white text; `navy-hover` on hover. Used for search submit (44px beside a 44px input).
 - **Focus:** 2px sky outline, 2px offset, site-wide.
 
@@ -279,7 +281,7 @@ Compact and solid, 600 weight at 14px, 38px tall, 4px corners.
 - **Focus:** 2px sky outline inset by 1px, border to `sky-edge`.
 
 ### Navigation
-- **Masthead:** navy 600 links at 14px, 22px apart; the current page carries a 2px sky underline. Under 900px only the app button remains.
+- **Masthead:** no text links: logo, search, store badges. The tracker and the app are linked from the footer.
 - **Breadcrumbs:** 13px muted links with slash separators on a white bar.
 - **Footer:** deep navy, `band-text` copy, white links.
 
@@ -289,7 +291,7 @@ Compact and solid, 600 weight at 14px, 38px tall, 4px corners.
 - **Body:** 12px 14px; notes 12.5px muted under a `line-soft` rule.
 
 ### Status Band (signature)
-The one-line answer welded to the top edge of the dock: white text on a solid state fill, 11px 16px padding, the state word at 17px 700 and the detail at 600, spread to opposite ends. States: `ok` (arrived or landed on time), `late` (late departure or arrival, including a late departure on an otherwise on-time estimate), `bad` (diverted, cancelled), `live` (en route or taxiing with no delay known, in link blue), `idle` (scheduled, or no current data). The title band repeats the state as a 13px label chip with 3px corners.
+The one-line answer welded to the top edge of the dock: white text on a solid state fill, 11px 16px padding, the state word at 17px 700 and the detail at 600, spread to opposite ends. States: `ok` (arrived or landed on time), `late` (late departure or arrival, including a late departure on an otherwise on-time estimate), `bad` (diverted, cancelled), `live` (en route or taxiing with no delay known, in link blue), `idle` (scheduled, or no current data). The title band does not repeat it.
 
 ### Route Block
 Departure and arrival codes in 32px navy at either end, city names in 13px muted below. Between them a 2px track: dashed `route-ahead-dash` for the whole leg, solid `link` for the flown share, with a navy plane on a white disc at the progress point. Below a `line-soft` rule, the two times that matter at 19px navy with small zones, each with a 13px delay word in `ok` or `late`. A centred muted note gives distance flown and to go.

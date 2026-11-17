@@ -100,10 +100,16 @@ time, .num { font-variant-numeric: tabular-nums; }
 /* ---------- masthead ---------- */
 
 .masthead { background: var(--surface); border-bottom: 1px solid var(--line); }
-.masthead-in { display: flex; align-items: center; gap: 24px; height: 64px; }
-.brand { flex: none; line-height: 0; }
-.brand img { width: 140px; height: auto; }
-.find { position: relative; flex: 1; max-width: 460px; }
+/* logo, search at the page's centre, the app stores. The side columns are
+   equal and never narrower than the two badges (2 x 135px and their gap),
+   so the search stays centred and gives up its own width first */
+.masthead-in {
+	display: grid; grid-template-columns: minmax(278px, 1fr) minmax(0, 460px) minmax(278px, 1fr); grid-template-areas: "brand find stores";
+	align-items: center; gap: 24px; height: 64px;
+}
+.brand { grid-area: brand; justify-self: start; line-height: 0; }
+.brand img { width: 168px; height: auto; }
+.find { grid-area: find; position: relative; }
 .find input {
 	width: 100%; height: 40px; padding: 0 42px 0 12px;
 	border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface);
@@ -115,9 +121,10 @@ time, .num { font-variant-numeric: tabular-nums; }
 	position: absolute; top: 0; right: 0; width: 42px; height: 40px;
 	display: grid; place-items: center; border: 0; background: none; color: var(--navy); font-size: 17px; cursor: pointer;
 }
-.masthead-nav { margin-left: auto; display: flex; align-items: center; gap: 22px; font-size: 14px; font-weight: 600; }
-.masthead-nav > a:not(.btn) { color: var(--navy); }
-.masthead-nav > a[aria-current] { box-shadow: inset 0 -2px 0 var(--sky); padding-block: 6px; }
+/* Apple's and Google's own badges, unaltered, at the same height */
+.stores { grid-area: stores; justify-self: end; display: flex; gap: 8px; }
+.stores a { display: block; line-height: 0; border-radius: 6px; }
+.stores img { width: auto; height: 40px; }
 
 /* ---------- title band ---------- */
 
@@ -128,13 +135,18 @@ time, .num { font-variant-numeric: tabular-nums; }
 .band-sub a { color: #fff; font-weight: 600; }
 .band-sub a:hover { color: #fff; }
 .band-codes { color: #fff; font-weight: 600; }
-.band-id:has(> .band-logo) { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; align-items: center; }
-.band-logo { grid-row: span 2; width: 52px; height: 52px; padding: 6px; border-radius: 6px; background: #fff; object-fit: contain; }
+.band-id:has(> .band-logo, > .band-mark) { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; align-items: center; }
+.band-logo, .band-mark { grid-row: span 2; }
+.band-mark { line-height: 0; border-radius: 6px; }
+.band-logo { width: 52px; height: 52px; padding: 6px; border-radius: 6px; background: #fff; object-fit: contain; }
 .op { display: inline-block; width: 20px; height: 20px; margin-right: 8px; vertical-align: -5px; object-fit: contain; }
-.band-meta { font-size: 13px; color: #9db4d1; }
-.band-meta time { color: #dbe7f5; }
-.band-state { display: inline-block; margin-right: 14px; padding: 3px 9px; border-radius: 3px; font-size: 13px; font-weight: 700; color: #fff; vertical-align: 1px; }
-.band .s-live { box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.35); }
+/* "Updated 12 seconds ago": quiet, and steady as the seconds count */
+.band-meta { font-size: 13px; color: #b9cce4; font-variant-numeric: tabular-nums; }
+.band-meta time:not([data-ago]) { color: #dbe7f5; }
+/* on a page with a map the band is the top of the stage, and the map runs
+   on under it through 80% navy */
+.stage > .band { position: relative; z-index: 3; }
+.stage:not(.stage-bare) > .band { background: color-mix(in srgb, var(--navy) 80%, transparent); }
 
 /* ---------- stage: the live map with the docked panel ---------- */
 
@@ -395,14 +407,19 @@ a.mk-plane-sm:hover { color: var(--link); }
 
 @media (max-width: 899px) {
 	:root { --gutter: 16px; }
-	.masthead-in { flex-wrap: wrap; height: auto; gap: 10px 16px; padding-block: 10px; }
-	.brand img { width: 124px; }
-	.find { order: 3; flex-basis: 100%; max-width: none; }
-	.masthead-nav > a:not(.btn) { display: none; }
-	.masthead-nav .btn { height: 34px; padding-inline: 12px; font-size: 13px; }
+	/* logo and badges share the top row, scaled with the screen; search below */
+	.masthead-in { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "brand stores" "find find"; height: auto; gap: 10px 12px; padding-block: 10px; }
+	.brand img { width: min(37vw, 168px); }
+	.find { max-width: none; }
+	.stores { gap: 6px; }
+	.stores img { height: min(7vw, 40px); }
 	.band h1 { font-size: 24px; }
 	.stage { background: none; border: 0; }
-	.stage-map { position: relative; height: 320px; }
+	/* the band over the map's top, then 320px of map, then the dock */
+	.stage:not(.stage-bare) { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 320px auto; }
+	.stage:not(.stage-bare) > .stage-map { grid-area: 1 / 1 / 3 / 2; position: relative; }
+	.stage:not(.stage-bare) > .band { grid-area: 1 / 1; align-self: start; }
+	.stage:not(.stage-bare) > .stage-wrap { grid-area: 3 / 1; margin-inline: 0; } /* auto margins would shrink a grid item to fit */
 	.stage-wrap { padding-inline: 0; }
 	.stage { min-height: 0; }
 	.stage-wrap { padding-block: 0; }

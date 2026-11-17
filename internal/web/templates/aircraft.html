@@ -1,22 +1,21 @@
 {{define "content"}}{{$v := .Body}}
-<div class="band">
-	<div class="wrap band-in">
-		<div class="band-id">
-			{{template "band-logo" $v.OperatorICAO}}
-			<h1>{{$v.Registration}}</h1>
-			<p class="band-sub">
-				{{if $v.Name}}<span>{{$v.Name}}</span>{{end}}
-				{{if $v.OperatorURL}}<a href="{{$v.OperatorURL}}">{{$v.Operator}}</a>{{else if $v.Operator}}<span>{{$v.Operator}}</span>{{end}}
-				{{if and $v.Hex (ne $v.Hex $v.Registration)}}<span>Mode S {{$v.Hex}}</span>{{end}}
-			</p>
-		</div>
-		<p class="band-meta">{{with $v.Band}}<span class="band-state s-{{.Class}}">{{.Title}}</span>{{end}} Updated <time datetime="{{.Updated.ISO}}">{{.Updated.Clock}} UTC</time></p>
-	</div>
-</div>
-
-<section class="stage{{if not $v.Map}} stage-bare{{end}}" aria-label="Where {{$v.Registration}} is now">
+<div class="stage{{if not $v.Map}} stage-bare{{end}}">
 	{{if $v.Map}}<div class="stage-map">{{template "map" $v.Map}}</div>{{end}}
-	<div class="wrap stage-wrap">
+	<div class="band">
+		<div class="wrap band-in">
+			<div class="band-id">
+				{{template "band-logo" $v.OperatorICAO}}
+				<h1>{{$v.Registration}}</h1>
+				<p class="band-sub">
+					{{if $v.Name}}<span>{{$v.Name}}</span>{{end}}
+					{{if $v.OperatorURL}}<a href="{{$v.OperatorURL}}">{{$v.Operator}}</a>{{else if $v.Operator}}<span>{{$v.Operator}}</span>{{end}}
+					{{if and $v.Hex (ne $v.Hex $v.Registration)}}<span>Mode S {{$v.Hex}}</span>{{end}}
+				</p>
+			</div>
+			<p class="band-meta">Updated <time datetime="{{.Updated.ISO}}" data-ago>{{.Updated.Clock}} UTC</time></p>
+		</div>
+	</div>
+	<section class="wrap stage-wrap" aria-label="Where {{$v.Registration}} is now">
 		<div class="dock">
 			{{template "band-status" $v.Band}}
 			{{with $v.ModelURL}}<iframe class="model" src="{{.}}" title="3D model of {{$v.Registration}}"></iframe>{{end}}
@@ -32,8 +31,8 @@
 				{{end}}
 			</div>
 		</div>
-	</div>
-</section>
+	</section>
+</div>
 
 <div class="wrap cols">
 	<div class="col-main">

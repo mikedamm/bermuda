@@ -269,7 +269,7 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 		v.ModelURL = s.modelURL(v.Registration)
 	}
 	if v.Live != nil && !v.LADD {
-		p.AppURL, p.AppLabel = s.appLink("flight", v.Live.FlightID), "Follow this aircraft live"
+		p.AppURL = s.appLink("flight", v.Live.FlightID)
 	}
 	p.Crumbs = []Crumb{{"Home", "/"}}
 	if v.OperatorURL != "" {

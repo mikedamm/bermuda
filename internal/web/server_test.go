@@ -180,7 +180,11 @@ func TestPages(t *testing.T) {
 	}{
 		{"/flight/ASA14", 200, "", []string{
 			`<link rel="canonical" href="https://www.wingview.com/flight/ASA14">`,
-			`"@type":"Flight"`, ">AS14</h1>", "Alaska Airlines", `<p class="status s-`, "<strong>En route</strong>", "Gate departure",
+			`"@type":"Flight"`, ">Alaska Airlines Flight 14</h1>", `<p class="status s-`, "<strong>En route</strong>", "Gate departure",
+			// the masthead's store badges, and the band's count-up time
+			`<a href="https://www.wingview.com/ios"><img src="/tracker/static/`, `/badge-app-store.svg" width="135" height="40" alt="Download on the App Store">`,
+			`<a href="https://www.wingview.com/android"><img src="/tracker/static/`, `/badge-google-play.svg" width="135" height="40" alt="Get it on Google Play">`,
+			`data-ago>`,
 			`href="/aircraft/N527AS"`, `href="/airport/KSEA"`, "2h 30m", // history duration from off/on, not the "seen" span
 		}},
 		{"/flight/AS14", 301, "/flight/ASA14", nil},

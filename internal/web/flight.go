@@ -19,6 +19,7 @@ import (
 type FlightPageV struct {
 	Ident       string
 	Number      string
+	Heading     string // "United Airlines Flight 7"
 	Airline     string
 	AirlineURL  string
 	AirlineICAO string
@@ -176,6 +177,7 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 			}
 		}
 	}
+	v.Heading = flightHeading(v)
 	if live != nil {
 		v.AppURL = s.appLink("flight", live.FlightID)
 	}
@@ -202,7 +204,7 @@ func (s *Server) flightPage(ctx context.Context, r *http.Request) (resp, error) 
 	p.Section = "flights"
 	p.Query = v.Number
 	if v.AppURL != "" {
-		p.AppURL, p.AppLabel = v.AppURL, "Follow this flight live"
+		p.AppURL = v.AppURL
 	}
 	if live != nil && featured.Phase != "arrived" && featured.Phase != "cancelled" {
 		p.Live = s.liveURL(live.FlightID, now)
@@ -255,6 +257,31 @@ func (s *Server) callsignHistory(ctx context.Context, callsign string, airframes
 		}
 	}
 	return dedup
+}
+
+// flightHeading names a flight the way people say it, "United Airlines
+// Flight 7": the airline, then the number without the airline's code. The
+// number is the IATA one when the flight has it (what tickets and boards
+// show), else the callsign's. Without an airline it is the flight number.
+func flightHeading(v FlightPageV) string {
+	if v.Airline == "" {
+		return v.Number
+	}
+	n := ""
+	// the IATA number differs from the callsign; one that doesn't is the
+	// callsign itself, and a registration like N61103 would split as "N6" 1103
+	if m := iataFlight.FindStringSubmatch(v.Number); m != nil && v.Number != v.Ident {
+		n = m[2]
+	} else if _, num, ok := store.AirlineCallsign(v.Ident); ok && v.Number == v.Ident {
+		n = num
+	}
+	if t := strings.TrimLeft(n, "0"); t != "" && t[0] <= '9' {
+		n = t // "UA0007" is Flight 7
+	}
+	if n == "" {
+		return v.Number
+	}
+	return v.Airline + " Flight " + n
 }
 
 func flightTitle(v FlightPageV) string {

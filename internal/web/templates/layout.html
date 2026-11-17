@@ -37,9 +37,9 @@
 			<input id="q" name="q" type="search" value="{{.Query}}" placeholder="Flight, tail number or airport" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="search">
 			<button type="submit"><span class="vh">Search</span>{{template "icon-search"}}</button>
 		</form>
-		<nav class="masthead-nav" aria-label="WingView">
-			<a href="/tracker/"{{if eq .Section "home"}} aria-current="page"{{end}}>Flight tracker</a>
-			<a class="btn btn-app" href="{{.AppURL}}">{{.AppLabel}}</a>
+		<nav class="stores" aria-label="Get the WingView app">
+			<a href="{{.Site}}/ios"><img src="{{static "badge-app-store.svg"}}" width="135" height="40" alt="Download on the App Store"></a>
+			<a href="{{.Site}}/android"><img src="{{static "badge-google-play.svg"}}" width="135" height="40" alt="Get it on Google Play"></a>
 		</nav>
 	</div>
 </header>

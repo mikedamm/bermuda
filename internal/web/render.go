@@ -24,7 +24,6 @@ type Page struct {
 	JSONLD      []any
 	Crumbs      []Crumb
 	AppURL      string // deep link into the WingView app for this page
-	AppLabel    string
 	Query       string // search box value
 	Section     string
 	Body        any
@@ -59,8 +58,8 @@ type Crumb struct {
 func (s *Server) basePage(status int, title, desc, canonicalPath string) Page {
 	p := Page{
 		Status: status, Title: title, Description: desc,
-		AppURL: s.cfg.AppURL, AppLabel: "Open WingView 3D",
-		Site: s.cfg.SiteURL, Year: time.Now().Year(),
+		AppURL: s.cfg.AppURL,
+		Site:   s.cfg.SiteURL, Year: time.Now().Year(),
 		OGImage: s.cfg.SiteURL + s.staticURL("og-default.jpg"),
 		Map:     s.mapAssets(),
 		Updated: timeCell(time.Now(), "UTC", ""),

@@ -146,7 +146,7 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 	p := s.basePage(http.StatusOK, title, desc, "/airport/"+a.ICAO)
 	p.Section = "airports"
 	p.Query = a.Code()
-	p.AppURL, p.AppLabel = s.appLink("airport", a.Code()), "See "+a.Code()+" in 3D"
+	p.AppURL = s.appLink("airport", a.Code())
 	p.Crumbs = []Crumb{{"Home", "/"}, {a.Name, ""}}
 	p.JSONLD = append(p.JSONLD, airportLD(a, s.cfg.SiteURL))
 	return s.html("airport", p, v, time.Minute)

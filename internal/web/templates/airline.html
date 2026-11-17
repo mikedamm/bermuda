@@ -6,7 +6,7 @@
 			<h1>{{$v.Name}}</h1>
 			<p class="band-sub"><span class="band-codes">{{if $v.IATA}}{{$v.IATA}} / {{end}}{{$v.ICAO}}</span><span>Flights and aircraft tracked this week</span></p>
 		</div>
-		<p class="band-meta">Updated <time datetime="{{.Updated.ISO}}">{{.Updated.Clock}} UTC</time></p>
+		<p class="band-meta">Updated <time datetime="{{.Updated.ISO}}" data-ago>{{.Updated.Clock}} UTC</time></p>
 	</div>
 </div>
 

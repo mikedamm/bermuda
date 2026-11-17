@@ -97,3 +97,21 @@ func TestZoneAndCoordinates(t *testing.T) {
 		t.Errorf("Sydney: %q", got)
 	}
 }
+
+func TestFlightHeading(t *testing.T) {
+	for _, c := range []struct {
+		v    FlightPageV
+		want string
+	}{
+		{FlightPageV{Ident: "UAL7", Number: "UA7", Airline: "United Airlines"}, "United Airlines Flight 7"},
+		{FlightPageV{Ident: "UAL7", Number: "UA0007", Airline: "United Airlines"}, "United Airlines Flight 7"},
+		{FlightPageV{Ident: "SWA12AB", Number: "WN1234", Airline: "Southwest Airlines"}, "Southwest Airlines Flight 1234"}, // the ticketed number, not the callsign's
+		{FlightPageV{Ident: "ASA14", Number: "ASA14", Airline: "Alaska Airlines"}, "Alaska Airlines Flight 14"},            // no IATA number: the callsign's
+		{FlightPageV{Ident: "N61103", Number: "N61103", Airline: "Textron Aviation"}, "N61103"},                            // a registration, not "N6" 1103
+		{FlightPageV{Ident: "UAL7", Number: "UA7"}, "UA7"},                                                                 // no airline
+	} {
+		if got := flightHeading(c.v); got != c.want {
+			t.Errorf("flightHeading(%s %s) = %q, want %q", c.v.Ident, c.v.Number, got, c.want)
+		}
+	}
+}

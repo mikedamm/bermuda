@@ -40,6 +40,7 @@
 				if (!el || shown[k] === html || el.contains(document.activeElement)) continue;
 				el.innerHTML = shown[k] = html;
 			}
+			document.dispatchEvent(new Event("wv:parts")); // site.js recounts the new "Updated" time at once
 			if (d.map && map) map.dispatchEvent(new CustomEvent("wv:live", { detail: d.map }));
 			if (d.next) url = d.next;
 			stopped = !!d.done;

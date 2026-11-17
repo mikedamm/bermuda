@@ -1,7 +1,35 @@
 // WingView flight pages: draws each page's map from the data the
 // server embedded next to it, with MapLibre GL JS over WingView's Protomaps
-// basemap (a PMTiles archive read by HTTP range requests). Everything else
-// on the page works without this script.
+// basemap (a PMTiles archive read by HTTP range requests), and counts the
+// title band's "Updated" time up. Everything else on the page works
+// without this script.
+
+// "Updated 12 seconds ago": the band's time counts up from when the page's
+// data was read. The server writes the clock time, which stays for readers
+// without this script and becomes the tooltip.
+(() => {
+	"use strict";
+	const plural = (n, unit) => n + " " + unit + (n === 1 ? "" : "s") + " ago";
+	const ago = (s) =>
+		s < 5 ? "just now"
+		: s < 60 ? s + " seconds ago"
+		: s < 3600 ? plural(Math.floor(s / 60), "minute")
+		: s < 86400 ? plural(Math.floor(s / 3600), "hour")
+		: plural(Math.floor(s / 86400), "day");
+	const tick = () => {
+		for (const t of document.querySelectorAll("time[data-ago]")) {
+			const at = Date.parse(t.dateTime);
+			if (Number.isNaN(at)) continue;
+			t.title ||= t.textContent;
+			const text = ago(Math.max(0, Math.round((Date.now() - at) / 1000)));
+			if (t.textContent !== text) t.textContent = text;
+		}
+	};
+	tick();
+	setInterval(tick, 1000);
+	document.addEventListener("wv:parts", tick); // live refresh swapped in a new time
+})();
+
 (() => {
 	"use strict";
 	const cfg = document.body.dataset;
@@ -65,19 +93,23 @@
 		// edge of the content column, not the window: on a wide screen the
 		// map runs edge to edge but the route stays where the page's content is
 		const padding = () => {
-			const dock = el.closest(".stage")?.querySelector(".dock");
-			const over = dock && matchMedia("(min-width: 900px)").matches;
-			if (!over) return { top: 52, bottom: 52, left: 52, right: 52 }; // dock sits below: even margins
+			const stage = el.closest(".stage");
+			const dock = stage?.querySelector(".dock");
 			const box = el.getBoundingClientRect();
+			// the title band lies over the map's top: frame the route below it
+			const band = stage?.querySelector(":scope > .band");
+			const under = band ? Math.max(0, band.getBoundingClientRect().bottom - box.top) : 0;
+			const over = dock && matchMedia("(min-width: 900px)").matches;
+			if (!over) return { top: under + 52, bottom: 52, left: 52, right: 52 }; // dock sits below: even margins
 			const left = Math.min(dock.getBoundingClientRect().right - box.left + 48, el.clientWidth * 0.62);
 			const col = dock.parentElement; // .stage-wrap, the content column
 			const end = col.getBoundingClientRect().right - parseFloat(getComputedStyle(col).paddingRight);
 			// 64 px inside the column leaves room for a pin's label, which sits to its right
 			const right = Math.max(64, Math.min(box.right - end + 64, el.clientWidth - left - 240));
 			// the panels below rise over the map's faded foot: keep the route above it
-			const below = el.closest(".stage").nextElementSibling;
+			const below = stage.nextElementSibling;
 			const rise = below ? Math.max(0, box.bottom - below.getBoundingClientRect().top) : 0;
-			return { top: 56, bottom: rise + 80, left, right };
+			return { top: under + 56, bottom: rise + 80, left, right };
 		};
 		const bounds = (pts) => pts.reduce((b, c) => b.extend(c), new ml.LngLatBounds(pts[0], pts[0]));
 		const coords = [];
