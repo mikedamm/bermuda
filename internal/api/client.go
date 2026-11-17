@@ -71,76 +71,52 @@ func New(base, token string, maxConcurrent int, log *slog.Logger) *Client {
 	}
 }
 
-// TTLs per endpoint: live data short, archives longer.
-const (
-	ttlSearch   = 45 * time.Second
-	ttlAircraft = 90 * time.Second
-	ttlFlights  = 8 * time.Minute
-	ttlAirport  = 45 * time.Second
-	ttlMissing  = 5 * time.Minute
-	ttlPlan     = 2 * time.Minute  // a live flight's route, amendments included
-	ttlTrail    = 10 * time.Second // a live flight's trail, memory only
-	ttlLive     = 5 * time.Second  // a flight's live state, memory only: every poller in this window shares one lookup
-	ttlArchive  = 6 * time.Hour    // a closed flight's plan or track never changes
-)
+// apiTTL is how long every API answer is reused, misses included. The
+// real-time endpoint (FlightLive) is never cached.
+const apiTTL = 60 * time.Second
 
 func (c *Client) Aircraft(ctx context.Context, key string, days, limit int) (*AircraftPage, error) {
 	q := url.Values{"days": {strconv.Itoa(days)}, "limit": {strconv.Itoa(limit)}}
-	return get[AircraftPage](ctx, c, "/aircraft/"+url.PathEscape(key), q, ttlAircraft)
+	return get[AircraftPage](ctx, c, "/aircraft/"+url.PathEscape(key), q)
 }
 
 func (c *Client) AircraftFlights(ctx context.Context, key string, days, limit int) (*FlightsPage, error) {
 	q := url.Values{"days": {strconv.Itoa(days)}, "limit": {strconv.Itoa(limit)}}
-	return get[FlightsPage](ctx, c, "/aircraft/"+url.PathEscape(key)+"/flights", q, ttlFlights)
+	return get[FlightsPage](ctx, c, "/aircraft/"+url.PathEscape(key)+"/flights", q)
 }
 
 func (c *Client) Search(ctx context.Context, q string, limit int) (*Search, error) {
 	v := url.Values{"q": {q}, "limit": {strconv.Itoa(limit)}}
-	return get[Search](ctx, c, "/search/aircraft", v, ttlSearch)
+	return get[Search](ctx, c, "/search/aircraft", v)
 }
 
 func (c *Client) AirportTraffic(ctx context.Context, code string, radiusMi int) (*AirportTraffic, error) {
 	v := url.Values{"radius_mi": {strconv.Itoa(radiusMi)}}
-	return get[AirportTraffic](ctx, c, "/airports/"+url.PathEscape(code)+"/aircraft", v, ttlAirport)
+	return get[AirportTraffic](ctx, c, "/airports/"+url.PathEscape(code)+"/aircraft", v)
 }
 
 // FlightLive is one flight's real-time state, read from the gateway's
-// memory in milliseconds. It is kept in memory for a few seconds, so every
-// page polling one flight shares a lookup, and never written to the shared
-// store: it is stale in seconds. A closed flight is ErrNotFound.
+// memory in milliseconds. It is never cached: every call is one lookup.
+// A closed flight is ErrNotFound.
 func (c *Client) FlightLive(ctx context.Context, flightID string) (*LiveAnswer, error) {
-	path := "/flights/" + url.PathEscape(flightID) + "/live"
-	return cache.Do(c.cache, path, func() (*LiveAnswer, time.Duration, error) {
-		lctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Second)
-		defer cancel()
-		body, err := c.fetch(lctx, path)
-		switch {
-		case errors.Is(err, ErrNotFound), errors.Is(err, ErrBadRequest):
-			return nil, ttlLive, err
-		case err != nil:
-			return nil, 0, err
-		}
-		var out LiveAnswer
-		if err := json.Unmarshal(body, &out); err != nil {
-			return nil, 0, fmt.Errorf("%w: decode: %v", ErrUpstream, err)
-		}
-		return &out, ttlLive, nil
-	})
+	body, err := c.fetch(ctx, "/flights/"+url.PathEscape(flightID)+"/live")
+	if err != nil {
+		return nil, err
+	}
+	var out LiveAnswer
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("%w: decode: %v", ErrUpstream, err)
+	}
+	return &out, nil
 }
 
 // FlightPlan is the route in force for one flight, resolved to positions.
-// Plans change rarely, so they are shared through the store too.
 func (c *Client) FlightPlan(ctx context.Context, flightID string) (*PlanAnswer, error) {
-	return getFor(ctx, c, "/flights/"+url.PathEscape(flightID)+"/plan", nil, func(p *PlanAnswer) time.Duration {
-		if p.Live {
-			return ttlPlan
-		}
-		return ttlArchive
-	})
+	return get[PlanAnswer](ctx, c, "/flights/"+url.PathEscape(flightID)+"/plan", nil)
 }
 
-// FlightTrack is one flight's flown trail. A live trail is stale in seconds,
-// so it is kept in memory briefly and never written to the store.
+// FlightTrack is one flight's flown trail, kept in memory only (a trail can
+// be large, and a live one changes by the second).
 func (c *Client) FlightTrack(ctx context.Context, flightID string) (*TrackAnswer, error) {
 	path := "/flights/" + url.PathEscape(flightID) + "/track?res=line"
 	return cache.Do(c.cache, path, func() (*TrackAnswer, time.Duration, error) {
@@ -149,7 +125,7 @@ func (c *Client) FlightTrack(ctx context.Context, flightID string) (*TrackAnswer
 		body, err := c.fetch(lctx, path)
 		switch {
 		case errors.Is(err, ErrNotFound), errors.Is(err, ErrBadRequest):
-			return nil, time.Minute, err
+			return nil, apiTTL, err
 		case err != nil:
 			return nil, 0, err
 		}
@@ -157,10 +133,7 @@ func (c *Client) FlightTrack(ctx context.Context, flightID string) (*TrackAnswer
 		if err := json.Unmarshal(body, &out); err != nil {
 			return nil, 0, fmt.Errorf("%w: decode: %v", ErrUpstream, err)
 		}
-		if out.Live {
-			return &out, ttlTrail, nil
-		}
-		return &out, ttlArchive, nil
+		return &out, apiTTL, nil
 	})
 }
 
@@ -178,13 +151,9 @@ func (c *Client) FreshAirportTraffic(ctx context.Context, code string, radiusMi 
 	return &out, nil
 }
 
-func get[T any](ctx context.Context, c *Client, path string, q url.Values, ttl time.Duration) (*T, error) {
-	return getFor(ctx, c, path, q, func(*T) time.Duration { return ttl })
-}
-
-// getFor is get with a lifetime that depends on the answer (a live flight's
-// plan changes, an archived one's never does).
-func getFor[T any](ctx context.Context, c *Client, path string, q url.Values, ttlOf func(*T) time.Duration) (*T, error) {
+// get returns an API answer, reusing it (from memory, then the shared store)
+// for apiTTL.
+func get[T any](ctx context.Context, c *Client, path string, q url.Values) (*T, error) {
 	key := path + "?" + q.Encode()
 	return cache.Do(c.cache, key, func() (*T, time.Duration, error) {
 		// The load is shared by every waiting caller, so one client hanging up
@@ -194,18 +163,18 @@ func getFor[T any](ctx context.Context, c *Client, path string, q url.Values, tt
 
 		// second tier: an answer another instance (or this one before a
 		// restart) already fetched
-		if out, left, hit, err := fromStore(lctx, c, key, ttlOf); hit {
+		if out, left, hit, err := fromStore[T](lctx, c, key); hit {
 			return out, left, err
 		}
 
 		body, err := c.fetch(lctx, key)
 		switch {
 		case errors.Is(err, ErrNotFound):
-			c.store(key, http.StatusNotFound, nil, ttlMissing)
-			return nil, ttlMissing, err // remember misses, they are common bot traffic
+			c.store(key, http.StatusNotFound, nil)
+			return nil, apiTTL, err // remember misses, they are common bot traffic
 		case errors.Is(err, ErrBadRequest):
-			c.store(key, http.StatusBadRequest, nil, ttlMissing)
-			return nil, ttlMissing, err
+			c.store(key, http.StatusBadRequest, nil)
+			return nil, apiTTL, err
 		case err != nil:
 			return nil, 0, err
 		}
@@ -213,16 +182,15 @@ func getFor[T any](ctx context.Context, c *Client, path string, q url.Values, tt
 		if err := json.Unmarshal(body, &out); err != nil {
 			return nil, 0, fmt.Errorf("%w: decode: %v", ErrUpstream, err)
 		}
-		ttl := ttlOf(&out)
-		c.store(key, http.StatusOK, body, ttl)
-		return &out, ttl, nil
+		c.store(key, http.StatusOK, body)
+		return &out, apiTTL, nil
 	})
 }
 
 // fromStore reads the shared tier within a short budget: a slow or failing
 // database is a miss, never a slow page.
 // A hit returns the stored answer, or the stored ErrNotFound/ErrBadRequest.
-func fromStore[T any](ctx context.Context, c *Client, key string, ttlOf func(*T) time.Duration) (out *T, left time.Duration, hit bool, err error) {
+func fromStore[T any](ctx context.Context, c *Client, key string) (out *T, left time.Duration, hit bool, err error) {
 	if c.l2 == nil {
 		return nil, 0, false, nil
 	}
@@ -247,20 +215,20 @@ func fromStore[T any](ctx context.Context, c *Client, key string, ttlOf func(*T)
 			return nil, 0, false, nil
 		}
 		c.stats.hits.Add(1)
-		return &v, min(left, ttlOf(&v)), true, nil
+		return &v, min(left, apiTTL), true, nil
 	case http.StatusNotFound:
 		c.stats.hits.Add(1)
-		return nil, min(left, ttlMissing), true, ErrNotFound
+		return nil, min(left, apiTTL), true, ErrNotFound
 	case http.StatusBadRequest:
 		c.stats.hits.Add(1)
-		return nil, min(left, ttlMissing), true, ErrBadRequest
+		return nil, min(left, apiTTL), true, ErrBadRequest
 	}
 	return nil, 0, false, nil
 }
 
 // store writes an answer to the shared tier in the background; when writes
 // back up, new ones are dropped rather than queued.
-func (c *Client) store(key string, status int, body []byte, ttl time.Duration) {
+func (c *Client) store(key string, status int, body []byte) {
 	if c.l2 == nil {
 		return
 	}
@@ -273,7 +241,7 @@ func (c *Client) store(key string, status int, body []byte, ttl time.Duration) {
 		defer func() { <-c.l2w }()
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		if err := c.l2.Put(ctx, key, status, body, time.Now().Add(ttl)); err != nil {
+		if err := c.l2.Put(ctx, key, status, body, time.Now().Add(apiTTL)); err != nil {
 			c.stats.writeErrors.Add(1)
 			c.log.Debug("cache write failed", "key", key, "err", err)
 			return

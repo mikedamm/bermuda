@@ -58,14 +58,15 @@ One Go binary, standard library only.
   templates, plus the aircraft's new position on the map. The URL is
   HMAC-signed, bound to one flight, valid for 6 hours and renewed by each
   answer, so it only works from that flight's page: there is no key to
-  enumerate. One render per flight answers every poller for 5 s and the
-  CDN reuses it for 10 s. No CORS, `Cross-Origin-Resource-Policy:
+  enumerate. Every poll is one fresh render from one real-time lookup;
+  neither is cached. No CORS, `Cross-Origin-Resource-Policy:
   same-origin`, `noindex`, and robots.txt disallows it. Polling pauses in
   hidden tabs, backs off on errors and stops when the flight arrives. The
   signing key is derived from `WV_API_TOKEN`, so every instance agrees.
 - **Upstream protection.** At most 24 concurrent API calls, a 10 s timeout,
-  one retry on 5xx, and short TTL caches per endpoint. Not-found answers are
-  cached too, because bots probe a lot of nonsense.
+  one retry on 5xx, and every API answer cached for 60 s (in memory, then the
+  shared store), except the real-time `/live` lookup, which is never cached.
+  Not-found answers are cached too, because bots probe a lot of nonsense.
 
 ```
 cmd/site            main: env config, crawler, HTTP server

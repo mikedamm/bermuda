@@ -12,9 +12,8 @@ package web
 //     its cache key still cannot hand a signed answer to an unsigned URL.
 //   - an answer is the page's own HTML for the parts that change, plus the
 //     map's moving pieces: nothing the page does not already show.
-//   - answers are rendered per poll and never stored by the CDN; the API
-//     client shares one live lookup per flight among every poller for a few
-//     seconds, so more viewers cost the API nothing.
+//   - answers are rendered per poll from one real-time lookup (never cached)
+//     and are never stored by a browser or the CDN.
 //   - no CORS, a same-origin resource policy, noindex, and robots.txt.
 
 import (
