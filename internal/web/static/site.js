@@ -6,49 +6,25 @@
 
 // The aircraft page's band: it sticks to the top, and when the dock scrolls
 // up and touches it the dock folds into it: this marks the band is-docked
-// and CSS quickly fades the dock out and condenses the band into a bar with
-// the dock's one-line summary (and reverses it on the way back down). This
-// measures what CSS needs to place the condensed names; the band keeps its
-// height in the flow, so nothing below it moves.
+// and CSS quickly fades the dock out and condenses the band into a bar (the
+// WingView mark, the dock's one-line summary, the codes by the tail), and
+// reverses it on the way back down. The band keeps its height in the flow,
+// so nothing below it moves.
 (() => {
 	"use strict";
 	const band = document.querySelector("[data-condense]");
 	if (!band) return;
 	const stage = band.nextElementSibling;
 	const dock = stage?.querySelector(".dock");
-	const inner = band.querySelector(".band-in");
-	const id = band.querySelector(".band-id"), tail = band.querySelector(".band-tail"), sum = band.querySelector(".band-sum");
 	const BAR = 56; // the condensed height
 	const SLACK = 6; // px past the line before it undocks, so it cannot flicker there
 	let height = 0;
 
-	// offset metrics ignore transforms, so this reads the band as laid out
-	// whatever state it is drawn in
+	// how much of the band the condensed bar clips away (offsetHeight
+	// ignores the clip, so this reads the band as laid out)
 	const measure = () => {
 		height = band.offsetHeight;
-		const cut = Math.max(0, height - BAR);
-		const k = 1 - parseFloat(getComputedStyle(band).getPropertyValue("--shrink") || "0.36"); // the names' condensed scale
-		// an element's middle, from the band's top (whichever ancestor offsetTop counts from)
-		const mid = (el) => {
-			let top = 0;
-			for (let n = el; n && n !== inner; n = n.offsetParent) top += n.offsetTop;
-			return top + el.offsetHeight / 2;
-		};
-		band.style.setProperty("--cut", cut + "px");
-		// each block scales about its own middle, then rises to the bar's
-		if (id) band.style.setProperty("--lift-id", mid(id) - BAR / 2 + "px");
-		if (tail) {
-			// the tail number alone is centred (the airframe under it fades),
-			// and the block scales about its middle, not the number's
-			const reg = tail.querySelector("h1") || tail, t = mid(tail);
-			band.style.setProperty("--lift-tail", t + (mid(reg) - t) * k - BAR / 2 + "px");
-		}
-		if (sum && inner) {
-			// the summary takes the bar's middle, clear of the condensed names
-			const left = id ? id.offsetLeft + id.offsetWidth * k : 0;
-			const right = tail ? inner.clientWidth - (tail.offsetLeft + tail.offsetWidth * (1 - k)) : 0;
-			band.style.setProperty("--sum-inset", Math.round(Math.max(left, right) + 24) + "px");
-		}
+		band.style.setProperty("--cut", Math.max(0, height - BAR) + "px");
 	};
 	// docked once the dock's top meets the full band's foot; undocked again
 	// only once it is back past the line by SLACK
@@ -73,7 +49,7 @@
 		update();
 	};
 	addEventListener("resize", again);
-	document.fonts?.ready.then(again); // Inter's widths, once it has loaded
+	document.fonts?.ready.then(again); // the band's height in Inter, once it has loaded
 	again();
 	requestAnimationFrame(() => requestAnimationFrame(() => band.classList.add("cond-ready"))); // animate from here on
 })();

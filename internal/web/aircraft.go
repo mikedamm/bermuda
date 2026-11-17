@@ -52,12 +52,13 @@ type AircraftPageV struct {
 }
 
 // Hero is the band's named mark: an airline's logo and a flight or
-// operator name, linked to its page.
-type Hero struct{ Name, URL, Logo string }
+// operator name, linked to its page. Code is the short form the condensed
+// bar shows: the flight's ICAO ident (ASA14) or the operator's (ASA).
+type Hero struct{ Name, URL, Logo, Code string }
 
 // legHero names a leg as its own flight page does.
 func legHero(l LegV) *Hero {
-	return &Hero{Name: flightName(l.Number, l.Ident, l.Airline), URL: l.URL, Logo: l.Op}
+	return &Hero{Name: flightName(l.Number, l.Ident, l.Airline), URL: l.URL, Logo: l.Op, Code: l.Ident}
 }
 
 type AirportCountV struct {
@@ -205,7 +206,7 @@ func (s *Server) aircraftPage(ctx context.Context, r *http.Request) (resp, error
 		}
 		v.Hero = legHero(next)
 	case v.Operator != "":
-		v.Hero = &Hero{Name: v.Operator, URL: v.OperatorURL, Logo: v.OperatorICAO}
+		v.Hero = &Hero{Name: v.Operator, URL: v.OperatorURL, Logo: v.OperatorICAO, Code: v.OperatorICAO}
 	}
 	// The map and the Flights panel read the same flights: the one under
 	// way, else the latest one flown, and those before it, latest first.

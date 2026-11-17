@@ -160,58 +160,63 @@ time, .num { font-variant-numeric: tabular-nums; }
 
 /* The aircraft page's band sticks to the top. When the dock scrolls up and
    touches it, site.js marks it is-docked: the dock fades out quickly as it
-   lifts into the band, and the band condenses into a 56px bar with the
-   dock's one-line summary; scrolling back down past the line reverses it.
-   --cp (condensed) and --sp (summary shown) are registered so they animate;
-   site.js measures --cut, --lift-id, --lift-tail and --sum-inset. The band
-   keeps its height in the flow, so nothing below moves: it clips its foot
-   and scales its names. Transitions start once site.js has placed the band
+   lifts into the band, the band condenses to a 56px bar, and its full row
+   gives way to band-bar: the WingView mark at the left, the dock's one-line
+   summary in the middle, the airline's mark and the short codes by the tail
+   at the right. Scrolling back past the line reverses it. --cp (condensed)
+   and --sp (bar shown) are registered so they animate; site.js measures
+   --cut. The band keeps its height in the flow, so nothing below moves: it
+   clips its foot. Transitions start once site.js has placed the band
    (cond-ready), so a page reloaded part-way down does not animate in. */
 @property --cp { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --sp { syntax: "<number>"; inherits: true; initial-value: 0; }
 .band-sticky.is-docked { --cp: 1; --sp: 1; }
 .band-sticky.is-docked + .stage .dock { opacity: 0; transform: translateY(-12px) scale(0.98); pointer-events: none; }
 .band-sticky + .stage .dock { transform-origin: top center; }
-/* docking: the dock goes first, the bar condenses with it, the summary follows */
-.band-sticky.cond-ready.is-docked { transition: --cp 240ms cubic-bezier(0.2, 0.7, 0.2, 1), --sp 180ms ease-out 110ms; }
+/* docking: the dock and the full row go first, the bar condenses with
+   them, the condensed row follows */
+.band-sticky.cond-ready.is-docked { transition: --cp 240ms cubic-bezier(0.2, 0.7, 0.2, 1), --sp 180ms ease-out 120ms; }
 .band-sticky.cond-ready.is-docked + .stage .dock { transition: opacity 140ms ease-out, transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1); }
-/* undocking: the summary goes first, the bar opens, the dock returns */
+/* undocking: the condensed row goes first, the bar opens, the dock returns */
 .band-sticky.cond-ready { transition: --cp 240ms cubic-bezier(0.2, 0.7, 0.2, 1) 60ms, --sp 120ms ease-out; }
 .band-sticky.cond-ready + .stage .dock { transition: opacity 180ms ease-out 160ms, transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1) 140ms; }
 @media (prefers-reduced-motion: reduce) {
 	.band-sticky.cond-ready, .band-sticky.cond-ready + .stage .dock { transition: none; }
 }
 .band-sticky {
-	--shrink: 0.36; /* the names lose this much; site.js reads it to place the summary */
 	position: sticky; top: 0; z-index: 5;
 	clip-path: inset(0 0 calc(var(--cut, 0px) * var(--cp, 0)) 0);
 }
 /* over the map: 80% navy, solid once condensed, so the panels scrolling
    under it never ghost through (the navy, as rgb for the calc'd alpha) */
 .band-sticky.band-over { background: rgb(0 47 100 / calc(0.8 + 0.2 * var(--cp, 0))); }
-.band-sticky .band-in { position: relative; }
-.band-sticky .band-id, .band-sticky .band-tail { will-change: transform; }
-.band-sticky .band-id {
-	transform-origin: left center;
-	transform: translateY(calc(var(--lift-id, 0px) * -1 * var(--cp, 0))) scale(calc(1 - var(--shrink) * var(--cp, 0)));
-}
-.band-sticky .band-tail {
-	transform-origin: right center;
-	transform: translateY(calc(var(--lift-tail, 0px) * -1 * var(--cp, 0))) scale(calc(1 - var(--shrink) * var(--cp, 0)));
-}
-/* the airframe would shrink past reading size: it fades, and the tail
-   number alone is centred in the bar (--lift-tail is measured on it) */
-.band-sticky .band-type { opacity: calc(1 - var(--cp, 0)); }
-.band-sum {
-	position: absolute; top: 0; left: var(--sum-inset, 0px); right: var(--sum-inset, 0px); height: 56px;
-	display: flex; align-items: center; justify-content: center; gap: 14px;
+/* the full row fades out over the first half of the condense and rises with it */
+.band-sticky .band-in { opacity: max(0, calc(1 - 2 * var(--cp, 0))); transform: translateY(calc(-10px * var(--cp, 0))); }
+.band-sticky.is-docked .band-in { pointer-events: none; }
+
+.band-bar {
+	position: absolute; top: 0; left: 0; right: 0; height: 56px;
+	display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px;
 	opacity: var(--sp, 0); transform: translateY(calc(6px * (1 - var(--sp, 0)))); pointer-events: none;
-	font-size: 14px; white-space: nowrap;
+	color: #fff; white-space: nowrap;
 }
+.band-sticky.is-docked .band-bar { pointer-events: auto; }
+/* the masthead's logo at reduced size, "Wing" in white for the navy
+   (wingview-header-dark.svg); phones show the round mark alone */
+.band-bar-home { justify-self: start; line-height: 0; }
+.band-bar-home img { height: 32px; width: auto; }
+.band-bar-logo-icon { display: none; }
+.band-sum { display: flex; align-items: center; gap: 14px; min-width: 0; font-size: 14px; }
 .band-chip { flex: none; padding: 3px 9px; border-radius: 4px; font-size: 13px; font-weight: 700; color: #fff; }
-.band-sum-route { flex: none; display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: 0.01em; color: #fff; }
+.band-sum-route { flex: none; display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: 0.01em; }
 .band-sum-track { width: 112px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--sky) var(--p, 0%), rgb(255 255 255 / 0.28) var(--p, 0%)); }
 .band-sum-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: #b9cce4; }
+/* by the tail: the airline's mark and the flight's (or operator's) ICAO code, a rule, the tail number */
+.band-bar-id { justify-self: end; display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 15px; font-weight: 700; }
+.band-bar-logo { width: 28px; height: 28px; padding: 3px; border-radius: 4px; background: #fff; object-fit: contain; }
+.band-bar-code { color: #dbe7f5; font-weight: 600; letter-spacing: 0.01em; }
+.band-bar-code + .band-bar-reg { padding-left: 10px; border-left: 1px solid rgb(255 255 255 / 0.28); }
+.band-bar-reg { font-size: 16px; letter-spacing: -0.005em; }
 .band-meta time:not([data-ago]) { color: #dbe7f5; }
 /* on a page with a map the band is the top of the stage, and the map runs
    on under it through 80% navy */
@@ -563,11 +568,17 @@ a.mk-plane-sm:hover { color: var(--link); }
 	}
 	.band-tail:first-child { padding-top: 0; border-top: 0; }
 	.band-tail .band-type { margin-top: 0; }
-	/* condensed, the tail's own row fades and is clipped away: the bar keeps
-	   the flight and, at its right, the status */
-	.band-sticky .band-tail { transform: none; opacity: calc(1 - var(--cp, 0)); }
-	.band-sum { left: auto; right: var(--gutter); justify-content: flex-end; }
+	/* condensed on a phone: the round mark and the status at the left, the
+	   codes by the tail at the right */
+	.band-bar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; }
+	.band-sum { justify-self: start; }
+	.band-bar-logo-full { display: none; }
+	.band-bar-logo-icon { display: block; }
 	.band-sum-route, .band-sum-detail { display: none; }
+	.band-bar-id { gap: 8px; font-size: 14px; }
+	.band-bar-logo { width: 24px; height: 24px; padding: 2px; }
+	.band-bar-code + .band-bar-reg { padding-left: 8px; }
+	.band-bar-reg { font-size: 15px; }
 	.route-code { font-size: 28px; }
 	.cols { padding-inline: 0; gap: 16px; }
 	.panel { border-radius: 0; border-inline: 0; }

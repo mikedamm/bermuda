@@ -831,19 +831,32 @@ func parkedAtFar() struct {
 }
 
 // The aircraft band sits above the stage (so it can stick to the top of the
-// whole page) and carries the dock's one-line summary it condenses into.
+// whole page) and carries the bar it condenses into: the WingView mark, the
+// dock's one-line summary, and the airline's mark with the flight's ICAO
+// ident by the tail. The bar only repeats the page, so it is hidden from
+// assistive tech and out of the tab order.
 func TestAircraftBandCondenses(t *testing.T) {
-	body := get(t, testServer(t), "/aircraft/N527AS").Body.String()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	s, err := New(api.New(fakeAPI(t).URL, "test-token", 4, log), store.NewIndex(),
+		Config{SiteURL: "https://www.wingview.com", LogoBase: "https://i.wvcdn.com/logos"}, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := get(t, s.Handler(), "/aircraft/N527AS").Body.String()
 	band, stage := strings.Index(body, `data-condense>`), strings.Index(body, `<div class="stage`)
 	if band < 0 || stage < 0 || band > stage {
 		t.Fatalf("band at %d, stage at %d: the band must come first, outside the stage", band, stage)
 	}
-	for _, want := range []string{`<div class="band-sum" aria-hidden="true">`, `<span class="band-chip s-`, `<b>SAN</b><span class="band-sum-track" style="--p:`, `</span><b>SEA</b>`} {
+	for _, want := range []string{`<div class="wrap band-bar" aria-hidden="true">`, `<a class="band-bar-home" href="/" tabindex="-1">`,
+		`<span class="band-chip s-`, `<b>SAN</b><span class="band-sum-track" style="--p:`, `</span><b>SEA</b>`,
+		`<img class="band-bar-logo" src="`, `<span class="band-bar-code">ASA14</span>`, `<span class="band-bar-reg">N527AS</span>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("band lacks %s", want)
 		}
 	}
-	if strings.Contains(get(t, testServer(t), "/aircraft/N1LADD").Body.String(), "band-sum") {
-		t.Error("a LADD aircraft's band summarises a flight")
+	ladd := get(t, testServer(t), "/aircraft/N1LADD").Body.String()
+	// its operator's code is public identity; a flight is not
+	if strings.Contains(ladd, "band-sum") || strings.Contains(ladd, `band-bar-code">ASA14`) {
+		t.Error("a LADD aircraft's bar summarises or names a flight")
 	}
 }
