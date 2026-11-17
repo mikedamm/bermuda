@@ -4,11 +4,12 @@
 // title band's "Updated" time up. Everything else on the page works
 // without this script.
 
-// The aircraft page's band: it sticks to the top and condenses into a bar
-// as the page scrolls, and the dock folds into it: as the dock slides under
-// the band, the band's one-line summary of it fades in. CSS draws it all
-// from the numbers this sets on the band; the band keeps its height in the
-// flow, so nothing below it moves.
+// The aircraft page's band: it sticks to the top, and when the dock scrolls
+// up and touches it the dock folds into it: this marks the band is-docked
+// and CSS quickly fades the dock out and condenses the band into a bar with
+// the dock's one-line summary (and reverses it on the way back down). This
+// measures what CSS needs to place the condensed names; the band keeps its
+// height in the flow, so nothing below it moves.
 (() => {
 	"use strict";
 	const band = document.querySelector("[data-condense]");
@@ -17,17 +18,15 @@
 	const dock = stage?.querySelector(".dock");
 	const inner = band.querySelector(".band-in");
 	const id = band.querySelector(".band-id"), tail = band.querySelector(".band-tail"), sum = band.querySelector(".band-sum");
-	const BAR = 56, RUN = 100; // the condensed height; the scroll it takes to get there
-	const clamp = (v) => Math.min(1, Math.max(0, v));
-	const ease = (t) => t * t * (3 - 2 * t);
-	let top0 = 0, height = 0, cut = 0;
+	const BAR = 56; // the condensed height
+	const SLACK = 6; // px past the line before it undocks, so it cannot flicker there
+	let height = 0;
 
 	// offset metrics ignore transforms, so this reads the band as laid out
 	// whatever state it is drawn in
 	const measure = () => {
 		height = band.offsetHeight;
-		cut = Math.max(0, height - BAR);
-		top0 = stage.getBoundingClientRect().top + scrollY - height; // where it sits before it sticks
+		const cut = Math.max(0, height - BAR);
 		const k = 1 - parseFloat(getComputedStyle(band).getPropertyValue("--shrink") || "0.36"); // the names' condensed scale
 		// an element's middle, from the band's top (whichever ancestor offsetTop counts from)
 		const mid = (el) => {
@@ -51,17 +50,16 @@
 			band.style.setProperty("--sum-inset", Math.round(Math.max(left, right) + 24) + "px");
 		}
 	};
+	// docked once the dock's top meets the full band's foot; undocked again
+	// only once it is back past the line by SLACK
 	const update = () => {
-		const cp = clamp((scrollY - top0) / RUN);
-		let sp = 0;
-		if (dock && sum) {
-			const bottom = band.getBoundingClientRect().top + height - cut * cp; // the band's drawn foot
-			const r = dock.getBoundingClientRect();
-			const under = clamp((bottom - r.top) / r.height); // how much of the dock has slid under
-			sp = Math.min(cp, ease(clamp((under - 0.3) / 0.45)));
-		}
-		band.style.setProperty("--cp", cp.toFixed(3));
-		band.style.setProperty("--sp", sp.toFixed(3));
+		if (!dock) return;
+		const foot = band.getBoundingClientRect().top + height;
+		// where the dock sits in the flow: its parent is never transformed,
+		// and offsetTop ignores the dock's own lift as it folds away
+		const top = dock.parentElement.getBoundingClientRect().top + dock.offsetTop;
+		const docked = band.classList.contains("is-docked") ? top < foot + SLACK : top <= foot;
+		band.classList.toggle("is-docked", docked);
 	};
 	let frame = 0;
 	addEventListener("scroll", () => {
@@ -77,6 +75,7 @@
 	addEventListener("resize", again);
 	document.fonts?.ready.then(again); // Inter's widths, once it has loaded
 	again();
+	requestAnimationFrame(() => requestAnimationFrame(() => band.classList.add("cond-ready"))); // animate from here on
 })();
 
 // "Updated 12 seconds ago": the band's time counts up from when the page's
