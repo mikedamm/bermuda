@@ -169,8 +169,9 @@ time, .num { font-variant-numeric: tabular-nums; }
 	position: sticky; top: 0; z-index: 5;
 	clip-path: inset(0 0 calc(var(--cut, 0px) * var(--cp, 0)) 0);
 }
-/* over the map: 80% navy, near solid once condensed over the panels (the navy, as rgb for the calc'd alpha) */
-.band-sticky.band-over { background: rgb(0 47 100 / calc(0.8 + 0.18 * var(--cp, 0))); }
+/* over the map: 80% navy, solid once condensed, so the panels scrolling
+   under it never ghost through (the navy, as rgb for the calc'd alpha) */
+.band-sticky.band-over { background: rgb(0 47 100 / calc(0.8 + 0.2 * var(--cp, 0))); }
 .band-sticky .band-in { position: relative; }
 .band-sticky .band-id, .band-sticky .band-tail { will-change: transform; }
 .band-sticky .band-id {
