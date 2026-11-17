@@ -37,7 +37,7 @@
 	// crawlers read the page; the map is for people
 	if (/bot|crawl|spider|slurp|facebookexternalhit|embedly|whatsapp|preview/i.test(navigator.userAgent)) return;
 
-	const C = { flown: "#0065ad", ahead: "#229cf8", net: "#0065ad", ring: "#0065ad", navy: "#002f64" };
+	const C = { flown: "#0065ad", ahead: "#229cf8", net: "#0065ad", ring: "#0065ad", navy: "#002f64", past: "#4a5363", pastOld: "#b2b9c3" };
 	const FONT = ["Inter SemiBold"]; // Inter, as on the page: glyphs built with its cv11 and ss01 forms
 	const PLANE = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1.6c.9 0 1.5 1 1.5 2.3v5.3l8 4.6v2.1l-8-2.4v4.6l2.4 1.8v1.7L12 20.6l-3.9 1v-1.7l2.4-1.8v-4.6l-8 2.4v-2.1l8-4.6V3.9c0-1.3.6-2.3 1.5-2.3Z"/></svg>';
 	// the same airliner as an icon for the map's own symbol layer: navy with a white edge
@@ -176,6 +176,11 @@
 				"line-color": C.net,
 				"line-width": ["interpolate", ["linear"], ["get", "w"], 0, 1, 1, 3],
 				"line-opacity": ["interpolate", ["linear"], ["get", "w"], 0, 0.3, 1, 0.9],
+			});
+			// earlier flights under the current one: gray, darkest the latest
+			line("wv-past", "past", {
+				"line-color": ["interpolate", ["linear"], ["get", "w"], 0, C.pastOld, 1, C.past],
+				"line-width": 2.4,
 			});
 			line("wv-flown", "flown", { "line-color": C.flown, "line-width": 3.2 });
 			line("wv-ahead", "ahead", { "line-color": C.ahead, "line-width": 3, "line-dasharray": [0.6, 1.8] });

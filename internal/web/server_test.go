@@ -294,6 +294,19 @@ func TestMapLibreMaps(t *testing.T) {
 			t.Errorf("map page lacks %q", want)
 		}
 	}
+	// the aircraft page draws its current flight as the flight page does and
+	// the flight before it (no track on record: a great circle) in the
+	// darkest gray, under it
+	ac := get(t, h, "/aircraft/N527AS").Body.String()
+	for _, want := range []string{`"k":"flown"`, `"k":"past","w":1}`, `aria-label="Map of N527AS&#39;s current flight and the one before it"`} {
+		if !strings.Contains(ac, want) {
+			t.Errorf("aircraft map lacks %s", want)
+		}
+	}
+	if strings.Index(ac, `"k":"past"`) < strings.Index(ac, `"k":"flown"`) {
+		t.Error("an earlier flight is drawn before the current one")
+	}
+
 	csp := rec.Header().Get("Content-Security-Policy")
 	for _, want := range []string{"connect-src 'self' https://i.wvcdn.com https://tiles.mapterhorn.com;", "worker-src 'self' blob:", "script-src 'self';",
 		"frame-src https://app.wingview.com blob:;"} {

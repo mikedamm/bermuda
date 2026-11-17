@@ -18,9 +18,10 @@ type routeShape struct {
 }
 
 const (
-	maxTrailPoints = 1500
-	tailStepMs     = 10_000 // the last five minutes come at full density; every 10 s is plenty
-	offRouteDeg    = 2.5    // farther than this from its route, a flight is not following it
+	maxTrailPoints  = 1500
+	pastTrailPoints = 300    // an earlier flight, drawn thin and gray beside the current one
+	tailStepMs      = 10_000 // the last five minutes come at full density; every 10 s is plenty
+	offRouteDeg     = 2.5    // farther than this from its route, a flight is not following it
 )
 
 // legShape reads a flight's trail and plan in parallel, within the
@@ -63,6 +64,31 @@ func (s *Server) legShape(ctx context.Context, flightID string) routeShape {
 		}
 	}
 	return sh
+}
+
+// flownLine is an earlier flight's track for the map, thinned (it is drawn
+// thin and gray), or nil when it is missing or later than the live-lookup
+// budget; the map then draws a great circle.
+func (s *Server) flownLine(ctx context.Context, flightID string) [][2]float64 {
+	if flightID == "" {
+		return nil
+	}
+	ch := make(chan [][2]float64, 1)
+	go func() {
+		var c [][2]float64
+		if t, err := s.api.FlightTrack(ctx, flightID); err == nil {
+			c = thin(trailCoords(t), pastTrailPoints)
+		}
+		ch <- c
+	}()
+	select {
+	case c := <-ch:
+		return c
+	case <-time.After(liveLookupBudget):
+		return nil
+	case <-ctx.Done():
+		return nil
+	}
 }
 
 // trailCoords is the flown line: an archived flight's track, or a live

@@ -1,10 +1,12 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"html/template"
 	"math"
 	"sort"
+	"sync"
 
 	"github.com/mikedamm/bermuda/internal/geo"
 )
@@ -30,7 +32,7 @@ type mapData struct {
 
 type mapLine struct {
 	C [][2]float64 `json:"c"`
-	K string       `json:"k"` // flown, ahead, net
+	K string       `json:"k"` // flown, ahead, net, past (an earlier flight; W is its shade, 1 darkest)
 	W float64      `json:"w,omitempty"`
 }
 
@@ -168,6 +170,96 @@ func legMapData(l LegV, sh routeShape) (mapData, bool) {
 		d.Plane.P = alignLon(d.Lines, d.Plane.P)
 	}
 	return d, true
+}
+
+// aircraftMapV draws an aircraft's flight under way (else its latest one)
+// as that flight's page does, the flights before it as gray lines fading
+// with age, and, when it is not flying, where it was last seen. prev is
+// latest first.
+func (s *Server) aircraftMapV(ctx context.Context, cur LegV, prev []LegV, parked *mapPlane, label string, svg func() *geo.Map) *MapV {
+	m := &MapV{Label: label}
+	if s.cfg.MapTiles == "" {
+		m.SVG = svg()
+		return m
+	}
+	var sh routeShape
+	tracks := make([][][2]float64, len(prev))
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sh = s.legShape(ctx, cur.FlightID)
+	}()
+	for i, l := range prev {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tracks[i] = s.flownLine(ctx, l.FlightID)
+		}()
+	}
+	wg.Wait()
+	d, _ := legMapData(cur, sh)
+	d.addPast(prev, tracks)
+	if d.Plane == nil && parked != nil {
+		p := *parked
+		p.P = alignLon(d.Lines, p.P)
+		d.Plane = &p
+	}
+	if len(d.Lines) == 0 && len(d.Pins) == 0 && d.Plane == nil {
+		return nil
+	}
+	m.JSON = encodeMap(d)
+	return m
+}
+
+// addPast draws earlier flights (latest first) under what the map shows:
+// each its track, else a great circle, in a gray that lightens with age,
+// the oldest first so the latest lies on top. Their airports join as minor
+// pins.
+func (d *mapData) addPast(legs []LegV, tracks [][][2]float64) {
+	pinned := map[string]bool{}
+	for _, p := range d.Pins {
+		pinned[p.L] = true
+	}
+	for i := len(legs) - 1; i >= 0; i-- {
+		l := legs[i]
+		arr := l.Arr
+		if l.DivertedTo != nil {
+			arr = *l.DivertedTo
+		}
+		c := tracks[i]
+		if len(c) < 2 && l.Dep.LL.Valid() && arr.LL.Valid() && l.Dep.ICAO != arr.ICAO {
+			c = arc(l.Dep.LL, arr.LL)
+		}
+		if len(c) < 2 {
+			continue
+		}
+		c = alignLine(d.Lines, c)
+		d.Lines = append(d.Lines, mapLine{C: c, K: "past", W: math.Max(0, 1-0.5*float64(i))})
+		for _, a := range []AirportV{l.Dep, arr} {
+			if a.LL.Valid() && !pinned[a.Code] {
+				pinned[a.Code] = true
+				d.Pins = append(d.Pins, mapPin{P: alignLon(d.Lines, pt(a.LL)), L: a.Code, K: "minor", U: a.URL})
+			}
+		}
+	}
+}
+
+// alignLine moves a whole line by turns of longitude into the copy of the
+// world nearest the lines already drawn.
+func alignLine(lines []mapLine, c [][2]float64) [][2]float64 {
+	if len(lines) == 0 {
+		return c
+	}
+	shift := alignLon(lines, c[0])[0] - c[0][0]
+	if shift == 0 {
+		return c
+	}
+	out := make([][2]float64, len(c))
+	for i, p := range c {
+		out[i] = [2]float64{p[0] + shift, p[1]}
+	}
+	return out
 }
 
 // alignLon moves p by whole turns of longitude to the copy of the world
