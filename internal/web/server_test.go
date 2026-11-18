@@ -244,14 +244,35 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		for k, v := range live {
 			inbound[k] = v
 		}
+		// the previews of the full boards lead with plans (newest board time
+		// first, any phase), so the page draws its top halves from the full
+		// boards instead
+		plan := planned("f-plan", "ASA777", "AS777", "KSAN", "KSEA", 5*time.Hour)
+		plan["board_time"] = ts(5 * time.Hour)
 		write(w, map[string]any{"code": "KSEA",
-			"counts": map[string]any{"arrivals": 1, "departures": 1, "enroute": 1, "scheduled": 1},
+			"counts": map[string]any{"arrivals": 2, "departures": 2, "enroute": 1, "scheduled": 1},
 			"boards": map[string]any{
-				"arrivals":   []any{arrived},
+				"arrivals":   []any{plan, arrived},
 				"enroute":    []any{inbound},
-				"departures": []any{landed},
+				"departures": []any{plan, landed},
 				"scheduled":  []any{leaving},
 			}})
+	})
+	// the full arrivals and departures boards from a time back: flown flights
+	// among plans gone past their time
+	mux.HandleFunc("GET /airports/{code}/board", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("before") == "" || q.Get("limit") == "" {
+			t.Errorf("full board asked without a start and a depth: %s", r.URL.RawQuery)
+		}
+		stale := planned("f-stale", "ASA700", "AS700", "KSAN", "KSEA", -time.Hour)
+		stale["board_time"] = ts(-time.Hour)
+		arrived := map[string]any{"board_time": ts(-25 * time.Hour), "arr_gate": "b4", "baggage": "4"}
+		for k, v := range hist {
+			arrived[k] = v
+		}
+		rows := map[string][]any{"arrivals": {stale, arrived}, "departures": {stale, landed}}[q.Get("kind")]
+		write(w, map[string]any{"kind": q.Get("kind"), "total": len(rows), "rows": rows})
 	})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer test-token" {
@@ -994,6 +1015,14 @@ func TestAirportBoards(t *testing.T) {
 		t.Fatalf("boards out of order: arrivals %d, departures %d, parked %d, flying over %d", arr, dep, park, over)
 	}
 	arrivals := body[arr:dep]
+	// the boards list what has landed and left, never a plan: not the one
+	// heading the page's previews, nor one gone past its time on the full
+	// boards
+	for _, plan := range []string{"AS777", "AS700"} {
+		if strings.Contains(body[arr:park], plan) {
+			t.Errorf("a plan, %s, is on the boards", plan)
+		}
+	}
 	rows := arrivals[strings.Index(arrivals, "<tbody"):]
 	past, next := strings.Index(rows, `<tr role="row" class="is-past is-filled" style="--p:100%">`), strings.Index(rows, `<tr role="row" class="is-filled" style="--p:`)
 	if past < 0 || next < past {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -70,11 +71,77 @@ func (r BoardRowV) RowClass() string {
 	return strings.Join(c, " ")
 }
 
-// setBoards fills the arrivals and departures boards from the API's answer.
-func (v *AirportPageV) setBoards(b *api.AirportBoards, now time.Time) {
+// boardsAnswer is what the two boards are drawn from: the airport page's
+// inbound and scheduled views for what is coming, and the full arrivals and
+// departures boards for what has landed and left (nil when they failed).
+type boardsAnswer struct {
+	page     *api.AirportBoards
+	arr, dep *api.Board
+}
+
+// Flown phases: what a board's top half lists. The full boards hold every
+// flight of any phase, planned ones ahead of flown ones, and so does the
+// page's ten-row preview of them, which is why it is not used.
+var (
+	landedPhases = []string{"landed", "arrived"}
+	leftPhases   = []string{"taxiing", "en_route", "landed", "arrived", "diverted"}
+)
+
+const (
+	// how deep the full boards are read for ten flown rows: flights in the
+	// air without an estimate and plans past their time sort among the
+	// landed ones, a few hundred of them at a hub before dawn
+	arrivalsDepth   = 500
+	departuresDepth = 60
+	flownRows       = 10
+)
+
+// loadBoards fetches the page's boards and the full arrivals and departures
+// boards together, from now back. Only the page's answer is required.
+func (s *Server) loadBoards(ctx context.Context, icao string, now time.Time) (boardsAnswer, error) {
+	var out boardsAnswer
+	var wg sync.WaitGroup
+	for _, side := range []struct {
+		kind  string
+		depth int
+		dst   **api.Board
+	}{{"arrivals", arrivalsDepth, &out.arr}, {"departures", departuresDepth, &out.dep}} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if b, err := s.api.AirportBoard(ctx, icao, side.kind, 6, side.depth, now); err == nil {
+				*side.dst = b
+			}
+		}()
+	}
+	var err error
+	out.page, err = s.api.AirportBoards(ctx, icao)
+	wg.Wait()
+	return out, err
+}
+
+// flown is a full board's first rows in one of the phases, newest first.
+func flown(b *api.Board, phases []string) []api.BoardRow {
+	if b == nil {
+		return nil
+	}
+	var out []api.BoardRow
+	for _, r := range b.Rows {
+		if slices.Contains(phases, r.Phase()) {
+			out = append(out, r)
+			if len(out) == flownRows {
+				break
+			}
+		}
+	}
+	return out
+}
+
+// setBoards fills the arrivals and departures boards.
+func (v *AirportPageV) setBoards(b boardsAnswer, now time.Time) {
 	v.Boards = true
-	v.Arrivals = boardRows(b.Boards.Arrivals, b.Boards.Enroute, true, v.Airport.TZ, now)
-	v.Departures = boardRows(b.Boards.Departures, b.Boards.Scheduled, false, v.Airport.TZ, now)
+	v.Arrivals = boardRows(flown(b.arr, landedPhases), b.page.Boards.Enroute, true, v.Airport.TZ, now)
+	v.Departures = boardRows(flown(b.dep, leftPhases), b.page.Boards.Scheduled, false, v.Airport.TZ, now)
 }
 
 // boardMins writes a number of minutes as a board does, in its largest unit
@@ -223,13 +290,14 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 	}
 
 	// the boards and the sweep around the field load together
-	boards := make(chan *api.AirportBoards, 1)
+	boards := make(chan *boardsAnswer, 1)
 	go func() {
-		b, err := s.api.AirportBoards(ctx, a.ICAO)
+		b, err := s.loadBoards(ctx, a.ICAO, now)
 		if err != nil {
-			b = nil // the page stands without its boards
+			boards <- nil // the page stands without its boards
+			return
 		}
-		boards <- b
+		boards <- &b
 	}()
 	t, err := s.api.AirportTraffic(ctx, a.ICAO, airportRadius)
 	switch {
@@ -257,7 +325,7 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 		planes, planeIDs = append(planes, p), append(planeIDs, id)
 	}
 	if b := <-boards; b != nil {
-		v.setBoards(b, now)
+		v.setBoards(*b, now)
 		// the boards' flights in the air near the field go on the map
 		for _, side := range []struct {
 			rows []BoardRowV

@@ -136,7 +136,7 @@ func (s *Server) liveAirport(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) liveAirportAnswer(ctx context.Context, a geo.Airport, now time.Time) (liveAnswer, error) {
 	v := AirportPageV{Airport: a, Code: a.Code()}
-	b, err := s.api.AirportBoards(ctx, a.ICAO)
+	b, err := s.loadBoards(ctx, a.ICAO, now)
 	if err != nil && !errors.Is(err, api.ErrNotFound) {
 		return liveAnswer{}, err // keep what the page shows; live.js backs off
 	}

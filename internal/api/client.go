@@ -104,6 +104,18 @@ func (c *Client) AirportBoards(ctx context.Context, code string) (*AirportBoards
 	return get[AirportBoards](ctx, c, "/airports/"+url.PathEscape(code), nil)
 }
 
+// AirportBoard is one of an airport's boards in full: arrivals or departures
+// newest board_time first, every phase (planned flights too, and ahead of
+// flown ones); enroute or scheduled soonest first. A non-zero before starts
+// the list there, cut to the minute so the answer caches.
+func (c *Client) AirportBoard(ctx context.Context, code, kind string, hours, limit int, before time.Time) (*Board, error) {
+	v := url.Values{"kind": {kind}, "hours": {strconv.Itoa(hours)}, "limit": {strconv.Itoa(limit)}}
+	if !before.IsZero() {
+		v.Set("before", before.UTC().Truncate(time.Minute).Format(time.RFC3339))
+	}
+	return get[Board](ctx, c, "/airports/"+url.PathEscape(code)+"/board", v)
+}
+
 func (c *Client) AirportTraffic(ctx context.Context, code string, radiusMi int) (*AirportTraffic, error) {
 	v := url.Values{"radius_mi": {strconv.Itoa(radiusMi)}}
 	return get[AirportTraffic](ctx, c, "/airports/"+url.PathEscape(code)+"/aircraft", v)

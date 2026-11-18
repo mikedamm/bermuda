@@ -276,6 +276,24 @@ type BoardRow struct {
 	BoardTime time.Time
 }
 
+// Phase is the row's flight phase, live or archived.
+func (r BoardRow) Phase() string {
+	switch {
+	case r.Live != nil:
+		return r.Live.Phase
+	case r.Archived != nil:
+		return r.Archived.Phase
+	}
+	return ""
+}
+
+// Board is GET /airports/{code}/board: one board in full.
+type Board struct {
+	Kind  string     `json:"kind"`
+	Total int        `json:"total"`
+	Rows  []BoardRow `json:"rows"`
+}
+
 func (r *BoardRow) UnmarshalJSON(b []byte) error {
 	var probe struct {
 		Dep, Arr  json.RawMessage
