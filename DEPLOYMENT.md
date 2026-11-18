@@ -51,11 +51,21 @@ attached database, are kept.
 
 ## Maps and the shared cache
 
-- **Basemap:** `https://i.wvcdn.com/v4.pmtiles` (Protomaps v4, on the `adsb`
-  pull zone, id 5676314). Browsers read it cross-origin by range requests, so
+- **Basemap:** `https://i.wvcdn.com/20261115.pmtiles`, a dated Protomaps v4
+  build, through the `adsb` pull zone (id 5676314), whose origin is
+  `build.protomaps.com`. Browsers read it cross-origin by range requests, so
   that zone's CORS extension list must include `pmtiles` (added 2026-11-16).
   Remove it and every map goes blank while the pages keep working. Override
   the archive with `MAP_TILES`.
+  - Always a dated build, never a moving alias like `v4.pmtiles`. The zone
+    caches range slices, so when an alias moves under the cache the browser
+    reads one build's directory and another's tiles, and every map loses its
+    basemap (2026-11-18).
+  - For a newer basemap, change the date in `cmd/site/main.go` to a build in
+    https://build-metadata.protomaps.dev/builds.json and deploy. Request the
+    new name only once the build is published: the zone caches a 404 too,
+    and a cached 404 on the first range breaks the maps until that file is
+    purged.
 - **Shared API cache:** the Bunny Database `wv-seo-cache` is attached to the
   app; Bunny injects `BUNNY_DATABASE_URL` and `BUNNY_DATABASE_AUTH_TOKEN`.
   Table `api_cache` holds gzip-compressed API answers until they expire;

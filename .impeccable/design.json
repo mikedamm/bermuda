@@ -541,7 +541,7 @@
 			"mobileMap": "320px"
 		},
 		"map": {
-			"basemap": "Protomaps v4 PMTiles (i.wvcdn.com/v4.pmtiles) with static/map-style.json, generated from @protomaps/basemaps light in the WingView palette",
+			"basemap": "Protomaps v4 PMTiles (a dated build, i.wvcdn.com/20261115.pmtiles) with static/map-style.json, generated from @protomaps/basemaps light in the WingView palette",
 			"paint": {
 				"land": "#f3f6fa",
 				"water": "#cadff2",

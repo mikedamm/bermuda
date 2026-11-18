@@ -34,7 +34,7 @@ One Go binary, standard library only.
   and aircraft link to their pages), shaded with Mapterhorn elevation
   (`TERRAIN`), over WingView's own
   Protomaps basemap, a PMTiles archive the browser reads by HTTP range
-  requests (`MAP_TILES`, default `https://i.wvcdn.com/v4.pmtiles`). MapLibre,
+  requests (`MAP_TILES`, default `https://i.wvcdn.com/20261115.pmtiles`, a dated build). MapLibre,
   the pmtiles protocol and the label glyphs are self-hosted under
   `static/vendor/`; the style (`static/map-style.json`) is generated from
   `@protomaps/basemaps` in the WingView palette. The server computes
@@ -103,7 +103,7 @@ go test ./...
 | `WV_API_BASE`, `WV_API_TOKEN` | internal API (required) |
 | `SITE_URL` | canonical origin used in canonical tags, JSON-LD and sitemaps (required) |
 | `APP_URL` | the app, for "open live" deep links (default `https://app.wingview.com`) |
-| `MAP_TILES` | PMTiles basemap for the maps (default `https://i.wvcdn.com/v4.pmtiles`; `off` draws SVG maps) |
+| `MAP_TILES` | PMTiles basemap for the maps (default `https://i.wvcdn.com/20261115.pmtiles`, a dated build; `off` draws SVG maps) |
 | `BUNNY_DATABASE_URL`, `BUNNY_DATABASE_AUTH_TOKEN` | shared API cache (Bunny Database, libSQL); optional |
 | `TERRAIN` | elevation shaded under the maps, a `{z}/{x}/{y}` template of Terrarium tiles (default `https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`; `off` draws flat maps) |
 | `LOGOS` | operator logos as `{LOGOS}/{ICAO}/icon.png`, one per ICAO-assigned operator (default `https://i.wvcdn.com/logos`; `off` shows none) |

@@ -12,7 +12,7 @@
 //	LOG_LEVEL     debug, info, warn                                (default info)
 //	BUNNY_DATABASE_URL, BUNNY_DATABASE_AUTH_TOKEN
 //	              shared cache for API answers (set by Bunny on the app; optional)
-//	MAP_TILES     PMTiles basemap for the interactive maps           (default https://i.wvcdn.com/v4.pmtiles; "off" draws SVG maps)
+//	MAP_TILES     PMTiles basemap for the interactive maps           (default https://i.wvcdn.com/20261115.pmtiles; "off" draws SVG maps)
 //	TERRAIN       elevation tiles shaded under the maps, a {z}/{x}/{y} template of Terrarium tiles
 //	              (default https://tiles.mapterhorn.com/{z}/{x}/{y}.webp; "off" draws flat maps)
 //	LOGOS         operator logos, {LOGOS}/{ICAO}/icon.png            (default https://i.wvcdn.com/logos; "off" shows none)
@@ -130,7 +130,9 @@ func run(log *slog.Logger) error {
 		cr.Run(ctx)
 	}
 
-	tiles := env("MAP_TILES", "https://i.wvcdn.com/v4.pmtiles")
+	// a dated Protomaps build, never a moving alias: the CDN caches range
+	// slices, and an alias that moves under the cache mixes two builds
+	tiles := env("MAP_TILES", "https://i.wvcdn.com/20261115.pmtiles")
 	if tiles == "off" {
 		tiles = ""
 	}
