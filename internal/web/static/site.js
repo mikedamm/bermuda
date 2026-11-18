@@ -383,13 +383,23 @@ document.querySelectorAll("[data-clock]").forEach((el) => {
 			};
 			pins("-minor", ["all", others, ["!", main]], map.getLayer("places_locality") ? "places_locality" : undefined);
 			pins("", main);
+			// a main or the subject airport's dot keeps other labels (cities, minor
+			// airports) off it: circles take no part in label placement, so an
+			// empty icon the dot's size, placed after the main labels and before
+			// everything under them, holds its place
+			if (!map.hasImage("wv-blank")) map.addImage("wv-blank", { width: 1, height: 1, data: new Uint8Array(4) });
+			map.addLayer({ id: "wv-pin-block", type: "symbol", source: "wv-pins", filter: ["any", main, subject], layout: {
+				"icon-image": "wv-blank", "icon-size": ["case", subject, 20, ["*", 2, ["+", 8.5, size]]],
+				"icon-allow-overlap": true, "icon-ignore-placement": false,
+			} }, "wv-pin-label");
 			map.addLayer({ id: "wv-subject-ring", type: "circle", source: "wv-pins", filter: subject, paint: { "circle-radius": 10, "circle-color": C.navy } });
 			map.addLayer({ id: "wv-subject", type: "circle", source: "wv-pins", filter: subject, paint: {
 				"circle-radius": 6, "circle-color": C.ahead, "circle-stroke-width": 2.5, "circle-stroke-color": "#ffffff",
 			} });
 			map.addLayer({ id: "wv-subject-label", type: "symbol", source: "wv-pins", filter: subject, layout: {
 				"text-field": ["get", "l"], "text-font": FONT, "text-size": 15,
-				"text-anchor": "left", "text-offset": [1.1, 0], "text-allow-overlap": true, "text-ignore-placement": true,
+				// always drawn, and other labels keep off it
+				"text-anchor": "left", "text-offset": [1.1, 0], "text-allow-overlap": true, "text-ignore-placement": false,
 			}, paint: { "text-color": C.navy, "text-halo-color": "#ffffff", "text-halo-width": 2 } });
 
 			const link = (id) => {
