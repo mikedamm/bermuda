@@ -358,28 +358,31 @@ document.querySelectorAll("[data-clock]").forEach((el) => {
 			// the page's own airport never gives way; it is drawn last, above traffic
 			const subject = ["==", ["get", "k"], "subject"];
 			const others = ["!=", ["get", "k"], "subject"];
-			map.addLayer({ id: "wv-pin-ring", type: "circle", source: "wv-pins", filter: others, paint: {
-				"circle-radius": ["case", main, ["+", 8.5, size], ["+", 5, size]], "circle-color": C.navy,
-			} });
-			map.addLayer({ id: "wv-pin", type: "circle", source: "wv-pins", filter: others, paint: {
-				"circle-radius": ["case", main, ["+", 5, size], ["+", 3.2, size]],
-				"circle-color": ["case", main, C.ahead, "#ffffff"],
-				"circle-stroke-width": ["case", main, 2, 0], "circle-stroke-color": "#ffffff",
-			} });
-			// a main airport's label outranks the cities' names; a minor one's gives
-			// way to them (its layer sits under theirs), so the big cities show
-			const pinLabel = (id, filter, before) => map.addLayer({ id, type: "symbol", source: "wv-pins", filter, layout: {
-				"text-field": ["get", "l"],
-				"text-font": FONT,
-				"text-size": ["case", main, 13, 11.5],
-				"text-variable-anchor": ["left", "right", "top", "bottom"],
-				"text-radial-offset": 0.95,
-				"text-padding": 4,
-				"text-justify": "auto",
-				"symbol-sort-key": ["case", main, ["-", -100000, ["get", "n"]], ["*", -1, ["get", "n"]]],
-			}, paint: { "text-color": C.navy, "text-halo-color": "#ffffff", "text-halo-width": 1.6 } }, before);
-			pinLabel("wv-pin-label", main);
-			pinLabel("wv-pin-label-minor", ["==", ["get", "k"], "minor"], map.getLayer("places_locality") ? "places_locality" : undefined);
+			// a main airport outranks the cities' names; a minor one (its dot and
+			// label) sits under their layer, so its label gives way to them and a
+			// city's name is drawn over its dot: the big cities always show
+			const pins = (sfx, filter, before) => {
+				map.addLayer({ id: "wv-pin-ring" + sfx, type: "circle", source: "wv-pins", filter, paint: {
+					"circle-radius": ["case", main, ["+", 8.5, size], ["+", 5, size]], "circle-color": C.navy,
+				} }, before);
+				map.addLayer({ id: "wv-pin" + sfx, type: "circle", source: "wv-pins", filter, paint: {
+					"circle-radius": ["case", main, ["+", 5, size], ["+", 3.2, size]],
+					"circle-color": ["case", main, C.ahead, "#ffffff"],
+					"circle-stroke-width": ["case", main, 2, 0], "circle-stroke-color": "#ffffff",
+				} }, before);
+				map.addLayer({ id: "wv-pin-label" + sfx, type: "symbol", source: "wv-pins", filter, layout: {
+					"text-field": ["get", "l"],
+					"text-font": FONT,
+					"text-size": ["case", main, 13, 11.5],
+					"text-variable-anchor": ["left", "right", "top", "bottom"],
+					"text-radial-offset": 0.95,
+					"text-padding": 4,
+					"text-justify": "auto",
+					"symbol-sort-key": ["case", main, ["-", -100000, ["get", "n"]], ["*", -1, ["get", "n"]]],
+				}, paint: { "text-color": C.navy, "text-halo-color": "#ffffff", "text-halo-width": 1.6 } }, before);
+			};
+			pins("-minor", ["all", others, ["!", main]], map.getLayer("places_locality") ? "places_locality" : undefined);
+			pins("", main);
 			map.addLayer({ id: "wv-subject-ring", type: "circle", source: "wv-pins", filter: subject, paint: { "circle-radius": 10, "circle-color": C.navy } });
 			map.addLayer({ id: "wv-subject", type: "circle", source: "wv-pins", filter: subject, paint: {
 				"circle-radius": 6, "circle-color": C.ahead, "circle-stroke-width": 2.5, "circle-stroke-color": "#ffffff",
@@ -394,7 +397,7 @@ document.querySelectorAll("[data-clock]").forEach((el) => {
 				map.on("mouseenter", id, () => { map.getCanvas().style.cursor = "pointer"; });
 				map.on("mouseleave", id, () => { map.getCanvas().style.cursor = ""; });
 			};
-			for (const id of ["wv-pin", "wv-pin-label", "wv-pin-label-minor", "wv-subject", "wv-subject-label"]) link(id);
+			for (const id of ["wv-pin", "wv-pin-minor", "wv-pin-label", "wv-pin-label-minor", "wv-subject", "wv-subject-label"]) link(id);
 
 			// other live aircraft (airport traffic, flights in the air now): a
 			// symbol layer above the labels, which it never pushes off the map;
