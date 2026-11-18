@@ -367,6 +367,29 @@ func TestLADDAircraftShowsNoFlights(t *testing.T) {
 }
 
 // With a tiles archive configured the page embeds map data and the
+// The archive the maps draw can move while the server runs: each page and
+// /statusz name the one drawn when they were asked.
+func TestMapTilesNow(t *testing.T) {
+	up := fakeAPI(t)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	now := "https://i.wvcdn.com/20260811.pmtiles"
+	s, err := New(api.New(up.URL, "test-token", 4, log), store.NewIndex(),
+		Config{SiteURL: "https://www.wingview.com", MapTiles: now, MapTilesNow: func() string { return now }}, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	for _, build := range []string{"20260811", "20261117"} {
+		now = "https://i.wvcdn.com/" + build + ".pmtiles"
+		if body := get(t, h, "/flight/ASA14").Body.String(); !strings.Contains(body, `data-map-tiles="`+now+`"`) {
+			t.Errorf("page does not draw %s", now)
+		}
+		if body := get(t, h, "/statusz").Body.String(); !strings.Contains(body, `"map_tiles":"`+now+`"`) {
+			t.Errorf("statusz does not name %s: %s", now, body)
+		}
+	}
+}
+
 // self-hosted MapLibre assets for site.js; without one it draws the SVG map
 // and ships no script.
 func TestMapLibreMaps(t *testing.T) {

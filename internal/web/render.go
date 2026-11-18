@@ -36,6 +36,14 @@ type Page struct {
 	Version     string     // the build that rendered the page; version.js reloads it when the site moves on
 }
 
+// tiles is the archive the maps draw now.
+func (s *Server) tiles() string {
+	if s.cfg.MapTilesNow != nil {
+		return s.cfg.MapTilesNow()
+	}
+	return s.cfg.MapTiles
+}
+
 // MapAssets is what the page's script needs to draw maps.
 type MapAssets struct {
 	Tiles, TilesOrigin, Terrain, TerrainOrigin, Style, Lib, CSS, PMTiles, Glyphs string
@@ -46,7 +54,7 @@ func (s *Server) mapAssets() *MapAssets {
 		return nil
 	}
 	return &MapAssets{
-		Tiles: s.cfg.MapTiles, TilesOrigin: s.tilesOrigin, Terrain: s.cfg.MapTerrain, TerrainOrigin: s.terrainOrigin,
+		Tiles: s.tiles(), TilesOrigin: s.tilesOrigin, Terrain: s.cfg.MapTerrain, TerrainOrigin: s.terrainOrigin,
 		Style: s.staticURL("map-style.json"), Lib: s.staticURL(mapLibreJS), CSS: s.staticURL(mapLibreCSS),
 		PMTiles: s.staticURL(pmtilesJS), Glyphs: Prefix + "/static/" + glyphsPath,
 	}

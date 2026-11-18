@@ -34,7 +34,7 @@ The pages sit on WingView's own live tracking data and lead into a 3D globe and 
 - Data per airport: live traffic within 50 miles (inbound, outbound, on the ground, overhead, parked), with routes where resolved; reference data and nearby airports.
 - No flown-track positions yet: a route is drawn as a great circle split at the live position.
 - Aircraft in the FAA LADD program show identity and owner only; no positions or flights.
-- Maps are WingView's own Protomaps basemap (`https://i.wvcdn.com/20261115.pmtiles`, a dated planet-wide Protomaps build the `adsb` Bunny pull zone proxies), drawn in the browser with MapLibre GL JS; no third-party map service or key.
+- Maps are WingView's own Protomaps basemap (Protomaps' newest final planet-wide build, the one it keeps for good, e.g. `https://i.wvcdn.com/20260811.pmtiles`, which the `adsb` Bunny pull zone proxies; the server moves on when Protomaps finishes a newer version), drawn in the browser with MapLibre GL JS; no third-party map service or key.
 - Terminology: flight number (IATA, "UA1275") shown first, ICAO callsign ("UAL1275") second; registration ("tail number"); gate out/off/on/in.
 
 ## Brand Commitments

@@ -49,6 +49,11 @@ type Config struct {
 	// basemap); the browser reads it with HTTP range requests, so its host
 	// must send CORS headers. Empty means maps are drawn server-side as SVG.
 	MapTiles string
+	// MapTilesNow, when set, is the archive the maps draw at this moment,
+	// which may move while the server runs (cmd/site follows Protomaps'
+	// newest final build); it is on MapTiles' host, and MapTiles is the
+	// archive it started with.
+	MapTilesNow func() string
 	// MapTerrain is a {z}/{x}/{y} template for Terrarium-encoded elevation
 	// tiles (Mapterhorn), shaded under the maps; empty means flat maps.
 	MapTerrain string
@@ -242,6 +247,9 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		st := s.index.Status()
 		st["version"] = s.cfg.Version
+		if s.cfg.MapTiles != "" {
+			st["map_tiles"] = s.tiles()
+		}
 		if c := s.api.Stats(); c != nil {
 			st["api_cache"] = c
 		}

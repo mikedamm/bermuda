@@ -51,21 +51,31 @@ attached database, are kept.
 
 ## Maps and the shared cache
 
-- **Basemap:** `https://i.wvcdn.com/20261115.pmtiles`, a dated Protomaps v4
-  build, through the `adsb` pull zone (id 5676314), whose origin is
+- **Basemap:** Protomaps' newest *final* v4 build, through the `adsb` pull
+  zone (id 5676314) at `https://i.wvcdn.com/{date}.pmtiles`, whose origin is
   `build.protomaps.com`. Browsers read it cross-origin by range requests, so
   that zone's CORS extension list must include `pmtiles` (added 2026-11-16).
-  Remove it and every map goes blank while the pages keep working. Override
-  the archive with `MAP_TILES`.
-  - Always a dated build, never a moving alias like `v4.pmtiles`. The zone
-    caches range slices, so when an alias moves under the cache the browser
+  Remove it and every map goes blank while the pages keep working.
+  - Protomaps keeps the past week's daily builds and, for good, the last
+    build of each patch version. The server (`internal/basemap`) reads
+    https://build-metadata.protomaps.dev/builds.json at start and every six
+    hours and draws the last build of the newest version a later one has
+    replaced: 4.15.1's `20260811.pmtiles` while 4.15.2 is current. It moves
+    when Protomaps finishes a version, every few weeks to few months, so the
+    zone's cache of one archive stays good that long. A daily build is never
+    drawn: it would be deleted from origin while its name is still in use.
+  - Before moving, the server reads the new archive's first range through
+    the zone and moves only on a 206 of the listed size that starts
+    `PMTiles`; otherwise it keeps the archive it has and logs
+    `basemap: keeping …`. The zone caches a 404 too (and slices of a file
+    that changed), and a bad first range blanks every map until that file is
+    purged. Until the list answers it draws `basemap.Fallback`.
+  - `/statusz` names the archive drawn (`map_tiles`); the log says
+    `basemap build=… version=…` when it moves.
+  - `MAP_TILES` set to a URL pins one archive. Never pin a moving alias like
+    `v4.pmtiles`: when an alias moves under the zone's cache, the browser
     reads one build's directory and another's tiles, and every map loses its
-    basemap (2026-11-18).
-  - For a newer basemap, change the date in `cmd/site/main.go` to a build in
-    https://build-metadata.protomaps.dev/builds.json and deploy. Request the
-    new name only once the build is published: the zone caches a 404 too,
-    and a cached 404 on the first range breaks the maps until that file is
-    purged.
+    basemap (2026-11-18). Never pin a daily build either.
 - **Shared API cache:** the Bunny Database `wv-seo-cache` is attached to the
   app; Bunny injects `BUNNY_DATABASE_URL` and `BUNNY_DATABASE_AUTH_TOKEN`.
   Table `api_cache` holds gzip-compressed API answers until they expire;

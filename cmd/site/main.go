@@ -12,7 +12,8 @@
 //	LOG_LEVEL     debug, info, warn                                (default info)
 //	BUNNY_DATABASE_URL, BUNNY_DATABASE_AUTH_TOKEN
 //	              shared cache for API answers (set by Bunny on the app; optional)
-//	MAP_TILES     PMTiles basemap for the interactive maps           (default https://i.wvcdn.com/20261115.pmtiles; "off" draws SVG maps)
+//	MAP_TILES     PMTiles basemap for the interactive maps: "auto" follows Protomaps' newest final build
+//	              through https://i.wvcdn.com/ (default); a URL pins one archive; "off" draws SVG maps
 //	TERRAIN       elevation tiles shaded under the maps, a {z}/{x}/{y} template of Terrarium tiles
 //	              (default https://tiles.mapterhorn.com/{z}/{x}/{y}.webp; "off" draws flat maps)
 //	LOGOS         operator logos, {LOGOS}/{ICAO}/icon.png            (default https://i.wvcdn.com/logos; "off" shows none)
@@ -32,6 +33,7 @@ import (
 	_ "time/tzdata" // airport local times in a scratch image
 
 	"github.com/mikedamm/bermuda/internal/api"
+	"github.com/mikedamm/bermuda/internal/basemap"
 	"github.com/mikedamm/bermuda/internal/dbcache"
 	"github.com/mikedamm/bermuda/internal/store"
 	"github.com/mikedamm/bermuda/internal/web"
@@ -130,11 +132,18 @@ func run(log *slog.Logger) error {
 		cr.Run(ctx)
 	}
 
-	// a dated Protomaps build, never a moving alias: the CDN caches range
-	// slices, and an alias that moves under the cache mixes two builds
-	tiles := env("MAP_TILES", "https://i.wvcdn.com/20261115.pmtiles")
-	if tiles == "off" {
+	// Protomaps' newest final build, the one it keeps for good, through the
+	// CDN (internal/basemap); never a moving alias, since the CDN caches
+	// range slices and an alias that moves under the cache mixes two builds
+	tiles := env("MAP_TILES", "auto")
+	var tilesNow func() string
+	switch tiles {
+	case "off":
 		tiles = ""
+	case "auto":
+		bm := basemap.New("https://i.wvcdn.com/", log)
+		bm.Run(ctx)
+		tiles, tilesNow = bm.URL(), bm.URL
 	}
 	terrain := env("TERRAIN", "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp")
 	if terrain == "off" {
@@ -144,7 +153,7 @@ func run(log *slog.Logger) error {
 	if logos == "off" {
 		logos = ""
 	}
-	srv, err := web.New(client, idx, web.Config{SiteURL: site, AppURL: env("APP_URL", "https://app.wingview.com"), Version: version, MapTiles: tiles, MapTerrain: terrain, LiveKey: liveKey(token), LogoBase: logos}, log)
+	srv, err := web.New(client, idx, web.Config{SiteURL: site, AppURL: env("APP_URL", "https://app.wingview.com"), Version: version, MapTiles: tiles, MapTilesNow: tilesNow, MapTerrain: terrain, LiveKey: liveKey(token), LogoBase: logos}, log)
 	if err != nil {
 		return err
 	}
