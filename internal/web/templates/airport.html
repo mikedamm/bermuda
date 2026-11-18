@@ -133,16 +133,18 @@
 		{{template "kv" $v.Facts}}
 		{{if $v.Wikipedia}}<p class="panel-more"><a href="https://en.wikipedia.org/wiki/{{$v.Wikipedia}}" rel="nofollow noopener">{{$a.Name}} on Wikipedia</a></p>{{end}}
 	</section>
-	{{if $v.Airlines}}
-	<section class="panel" aria-labelledby="al-h">
-		<h2 id="al-h">Airlines here now</h2>
-		<table class="grid grid-plain"><tbody>{{range $v.Airlines}}<tr><th scope="row">{{template "op" .ICAO}}{{if .URL}}<a href="{{.URL}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</th><td class="num">{{plural .Count "flight" "flights"}}</td></tr>{{end}}</tbody></table>
-	</section>
-	{{end}}
-	{{if $v.Nearby}}
-	<section class="panel" aria-labelledby="near-h">
-		<h2 id="near-h">Nearby airports</h2>
-		<table class="grid grid-plain"><tbody>{{range $v.Nearby}}<tr><th scope="row"><a href="{{.URL}}">{{.Code}}</a> <span class="dim">{{.Name}}</span></th><td class="num">{{.Dist}}</td></tr>{{end}}</tbody></table>
+	{{if $v.Routes}}
+	<section class="panel panel-routes" aria-labelledby="routes-h">
+		<h2 id="routes-h">Airlines and destinations</h2>
+		<ul class="routes" role="list">{{range $v.Routes}}
+			<li class="routes-airline">
+				<p class="routes-op">{{template "op" .ICAO}}<span>{{if .URL}}<a href="{{.URL}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}<small>{{plural (len .Places) "destination" "destinations"}}</small></span></p>
+				<ul class="routes-places" role="list">{{range .Places}}
+					<li>{{template "board-place" .}}</li>{{end}}
+				</ul>
+			</li>{{end}}
+		</ul>
+		<p class="panel-note">Where the airlines at {{$v.Code}} have flown to and from in the last two weeks.</p>
 	</section>
 	{{end}}
 </div>

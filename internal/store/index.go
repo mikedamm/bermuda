@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -64,6 +65,7 @@ type Index struct {
 	aircraft map[string]*Aircraft
 	airlines map[string]*Airline
 	airports map[string]*AirportActivity
+	routes   map[string]map[string]*Route // airport, then "AIRLINE OTHER"
 	dirty    bool
 	saved    time.Time // last successful snapshot
 }
@@ -74,6 +76,7 @@ func NewIndex() *Index {
 		aircraft: map[string]*Aircraft{},
 		airlines: map[string]*Airline{},
 		airports: map[string]*AirportActivity{},
+		routes:   map[string]map[string]*Route{},
 	}
 }
 
@@ -569,6 +572,7 @@ type snapshot struct {
 	Aircraft []*Aircraft        `json:"aircraft"`
 	Airlines []*Airline         `json:"airlines"`
 	Airports []*AirportActivity `json:"airports"`
+	Routes   []*Route           `json:"routes,omitempty"`
 }
 
 // Prune forgets flights and aircraft not seen for a while.
@@ -585,6 +589,7 @@ func (x *Index) Prune(now time.Time) {
 			delete(x.aircraft, k)
 		}
 	}
+	x.pruneRoutes(now)
 }
 
 // Save writes a gzip JSON snapshot atomically when something changed.
@@ -612,6 +617,13 @@ func (x *Index) Save(dir string) (err error) {
 	for _, v := range x.airports {
 		c := *v
 		s.Airports = append(s.Airports, &c)
+	}
+	for _, m := range x.routes {
+		for _, v := range m {
+			c := *v
+			c.Days = slices.Clone(v.Days)
+			s.Routes = append(s.Routes, &c)
+		}
 	}
 	x.dirty = false
 	x.mu.Unlock()
@@ -655,7 +667,7 @@ func (x *Index) Save(dir string) (err error) {
 func (x *Index) Status() map[string]any {
 	x.mu.RLock()
 	defer x.mu.RUnlock()
-	st := map[string]any{"flights": len(x.flights), "aircraft": len(x.aircraft), "airlines": len(x.airlines), "airports": len(x.airports)}
+	st := map[string]any{"flights": len(x.flights), "aircraft": len(x.aircraft), "airlines": len(x.airlines), "airports": len(x.airports), "routes": x.routeCount()}
 	if !x.saved.IsZero() {
 		st["saved"] = x.saved.UTC().Format(time.RFC3339)
 	}
@@ -698,6 +710,9 @@ func (x *Index) Load(dir string) error {
 	}
 	for _, v := range s.Airports {
 		x.airports[v.ICAO] = v
+	}
+	for _, v := range s.Routes {
+		x.loadRoute(v)
 	}
 	return nil
 }

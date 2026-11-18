@@ -31,7 +31,7 @@ The pages sit on WingView's own live tracking data and lead into a 3D globe and 
 
 - Data per flight: live position, altitude, speed, heading, squawk; gate and runway times (scheduled, out, off, on, in, estimates); aircraft registration and type; 30 days of history per flight number. Many fields are often missing and must degrade gracefully.
 - Data per aircraft: type, specs, register entry and owner history, recent flights, busiest airports, last position.
-- Data per airport: live traffic within 50 miles (inbound, outbound, on the ground, overhead, parked), with routes where resolved; reference data and nearby airports.
+- Data per airport: live traffic within 50 miles (inbound, outbound, on the ground, overhead, parked), with routes where resolved; reference data; the airlines flying there and their destinations over the last two weeks, gathered from the boards the pages read.
 - No flown-track positions yet: a route is drawn as a great circle split at the live position.
 - Aircraft in the FAA LADD program show identity and owner only; no positions or flights.
 - Maps are WingView's own Protomaps basemap (Protomaps' newest final planet-wide build, the one it keeps for good, e.g. `https://i.wvcdn.com/20260811.pmtiles`, which the `adsb` Bunny pull zone proxies; the server moves on when Protomaps finishes a newer version), drawn in the browser with MapLibre GL JS; no third-party map service or key.

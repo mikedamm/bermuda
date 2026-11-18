@@ -271,7 +271,17 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		for k, v := range hist {
 			arrived[k] = v
 		}
-		rows := map[string][]any{"arrivals": {stale, arrived}, "departures": {stale, landed}}[q.Get("kind")]
+		// United's planned flights from both Chicago fields: never on the
+		// boards, but routes all the same
+		fromChicago := func(id, callsign, dep string) map[string]any {
+			p := planned(id, callsign, "", dep, "KSEA", -2*time.Hour)
+			p["operator"], p["board_time"] = map[string]any{"icao": "UAL", "iata": "UA", "name": "United Airlines"}, ts(-2*time.Hour)
+			return p
+		}
+		rows := map[string][]any{
+			"arrivals":   {stale, arrived, fromChicago("f-ord", "UAL1", "KORD"), fromChicago("f-mdw", "UAL2", "KMDW")},
+			"departures": {stale, landed},
+		}[q.Get("kind")]
 		write(w, map[string]any{"kind": q.Get("kind"), "total": len(rows), "rows": rows})
 	})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1000,6 +1010,48 @@ func TestFlightSpots(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("flight route lacks %s", want)
 		}
+	}
+}
+
+func TestBoardCity(t *testing.T) {
+	for in, want := range map[string]string{
+		"Honolulu, Oahu": "Honolulu", "Paris (Roissy-en-France, Val-d'Oise)": "Paris", "Shanghai (Pudong)": "Shanghai (Pudong)",
+		"Seattle": "Seattle", "": "",
+	} {
+		if got := boardCity(in); got != want {
+			t.Errorf("boardCity(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// The airlines the boards have listed and their places, the most places
+// first, each place as a board names it (with its code where the airline
+// has two in a city); no list of nearby airports, which the map shows.
+func TestAirportRoutes(t *testing.T) {
+	body := get(t, testServer(t), "/airport/KSEA").Body.String()
+	i := strings.Index(body, `<h2 id="routes-h">Airlines and destinations</h2>`)
+	if i < 0 {
+		t.Fatal("no airlines and destinations")
+	}
+	panel := body[i:]
+	panel = panel[:strings.Index(panel, "</section>")]
+	at := func(s string) int { return strings.Index(panel, s) }
+	united, alaska := at(`<a href="/airline/UAL">United Airlines</a><small>2 destinations</small>`), at(`<a href="/airline/ASA">Alaska Airlines</a><small>1 destination</small>`)
+	if united < 0 || alaska < united {
+		t.Errorf("want United (two places) then Alaska (one):\n%s", panel)
+	}
+	for _, want := range []string{
+		`<a href="/airport/KMDW" title="Chicago Midway International Airport · MDW">Chicago</a> <span class="dim">MDW</span>`,
+		`<a href="/airport/KORD" title="Chicago O&#39;Hare International Airport · ORD">Chicago</a> <span class="dim">ORD</span>`,
+		`<a href="/airport/KSAN" title="San Diego International Airport · SAN">San Diego</a></li>`,
+		"Where the airlines at SEA have flown to and from in the last two weeks.",
+	} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("airlines and destinations lack %s:\n%s", want, panel)
+		}
+	}
+	if strings.Contains(body, "Nearby airports") || strings.Contains(body, "Airlines here now") {
+		t.Error("the old panels are still there")
 	}
 }
 

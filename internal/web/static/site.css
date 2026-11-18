@@ -189,8 +189,27 @@ time, .num { font-variant-numeric: tabular-nums; }
 	/* two classes: over .cols, which sets the main column and the side rail */
 	.cols.cols-boards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.cols.cols-more { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+	.cols-more > .panel-routes { grid-column: span 2; }
 }
 .cols-boards + .cols-more { padding-top: 0; }
+/* airlines and destinations: each airline beside its places, which run as a
+   comma-separated list of city links, as an airport's guide lists them; the
+   places go under the airline when the panel is narrow */
+.routes { margin: 0; padding: 0; list-style: none; container-type: inline-size; }
+.routes-airline { display: grid; grid-template-columns: 14em minmax(0, 1fr); gap: 4px 16px; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); }
+.routes-airline:last-child { border-bottom: 0; }
+.routes-op { display: flex; align-items: flex-start; margin: 0; font-size: 13.5px; font-weight: 600; line-height: 1.4; color: var(--ink); }
+.routes-op .op { flex: none; margin-top: -1px; }
+.routes-op span { min-width: 0; }
+.routes-op small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+.routes-places { margin: 0; padding: 0; list-style: none; font-size: 13.5px; line-height: 1.55; color: var(--ink); }
+.routes-places li { display: inline; }
+.routes-places li:not(:last-child)::after { content: ","; }
+.routes-places a { font-weight: 500; }
+@container (max-width: 520px) {
+	.routes-airline { grid-template-columns: minmax(0, 1fr); }
+	.routes-places { padding-left: 28px; }
+}
 /* Each row is a grid on the board's columns (subgrid), not a table row, so
    it can carry its own background in every browser: a flight fills its row
    from the left as far along its route as it is (--p; 98% landed, all of

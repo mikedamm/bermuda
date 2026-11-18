@@ -8,7 +8,7 @@ live under the main site:
 |---|---|
 | `/flight/{callsign}` | a flight number: live status, times, route map, 30 days of history (`/flight/UAL1275`; `UA1275` redirects) |
 | `/aircraft/{registration}` | an airframe: position, route network, specs, register entry, recent flights (`/aircraft/N527AS`; the Mode S hex redirects) |
-| `/airport/{icao}` | live arrivals, departures and ground traffic within 50 mi, reference data, nearby airports (`/airport/KSEA`; `SEA` redirects) |
+| `/airport/{icao}` | live arrivals, departures and ground traffic within 50 mi, reference data, airlines and their destinations (`/airport/KSEA`; `SEA` redirects) |
 | `/airline/{icao}` | flight numbers and aircraft seen this week (`/airline/ASA`) |
 | `/tracker/` | landing page, search (`/tracker/search?q=`), sitemaps (`/tracker/sitemap.xml`), static assets |
 

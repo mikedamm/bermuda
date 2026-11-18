@@ -31,9 +31,8 @@ type AirportPageV struct {
 	Live       bool         // the sweep of aircraft around the field answered
 	Parked     []TrafficRow // on the ground at the field
 	ParkedN    int
-	Overhead   []TrafficRow // passing within airportRadius, not landing or leaving here
-	Airlines   []AirlineCountV
-	Nearby     []NearbyV
+	Overhead   []TrafficRow     // passing within airportRadius, not landing or leaving here
+	Routes     []AirlineRoutesV // the airlines here and the places they fly to and from, most places first
 	Summary    []string
 	Facts      []Fact
 	Wikipedia  string
@@ -117,7 +116,24 @@ func (s *Server) loadBoards(ctx context.Context, icao string, now time.Time) (bo
 	var err error
 	out.page, err = s.api.AirportBoards(ctx, icao)
 	wg.Wait()
+	s.noteRoutes(icao, out, now)
 	return out, err
+}
+
+// noteRoutes has the index learn the airlines and places on the boards.
+func (s *Server) noteRoutes(icao string, b boardsAnswer, now time.Time) {
+	if p := b.page; p != nil {
+		s.index.NoteBoard(icao, p.Boards.Arrivals, true, now)
+		s.index.NoteBoard(icao, p.Boards.Enroute, true, now)
+		s.index.NoteBoard(icao, p.Boards.Departures, false, now)
+		s.index.NoteBoard(icao, p.Boards.Scheduled, false, now)
+	}
+	if b.arr != nil {
+		s.index.NoteBoard(icao, b.arr.Rows, true, now)
+	}
+	if b.dep != nil {
+		s.index.NoteBoard(icao, b.dep.Rows, false, now)
+	}
 }
 
 // flown is a full board's first rows in one of the phases, newest first.
@@ -265,8 +281,53 @@ type AirlineCountV struct {
 	Count           int
 }
 
-type NearbyV struct {
-	Code, Name, URL, Dist string
+// AirlineRoutesV is an airline at the airport and the places its flights
+// go to or come from, as the boards name them.
+type AirlineRoutesV struct {
+	ICAO, Name, URL string
+	Places          []RoutePlaceV // by city
+}
+
+// RoutePlaceV is one of an airline's places, drawn as a board draws its
+// from or to (the "board-place" template).
+type RoutePlaceV struct {
+	Place AirportV
+	City  string // as boards name it ("Honolulu", not "Honolulu, Oahu")
+	Twin  bool   // another of the airline's places is in the city too, so it shows the code
+}
+
+// routesWindow is how far back the airlines and destinations reach.
+const routesWindow = store.RouteDays * 24 * time.Hour
+
+// airlineRoutes is the airlines the airport's boards have listed lately and
+// their places.
+func (s *Server) airlineRoutes(icao string, now time.Time) []AirlineRoutesV {
+	var out []AirlineRoutesV
+	for _, r := range s.index.RoutesAt(icao, now.Add(-routesWindow)) {
+		v := AirlineRoutesV{ICAO: r.Airline, Name: r.Airline}
+		if al, ok := s.index.Airline(r.Airline); ok && al.Name != "" {
+			v.Name, v.URL = al.Name, "/airline/"+r.Airline
+		}
+		cities := map[string]int{}
+		for _, code := range r.Others {
+			p := RoutePlaceV{Place: airportV(code, nil)}
+			p.City = boardCity(p.Place.City)
+			cities[p.City]++
+			v.Places = append(v.Places, p)
+		}
+		for i := range v.Places {
+			v.Places[i].Twin = cities[v.Places[i].City] > 1
+		}
+		sort.Slice(v.Places, func(i, j int) bool {
+			a, b := v.Places[i], v.Places[j]
+			if a.City != b.City {
+				return a.City < b.City
+			}
+			return a.Place.Code < b.Place.Code
+		})
+		out = append(out, v)
+	}
+	return out
 }
 
 const (
@@ -339,10 +400,8 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 		}
 	}
 
-	for _, n := range geo.NearbyAirports(a.Lat, a.Lon, 150, 8, a.ICAO) {
-		v.Nearby = append(v.Nearby, NearbyV{Code: n.Code(), Name: n.Name, URL: "/airport/" + n.ICAO,
-			Dist: fmtMiles(geo.DistanceMi(a.Lat, a.Lon, n.Lat, n.Lon))})
-	}
+	// after the boards, which teach the index this field's routes
+	v.Routes = s.airlineRoutes(a.ICAO, now)
 
 	center := geo.LL{Lat: a.Lat, Lon: a.Lon}
 	close := geo.NearbyAirports(a.Lat, a.Lon, 40, 6, a.ICAO)
@@ -383,7 +442,7 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 	v.Summary = airportSummary(v)
 
 	title := fmt.Sprintf("%s (%s) live arrivals, departures and flight tracker", a.Name, codeSlash(a))
-	desc := fmt.Sprintf("Live flights at %s in %s: aircraft arriving, departing and on the ground right now, with airlines, routes and nearby airports.", a.Name, a.Place())
+	desc := fmt.Sprintf("Live flights at %s in %s: aircraft arriving, departing and on the ground right now, with the airlines here and where they fly.", a.Name, a.Place())
 	p := s.basePage(http.StatusOK, title, desc, "/airport/"+a.ICAO)
 	p.Section = "airports"
 	p.Query = a.Code()
@@ -481,7 +540,7 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 				}
 			}
 		}
-		r.City, _, _ = strings.Cut(r.Place.City, ", ")
+		r.City = boardCity(r.Place.City)
 		if !b.BoardTime.IsZero() {
 			r.At = timeCell(b.BoardTime, tz, "")
 		}
@@ -519,6 +578,18 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 	return out
 }
 
+// boardCity is a place's city as a board names it, up to its first comma
+// ("Honolulu" for "Honolulu, Oahu"), and short of a parenthesis that comma
+// would leave open ("Paris" for "Paris (Roissy-en-France, Val-d'Oise)";
+// "Shanghai (Pudong)" stays whole).
+func boardCity(city string) string {
+	c, _, _ := strings.Cut(city, ", ")
+	if i := strings.Index(c, " ("); i > 0 && !strings.Contains(c[i:], ")") {
+		c = c[:i]
+	}
+	return c
+}
+
 // markTwins marks the rows whose city another airport on the board shares
 // (New York's JFK and LaGuardia), which show their code by the city.
 func markTwins(rows []BoardRowV) {
@@ -537,10 +608,9 @@ func markTwins(rows []BoardRowV) {
 }
 
 // classifyTraffic sorts the aircraft around the field into what is parked at
-// it and what passes over it, counts the airlines flying here now, and looks
-// up where the passing flights come from and go to.
+// it and what passes over it, and looks up where the passing flights come
+// from and go to.
 func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.AirportTraffic) {
-	airlines := map[string]int{}
 	for _, x := range t.Aircraft {
 		row := TrafficRow{
 			Callsign: x.Callsign, Number: x.Callsign, URL: flightURL(x.Callsign), Op: opCode("", x.Callsign),
@@ -552,9 +622,6 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 		}
 		live := x.Status == "active" || x.Status == "landed"
 		if al, num, ok := store.AirlineCallsign(x.Callsign); ok {
-			if live {
-				airlines[al]++
-			}
 			if a, ok := s.index.Airline(al); ok && a.IATA != "" {
 				row.Number = a.IATA + strings.TrimLeft(num, "0")
 			}
@@ -620,24 +687,6 @@ func (s *Server) classifyTraffic(ctx context.Context, v *AirportPageV, t *api.Ai
 		}
 	}
 	s.resolveLive(ctx, passing, geo.LL{Lat: v.Airport.Lat, Lon: v.Airport.Lon})
-
-	for icao, n := range airlines {
-		name := icao
-		url := ""
-		if al, ok := s.index.Airline(icao); ok && al.Name != "" {
-			name, url = al.Name, "/airline/"+icao
-		}
-		v.Airlines = append(v.Airlines, AirlineCountV{ICAO: icao, Name: name, URL: url, Count: n})
-	}
-	sort.Slice(v.Airlines, func(i, j int) bool {
-		if v.Airlines[i].Count != v.Airlines[j].Count {
-			return v.Airlines[i].Count > v.Airlines[j].Count
-		}
-		return v.Airlines[i].Name < v.Airlines[j].Name
-	})
-	if len(v.Airlines) > 12 {
-		v.Airlines = v.Airlines[:12]
-	}
 }
 
 // liveLookupBudget bounds how long a page waits for optional live lookups.
