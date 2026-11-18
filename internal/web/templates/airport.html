@@ -1,21 +1,25 @@
 {{/* an arrivals or departures board as an airport's screens show it,
      earliest first: what has landed (or left), a line at now, then what
-     is on its way. A flight fills its row as far as it has come: in the air by its progress,
+     is on its way, with its gate and carousel where the board knows any. A flight fills its row as far as it has come: in the air by its progress,
      98% landed, all of it at the gate.
      The rows are laid out on a grid (site.css), so the roles keep the
      table's meaning for screen readers that drop it from a restyled table. */}}
 {{define "fids"}}{{if .Rows}}
-<table class="fids" role="table">
+<table class="fids{{if and .Gate .Claim}} fids-6{{else if or .Gate .Claim}} fids-5{{end}}" role="table">
 	<thead role="rowgroup"><tr role="row">
 		<th scope="col" role="columnheader">Time{{with (index .Rows 0).At.Zone}} <small>{{.}}</small>{{end}}</th>
 		<th scope="col" role="columnheader">Flight</th>
 		<th scope="col" role="columnheader">{{.Col}}</th>
+		{{if .Gate}}<th scope="col" role="columnheader" class="fids-gate">Gate</th>{{end}}
+		{{if .Claim}}<th scope="col" role="columnheader" class="fids-claim">Bag<span class="fids-long">gage</span></th>{{end}}
 		<th scope="col" role="columnheader">Status</th>
 	</tr></thead>
 	<tbody role="rowgroup">{{range .Rows}}<tr role="row"{{with .RowClass}} class="{{.}}"{{end}}{{if .Fill}} style="--p:{{.Fill}}%"{{end}}>
 		<td role="cell" class="fids-time">{{if .At.Set}}<time datetime="{{.At.ISO}}">{{.At.Clock}}</time>{{else}}<span class="dim">&ndash;</span>{{end}}</td>
 		<td role="cell" class="fids-flight">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}</td>
 		<td role="cell" class="fids-place">{{template "airport-inline" .Place}}{{with .Place.City}} <span class="dim">{{.}}</span>{{end}}</td>
+		{{if $.Gate}}<td role="cell" class="fids-gate">{{.Gate}}</td>{{end}}
+		{{if $.Claim}}<td role="cell" class="fids-claim">{{.Claim}}</td>{{end}}
 		<td role="cell" class="fids-status"><span class="tag tag-{{.Class}}">{{.Status}}</span>{{with .Note}}<small class="fids-note">{{.}}</small>{{end}}{{if .Air}}<span class="vh">, {{.Fill}}% of the way</span>{{end}}</td>
 	</tr>{{end}}</tbody>
 </table>
@@ -70,11 +74,11 @@
 <div class="wrap cols cols-boards">
 	<section class="panel" id="arrivals" aria-labelledby="arr-h">
 		<h2 id="arr-h">Arrivals</h2>
-		<div data-part="arrivals">{{template "airport-arrivals" $v}}</div>
+		<div class="board" data-part="arrivals">{{template "airport-arrivals" $v}}</div>
 	</section>
 	<section class="panel" id="departures" aria-labelledby="dep-h">
 		<h2 id="dep-h">Departures</h2>
-		<div data-part="departures">{{template "airport-departures" $v}}</div>
+		<div class="board" data-part="departures">{{template "airport-departures" $v}}</div>
 	</section>
 
 	<section class="panel" id="parked" aria-labelledby="park-h">

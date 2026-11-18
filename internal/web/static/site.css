@@ -201,6 +201,9 @@ time, .num { font-variant-numeric: tabular-nums; }
 	display: grid; grid-template-columns: max-content max-content minmax(0, 1fr) max-content;
 	width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums;
 }
+/* a Gate column, a Baggage one or both, where the board knows any */
+.fids-5 { grid-template-columns: max-content max-content minmax(0, 1fr) repeat(2, max-content); }
+.fids-6 { grid-template-columns: max-content max-content minmax(0, 1fr) repeat(3, max-content); }
 .fids thead, .fids tbody { display: contents; }
 .fids tr { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; border-bottom: 1px solid var(--line-soft); }
 .fids tbody tr:last-child { border-bottom: 0; }
@@ -213,6 +216,7 @@ time, .num { font-variant-numeric: tabular-nums; }
 .fids-time time { font-weight: 700; color: var(--ink); white-space: nowrap; }
 .fids-flight { white-space: nowrap; }
 .fids-place { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+td.fids-gate, td.fids-claim { font-weight: 700; color: var(--ink); white-space: nowrap; }
 .fids-status .tag { display: block; }
 .fids-note { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 500; color: var(--muted); white-space: nowrap; }
 .fids tr.is-filled, .grid tr.is-filled {
@@ -220,6 +224,41 @@ time, .num { font-variant-numeric: tabular-nums; }
 }
 /* the line at now: the first row still to land or leave */
 .fids tr.is-past + tr:not(.is-past) { border-top: 2px solid var(--sky); }
+
+/* a narrow board (two abreast on a small laptop, or a phone's) tightens up
+   by its own width, not the window's: the place keeps room for its code and
+   a long status ("ETA 20 min early") wraps before anything is cut; a little
+   narrower, the city is left off rather than cut to a letter */
+.board { container-type: inline-size; }
+@container (max-width: 520px) {
+	.fids th, .fids td { padding-inline: 6px; }
+	.fids th:first-child, .fids td:first-child { padding-left: 14px; }
+	.fids th:last-child, .fids td:last-child { padding-right: 14px; }
+	.fids { grid-template-columns: max-content max-content minmax(3.4em, 1fr) minmax(min-content, max-content); }
+	.fids-5 { grid-template-columns: max-content max-content minmax(3.4em, 1fr) max-content minmax(min-content, max-content); }
+	.fids-6 { grid-template-columns: max-content max-content minmax(3.4em, 1fr) repeat(2, max-content) minmax(min-content, max-content); }
+	.fids-status .tag, .fids-note { white-space: normal; }
+}
+@container (max-width: 480px) {
+	.fids-place .dim { display: none; }
+}
+/* narrower still, a carousel goes under its gate, in one column headed
+   "Gate" over "Bag" */
+@container (max-width: 460px) {
+	.fids-6 { grid-template-columns: max-content max-content minmax(3.4em, 1fr) max-content minmax(min-content, max-content); }
+	.fids-6 tr { grid-template-rows: auto auto; }
+	.fids-6 th, .fids-6 td { grid-row: 1 / span 2; }
+	.fids-6 .fids-gate { grid-column: 4; grid-row: 1; align-self: end; padding-bottom: 0; }
+	.fids-6 .fids-claim { grid-column: 4; grid-row: 2; align-self: start; padding-top: 1px; }
+	.fids-6 td.fids-gate, .fids-6 td.fids-claim { line-height: 1.2; }
+	.fids-6 td.fids-claim { font-size: 12px; font-weight: 500; color: var(--muted); }
+	.fids-6 th.fids-claim { font-weight: 500; color: #9fb5d1; }
+	.fids-long { display: none; }
+}
+/* the smallest phones leave the airline's logo off; the number says it */
+@container (max-width: 340px) {
+	.fids .op { display: none; }
+}
 
 /* condensed, the airport band keeps its clock, smaller, in the middle; the
    name and code sit at the right where aircraft pages put the tail */
@@ -654,11 +693,7 @@ a.mk-plane-sm:hover { color: var(--link); }
 	.flap-half b { font-size: 21px; }
 	.flap-wide b { font-size: 13px; }
 	.clock-colon { font-size: 20px; }
-	/* the boards keep their four columns: tighter, the city left off */
-	.fids th, .fids td { padding-inline: 8px; }
-	.fids th:first-child, .fids td:first-child { padding-left: 14px; }
-	.fids th:last-child, .fids td:last-child { padding-right: 14px; }
-	.fids-place .dim { display: none; }
+	/* the boards a touch smaller (their narrow layout is below, by width) */
 	.fids { font-size: 13px; }
 	.band-bar-name { display: none; }
 	/* under the flight, not across from it: its own row past a faint rule,

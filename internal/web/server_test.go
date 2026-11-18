@@ -959,18 +959,29 @@ func TestAirportBoards(t *testing.T) {
 	}
 	// the inbound flight is due ten minutes behind schedule: its status says
 	// so in place of "En Route"
-	if !strings.Contains(arrivals, ">Arrived Gate B4<") || !strings.Contains(arrivals, `<span class="tag tag-air">ETA 10 min late</span>`) || strings.Contains(arrivals, "En Route") ||
+	if !strings.Contains(arrivals, `<span class="tag tag-landed">Arrived</span>`) || !strings.Contains(arrivals, `<span class="tag tag-air">ETA 10 min late</span>`) || strings.Contains(arrivals, "En Route") ||
 		!strings.Contains(arrivals, `title="SAN DIEGO INTL">SAN</`) && !strings.Contains(arrivals, ">SAN<") {
 		t.Errorf("arrivals board:\n%s", arrivals)
 	}
-	// at the gate, its carousel; on the way, the gate it is coming to
-	for _, want := range []string{`<small class="fids-note">Baggage 4</small>`, `<small class="fids-note">Gate N12</small>`} {
+	// gates and carousels have columns of their own: at the gate B4 and
+	// carousel 4, on the way N12 and 5; the departures board has no carousels
+	spots := func(gate, claim string) string {
+		return `<td role="cell" class="fids-gate">` + gate + `</td>
+		<td role="cell" class="fids-claim">` + claim + `</td>`
+	}
+	for _, want := range []string{`<table class="fids fids-6"`, `>Gate</th>`, `>Bag<span class="fids-long">gage</span></th>`, spots("B4", "4"), spots("N12", "5")} {
 		if !strings.Contains(arrivals, want) {
 			t.Errorf("arrivals board lacks %s", want)
 		}
 	}
+	if strings.Contains(arrivals, "fids-note") {
+		t.Errorf("arrivals board: no note when the status and columns say it all:\n%s", arrivals)
+	}
 	departures := body[dep:park]
-	for _, want := range []string{`href="/flight/ASA13"`, `href="/flight/ASA15"`, ">Scheduled<", `<small class="fids-note">Gate C12</small>`} {
+	if strings.Contains(departures, `class="fids-claim"`) {
+		t.Error("departures board has a Baggage column")
+	}
+	for _, want := range []string{`href="/flight/ASA13"`, `href="/flight/ASA15"`, ">Scheduled<", `<table class="fids fids-5"`, `<td role="cell" class="fids-gate">C12</td>`} {
 		if !strings.Contains(departures, want) {
 			t.Errorf("departures board lacks %s", want)
 		}
@@ -1033,7 +1044,7 @@ func TestAirportLiveBoards(t *testing.T) {
 	if m == nil {
 		t.Fatal("airport page carries no refresh URL")
 	}
-	for _, want := range []string{"/live.js", `<div data-part="arrivals">`, `<div data-part="departures">`} {
+	for _, want := range []string{"/live.js", `<div class="board" data-part="arrivals">`, `<div class="board" data-part="departures">`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("airport page lacks %s", want)
 		}
@@ -1058,7 +1069,7 @@ func TestAirportLiveBoards(t *testing.T) {
 	}
 	// the parts are what the page drew
 	for _, part := range []string{"arrivals", "departures"} {
-		if !strings.Contains(page, `<div data-part="`+part+`">`+a.Parts[part]+`</div>`) {
+		if !strings.Contains(page, `<div class="board" data-part="`+part+`">`+a.Parts[part]+`</div>`) {
 			t.Errorf("%s part differs from the page's", part)
 		}
 	}
@@ -1217,5 +1228,42 @@ func TestSpots(t *testing.T) {
 	}
 	if d, a := spots(LegV{Phase: "arrived", DivertedTo: &AirportV{Code: "PDX"}}); d != "Terminal 3 · Gate 26" || a != "" {
 		t.Errorf("diverted: %q / %q", d, a)
+	}
+}
+
+// a board has a Gate column only when a row has a gate, and a Baggage one
+// only when a row has a carousel, so a field the airlines do not report to
+// keeps its four columns
+func TestBoardColumns(t *testing.T) {
+	s := newTestServer(t)
+	fids := s.funcs()["fids"].(func([]BoardRowV, string, string) any)
+	row := func(gate, claim string) BoardRowV {
+		return BoardRowV{Status: "Scheduled", Class: "sched", Gate: gate, Claim: claim}
+	}
+	for _, c := range []struct {
+		rows        []BoardRowV
+		table       string
+		gate, claim bool
+	}{
+		{[]BoardRowV{row("", ""), row("", "")}, `<table class="fids" `, false, false},
+		{[]BoardRowV{row("", ""), row("C12", "")}, `<table class="fids fids-5" `, true, false},
+		{[]BoardRowV{row("", "7"), row("", "")}, `<table class="fids fids-5" `, false, true},
+		{[]BoardRowV{row("B4", "4"), row("", "")}, `<table class="fids fids-6" `, true, true},
+	} {
+		var b strings.Builder
+		if err := s.tpl["airport"].ExecuteTemplate(&b, "fids", fids(c.rows, "From", "None.")); err != nil {
+			t.Fatal(err)
+		}
+		h := b.String()
+		count := func(on bool) int {
+			if on {
+				return len(c.rows) + 1 // the head and each row
+			}
+			return 0
+		}
+		gates, claims := strings.Count(h, `class="fids-gate"`), strings.Count(h, `class="fids-claim"`)
+		if !strings.Contains(h, c.table) || gates != count(c.gate) || claims != count(c.claim) {
+			t.Errorf("gate %v, claim %v: want %s, got %d gate and %d claim cells:\n%s", c.gate, c.claim, c.table, gates, claims, h)
+		}
 	}
 }

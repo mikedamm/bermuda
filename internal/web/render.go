@@ -131,11 +131,19 @@ func (s *Server) funcs() template.FuncMap {
 		"add":     func(a, b int) int { return a + b },
 		"country": geo.CountryName,
 		"query":   url.QueryEscape,
+		// a board, with a Gate column when any row has a gate and a
+		// Baggage one when any has a carousel
 		"fids": func(rows []BoardRowV, col, empty string) any {
-			return struct {
-				Rows       []BoardRowV
-				Col, Empty string
-			}{rows, col, empty}
+			v := struct {
+				Rows        []BoardRowV
+				Col, Empty  string
+				Gate, Claim bool
+			}{Rows: rows, Col: col, Empty: empty}
+			for _, r := range rows {
+				v.Gate = v.Gate || r.Gate != ""
+				v.Claim = v.Claim || r.Claim != ""
+			}
+			return v
 		},
 		"band": func(class, title, detail string) StatusBand { return StatusBand{class, title, detail} },
 		"timeGroups": func(depTitle string, dep []TimeRow, arrTitle string, arr []TimeRow) any {
