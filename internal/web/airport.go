@@ -95,10 +95,12 @@ const (
 	arrivalsDepth   = 500
 	departuresDepth = 60
 	flownRows       = 15
-	// what is coming: half an hour of a hub's inbound flights, a few more
-	// read for the ones the board holds twice
+	// what is coming: half an hour of a hub's inbound flights, at most ten
+	// of them already past their time; read deep enough for those (a hub's
+	// scheduled board starts an hour back) and the ones it holds twice
 	comingRows  = 30
-	comingDepth = 40
+	dueRows     = 10
+	comingDepth = 80
 )
 
 // loadBoards fetches the page's boards and the four full boards together:
@@ -594,6 +596,16 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 		a, b := next[i].t, next[j].t
 		return !a.IsZero() && (b.IsZero() || a.Before(b))
 	})
+	// Plans past their time (most about to push back, some never closed)
+	// head the list; at ORD three dozen of them filled the half before it
+	// reached the next minute, so only the latest few stay.
+	due := 0
+	for due < len(next) && !next[due].t.IsZero() && next[due].t.Before(now) {
+		due++
+	}
+	if due > dueRows {
+		next = next[due-dueRows:]
+	}
 	for i, n := 0, len(out); i < len(next) && len(out)-n < comingRows; i++ {
 		keep(next[i], 3*time.Hour)
 	}

@@ -1400,6 +1400,28 @@ func TestBoardRowsDepth(t *testing.T) {
 	}
 }
 
+// The coming half keeps only the ten latest of the plans past their time,
+// so it reaches past now however many a hub's scheduled board holds.
+func TestBoardRowsDue(t *testing.T) {
+	now := time.Date(2026, 11, 18, 20, 0, 0, 0, time.UTC)
+	var next []api.BoardRow
+	for i := range 74 {
+		cs := fmt.Sprintf("UAL%d", i)
+		next = append(next, api.BoardRow{BoardTime: now.Add(time.Duration(i-34) * 2 * time.Minute),
+			Live: &api.FlightSummary{FlightID: cs, Callsign: cs, Dep: "KORD", Arr: "KSFO", Phase: "scheduled", PhaseWord: "Scheduled"}})
+	}
+	rows := boardRows(nil, next, false, "America/Chicago", now)
+	var due int
+	for _, r := range rows {
+		if r.t.Before(now) {
+			due++
+		}
+	}
+	if len(rows) != comingRows || due != dueRows || rows[0].Ident != "UAL24" {
+		t.Errorf("got %d rows, %d due, the first %s; want %d, %d, UAL24", len(rows), due, rows[0].Ident, comingRows, dueRows)
+	}
+}
+
 // A row's fill: all of it at the gate, 98% landed; in the air the leg's
 // position where it has one, else the clock from take-off to the estimate,
 // never past 97; none before leaving.
