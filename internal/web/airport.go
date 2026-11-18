@@ -429,6 +429,14 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 	for i := len(recent) - 1; i >= 0; i-- {
 		add(recent[i], true)
 	}
+	// the API lists the flights with an estimate before those with only a
+	// metered or scheduled time, so the coming rows are put in the order of
+	// the time each one shows (a row without one last)
+	coming = append([]api.BoardRow(nil), coming...)
+	sort.SliceStable(coming, func(i, j int) bool {
+		a, b := coming[i].BoardTime, coming[j].BoardTime
+		return !a.IsZero() && (b.IsZero() || a.Before(b))
+	})
 	for _, b := range coming {
 		add(b, false)
 	}

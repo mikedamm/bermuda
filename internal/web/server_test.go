@@ -1216,6 +1216,28 @@ func TestBoardRowsDedupe(t *testing.T) {
 	}
 }
 
+// The coming rows read in time order even when the API lists the flights
+// with an estimate ahead of those with only a scheduled time (seen at KSEA:
+// 9:33 AM, then 12:00 AM, 2:46 AM).
+func TestBoardRowsOrder(t *testing.T) {
+	at := func(m int) time.Time {
+		return time.Date(2026, 11, 18, 8, 0, 0, 0, time.UTC).Add(time.Duration(m) * time.Minute)
+	}
+	inbound := func(id, cs string, m int) api.BoardRow {
+		return api.BoardRow{BoardTime: at(m), Live: &api.FlightSummary{FlightID: id, Callsign: cs, Dep: "PANC", Arr: "KSEA", Phase: "en_route", PhaseWord: "En Route"}}
+	}
+	rows := boardRows(nil,
+		[]api.BoardRow{inbound("a", "DAL375", 312), inbound("b", "KAL41", 573), inbound("c", "CKK625", 0), inbound("d", "ASA7096", 166)},
+		true, "America/Los_Angeles", at(-2))
+	var got []string
+	for _, r := range rows {
+		got = append(got, r.Ident+"@"+r.At.Clock)
+	}
+	if want := "[CKK625@12:00 AM ASA7096@2:46 AM DAL375@5:12 AM KAL41@9:33 AM]"; fmt.Sprint(got) != want {
+		t.Errorf("got %v\nwant %s", got, want)
+	}
+}
+
 // A row's fill: all of it at the gate, 98% landed; in the air the leg's
 // position where it has one, else the clock from take-off to the estimate,
 // never past 97; none before leaving.
