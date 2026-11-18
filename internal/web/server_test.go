@@ -223,6 +223,16 @@ func fakeAPI(t *testing.T) *httptest.Server {
 			map[string]any{"callsign": "", "direction": "local", "registration": "N9BFI", "on_ground": true, "alt_ft": 20, "status": "completed", "distance_mi": 5.2},
 		}})
 	})
+	// what is coming: inbound and leaving, in the page's previews and on
+	// the full enroute and scheduled boards
+	inbound := map[string]any{"board_time": ts(40 * time.Minute)}
+	for k, v := range live {
+		inbound[k] = v
+	}
+	leaving := map[string]any{"dep_gate": "c12"}
+	for k, v := range nextLeg {
+		leaving[k] = v
+	}
 	// the airport page's boards: landed, inbound, left, scheduled
 	mux.HandleFunc("GET /airports/{code}", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("code") != "KSEA" {
@@ -236,14 +246,6 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		}
 		arrived["board_time"] = ts(-25 * time.Hour)
 		arrived["arr_gate"], arrived["baggage"] = "b4", "4"
-		leaving := map[string]any{"dep_gate": "c12"}
-		for k, v := range nextLeg {
-			leaving[k] = v
-		}
-		inbound := map[string]any{"board_time": ts(40 * time.Minute)}
-		for k, v := range live {
-			inbound[k] = v
-		}
 		// the previews of the full boards lead with plans (newest board time
 		// first, any phase), so the page draws its top halves from the full
 		// boards instead
@@ -258,13 +260,21 @@ func fakeAPI(t *testing.T) *httptest.Server {
 				"scheduled":  []any{leaving},
 			}})
 	})
-	// the full arrivals and departures boards from a time back: flown flights
-	// among plans gone past their time
+	// the full boards: arrivals and departures from a time back, flown
+	// flights among plans gone past their time; enroute and scheduled from
+	// now on, deeper than the page's previews (AS16, a second flight in)
 	mux.HandleFunc("GET /airports/{code}/board", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if q.Get("before") == "" || q.Get("limit") == "" {
-			t.Errorf("full board asked without a start and a depth: %s", r.URL.RawQuery)
+		kind := q.Get("kind")
+		if back := kind == "arrivals" || kind == "departures"; back != (q.Get("before") != "") || q.Get("limit") == "" {
+			t.Errorf("%s board asked from the wrong start or without a depth: %s", kind, r.URL.RawQuery)
 		}
+		later := map[string]any{"board_time": ts(70 * time.Minute)}
+		for k, v := range live {
+			later[k] = v
+		}
+		later["flight_id"], later["callsign"], later["iata_flight"], later["eta"], later["sched_arr"] = "f-16", "ASA16", "AS16", ts(70*time.Minute), ts(70*time.Minute)
+		later["arr_gate"], later["baggage"] = nil, nil
 		stale := planned("f-stale", "ASA700", "AS700", "KSAN", "KSEA", -time.Hour)
 		stale["board_time"] = ts(-time.Hour)
 		arrived := map[string]any{"board_time": ts(-25 * time.Hour), "arr_gate": "b4", "baggage": "4"}
@@ -281,8 +291,10 @@ func fakeAPI(t *testing.T) *httptest.Server {
 		rows := map[string][]any{
 			"arrivals":   {stale, arrived, fromChicago("f-ord", "UAL1", "KORD"), fromChicago("f-mdw", "UAL2", "KMDW")},
 			"departures": {stale, landed},
-		}[q.Get("kind")]
-		write(w, map[string]any{"kind": q.Get("kind"), "total": len(rows), "rows": rows})
+			"enroute":    {inbound, later},
+			"scheduled":  {leaving},
+		}[kind]
+		write(w, map[string]any{"kind": kind, "total": len(rows), "rows": rows})
 	})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer test-token" {
@@ -1080,6 +1092,10 @@ func TestAirportBoards(t *testing.T) {
 	if past < 0 || next < past {
 		t.Errorf("arrivals: want the landed flight first, then the inbound one filling its row:\n%s", rows)
 	}
+	// what is coming is the full inbound board, not the page's preview of it
+	if as14, as16 := strings.Index(rows, `href="/flight/ASA14"`), strings.LastIndex(rows, `href="/flight/ASA16"`); as16 < 0 || as16 < strings.LastIndex(rows, `href="/flight/ASA14"`) || as14 < 0 {
+		t.Errorf("arrivals: want AS16, on the full inbound board only, after AS14:\n%s", rows)
+	}
 	// the inbound flight is due ten minutes behind schedule: its status says
 	// so in place of "En Route"
 	if !strings.Contains(arrivals, `<span class="tag tag-landed">Arrived</span>`) || !strings.Contains(arrivals, `<span class="tag tag-air">10m late</span>`) || strings.Contains(arrivals, "En Route") ||
@@ -1342,6 +1358,45 @@ func TestBoardRowsOrder(t *testing.T) {
 	}
 	if want := "[CKK625@08:00 ASA7096@10:46 DAL375@13:12 KAL41@17:33]"; fmt.Sprint(got) != want {
 		t.Errorf("got %v\nwant %s", got, want)
+	}
+}
+
+// A board shows the fifteen newest flights that have landed (a plan among
+// them left out) and the thirty soonest coming, however many the API lists.
+func TestBoardRowsDepth(t *testing.T) {
+	now := time.Date(2026, 11, 18, 20, 0, 0, 0, time.UTC)
+	row := func(phase string, n, m int) api.BoardRow {
+		cs := fmt.Sprintf("DAL%d", n)
+		return api.BoardRow{BoardTime: now.Add(time.Duration(m) * time.Minute),
+			Live: &api.FlightSummary{FlightID: cs, Callsign: cs, Dep: "KLGA", Arr: "KATL", Phase: phase, PhaseWord: phase}}
+	}
+	full := &api.Board{}
+	for i := range 40 {
+		ph := "arrived"
+		if i == 3 {
+			ph = "scheduled"
+		}
+		full.Rows = append(full.Rows, row(ph, i, -i))
+	}
+	var next []api.BoardRow
+	for i := range 40 {
+		next = append(next, row("en_route", 100+i, i+1))
+	}
+	recent := flown(full, landedPhases)
+	if len(recent) != flownRows || recent[3].Live.Callsign != "DAL4" {
+		t.Fatalf("flown: %d rows, the fourth %s; want %d, DAL4", len(recent), recent[3].Live.Callsign, flownRows)
+	}
+	rows := boardRows(recent, next, true, "America/New_York", now)
+	var past, coming int
+	for _, r := range rows {
+		if r.Past {
+			past++
+		} else {
+			coming++
+		}
+	}
+	if past != 15 || coming != 30 || rows[len(rows)-1].Ident != "DAL129" {
+		t.Errorf("got %d landed and %d coming, the last %s; want 15, 30, DAL129", past, coming, rows[len(rows)-1].Ident)
 	}
 }
 

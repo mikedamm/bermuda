@@ -70,12 +70,14 @@ func (r BoardRowV) RowClass() string {
 	return strings.Join(c, " ")
 }
 
-// boardsAnswer is what the two boards are drawn from: the airport page's
-// inbound and scheduled views for what is coming, and the full arrivals and
-// departures boards for what has landed and left (nil when they failed).
+// boardsAnswer is what the two boards are drawn from: the full arrivals and
+// departures boards for what has landed and left, and the full enroute and
+// scheduled ones for what is coming (each nil when it failed, when the page's
+// ten-row previews of the last two stand in).
 type boardsAnswer struct {
-	page     *api.AirportBoards
-	arr, dep *api.Board
+	page           *api.AirportBoards
+	arr, dep       *api.Board
+	enroute, sched *api.Board
 }
 
 // Flown phases: what a board's top half lists. The full boards hold every
@@ -92,23 +94,34 @@ const (
 	// landed ones, a few hundred of them at a hub before dawn
 	arrivalsDepth   = 500
 	departuresDepth = 60
-	flownRows       = 10
+	flownRows       = 15
+	// what is coming: half an hour of a hub's inbound flights, a few more
+	// read for the ones the board holds twice
+	comingRows  = 30
+	comingDepth = 40
 )
 
-// loadBoards fetches the page's boards and the full arrivals and departures
-// boards together, from now back. Only the page's answer is required.
+// loadBoards fetches the page's boards and the four full boards together:
+// arrivals and departures from now back, enroute and scheduled from now on.
+// Only the page's answer is required.
 func (s *Server) loadBoards(ctx context.Context, icao string, now time.Time) (boardsAnswer, error) {
 	var out boardsAnswer
 	var wg sync.WaitGroup
 	for _, side := range []struct {
-		kind  string
-		depth int
-		dst   **api.Board
-	}{{"arrivals", arrivalsDepth, &out.arr}, {"departures", departuresDepth, &out.dep}} {
+		kind   string
+		depth  int
+		before time.Time
+		dst    **api.Board
+	}{
+		{"arrivals", arrivalsDepth, now, &out.arr},
+		{"departures", departuresDepth, now, &out.dep},
+		{"enroute", comingDepth, time.Time{}, &out.enroute},
+		{"scheduled", comingDepth, time.Time{}, &out.sched},
+	} {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if b, err := s.api.AirportBoard(ctx, icao, side.kind, 6, side.depth, now); err == nil {
+			if b, err := s.api.AirportBoard(ctx, icao, side.kind, 6, side.depth, side.before); err == nil {
 				*side.dst = b
 			}
 		}()
@@ -128,11 +141,13 @@ func (s *Server) noteRoutes(icao string, b boardsAnswer, now time.Time) {
 		s.index.NoteBoard(icao, p.Boards.Departures, false, now)
 		s.index.NoteBoard(icao, p.Boards.Scheduled, false, now)
 	}
-	if b.arr != nil {
-		s.index.NoteBoard(icao, b.arr.Rows, true, now)
-	}
-	if b.dep != nil {
-		s.index.NoteBoard(icao, b.dep.Rows, false, now)
+	for _, full := range []struct {
+		b        *api.Board
+		arriving bool
+	}{{b.arr, true}, {b.enroute, true}, {b.dep, false}, {b.sched, false}} {
+		if full.b != nil {
+			s.index.NoteBoard(icao, full.b.Rows, full.arriving, now)
+		}
 	}
 }
 
@@ -153,11 +168,19 @@ func flown(b *api.Board, phases []string) []api.BoardRow {
 	return out
 }
 
+// coming is a full board's rows, else the page's first ten of it.
+func coming(full *api.Board, preview []api.BoardRow) []api.BoardRow {
+	if full != nil {
+		return full.Rows
+	}
+	return preview
+}
+
 // setBoards fills the arrivals and departures boards.
 func (v *AirportPageV) setBoards(b boardsAnswer, now time.Time) {
 	v.Boards = true
-	v.Arrivals = boardRows(flown(b.arr, landedPhases), b.page.Boards.Enroute, true, v.Airport.TZ, now)
-	v.Departures = boardRows(flown(b.dep, leftPhases), b.page.Boards.Scheduled, false, v.Airport.TZ, now)
+	v.Arrivals = boardRows(flown(b.arr, landedPhases), coming(b.enroute, b.page.Boards.Enroute), true, v.Airport.TZ, now)
+	v.Departures = boardRows(flown(b.dep, leftPhases), coming(b.sched, b.page.Boards.Scheduled), false, v.Airport.TZ, now)
 }
 
 // boardMins writes a number of minutes as a board does, in its largest unit
@@ -571,8 +594,8 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 		a, b := next[i].t, next[j].t
 		return !a.IsZero() && (b.IsZero() || a.Before(b))
 	})
-	for _, r := range next {
-		keep(r, 3*time.Hour)
+	for i, n := 0, len(out); i < len(next) && len(out)-n < comingRows; i++ {
+		keep(next[i], 3*time.Hour)
 	}
 	markTwins(out)
 	return out
