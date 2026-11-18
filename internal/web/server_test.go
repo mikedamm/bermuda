@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -108,6 +109,16 @@ func fakeAPI(t *testing.T) *httptest.Server {
 				"line": map[string]any{"type": "LineString", "coordinates": line}, "length_nm": 900}})
 	})
 	mux.HandleFunc("GET /flights/{id}/track", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("id") == "f-ual5" { // passing over Seattle: its last minutes, northbound
+			ms := now.UnixMilli()
+			write(w, map[string]any{"flight_id": "f-ual5", "live": true, "resolution": "line",
+				"tail_5m": []any{
+					[]any{ms - 120_000, 47.45, -122.28, 31000, "adsb", 440, 350, 0},
+					[]any{ms - 60_000, 47.52, -122.29, 31000, "adsb", 440, 350, 0},
+					[]any{ms - 5_000, 47.60, -122.30, 31000, "adsb", 440, 350, 0},
+				}})
+			return
+		}
 		if r.PathValue("id") != "f-live" {
 			w.WriteHeader(404)
 			return
@@ -302,7 +313,7 @@ func TestPages(t *testing.T) {
 		{"/aircraft/a6a300", 301, "/aircraft/N527AS", nil},
 		{"/aircraft/N0NE", 404, "", nil},
 		{"/airport/SEA", 301, "/airport/KSEA", nil},
-		{"/airport/KSEA", 200, "", []string{`"@type":"Airport"`, "Seattle–Tacoma International Airport", `<h2 id="arr-h">Arrivals</h2>`, `href="/flight/ASA14"`}},
+		{"/airport/KSEA", 200, "", []string{`"@type":"Airport"`, "Seattle–Tacoma International Airport", `<h2 id="arr-h" class="keyed"><span class="key key-arr" aria-hidden="true"></span>Arrivals</h2>`, `href="/flight/ASA14"`}},
 		{"/airport/XXXX", 404, "", nil},
 		{"/tracker/", 200, "", []string{`action="/tracker/search"`}},
 		{"/", 301, "/tracker/", nil},
@@ -368,6 +379,12 @@ func TestMapLibreMaps(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := s.Handler()
+	// the airport's map: the flight passing over is gray-keyed, with its
+	// last minutes behind it ending where it is
+	if body := get(t, h, "/airport/KSEA").Body.String(); !strings.Contains(body, `"k":"pass","t":[[-122.28,47.45],[-122.29,47.52],[-122.3,47.6]]`) {
+		i := strings.Index(body, `"planes"`)
+		t.Errorf("airport map lacks the passing flight's trail: %.600s", body[max(i, 0):])
+	}
 	rec := get(t, h, "/flight/ASA14")
 	body := rec.Body.String()
 	for _, want := range []string{`data-map-tiles="https://i.wvcdn.com/v4.pmtiles"`, `data-map-lib="/tracker/static/vendor/maplibre-gl-6.16.0/maplibre-gl.mjs`,
@@ -933,7 +950,9 @@ func TestFlightBandCondenses(t *testing.T) {
 // gate it left from, the gate and carousel it is coming to.
 func TestFlightSpots(t *testing.T) {
 	body := get(t, testServer(t), "/flight/ASA14").Body.String()
-	for _, want := range []string{`<span class="route-spot">Terminal 1 · Gate 21</span>`, `<span class="route-spot">Gate N12 · Baggage 5</span>`} {
+	for _, want := range []string{`<span class="route-spot">Terminal 1 · Gate 21</span>`, `<span class="route-spot">Gate N12 · Baggage 5</span>`,
+		// in the air, its bars keep filling between updates, short of the end
+		`<div class="route" style="--p:51%" data-rate="0.0136" data-max="99">`, `<span class="band-sum-track" style="--p:51%" data-rate="0.0136" data-max="99">`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("flight route lacks %s", want)
 		}
@@ -959,8 +978,8 @@ func TestAirportBoards(t *testing.T) {
 	}
 	// the inbound flight is due ten minutes behind schedule: its status says
 	// so in place of "En Route"
-	if !strings.Contains(arrivals, `<span class="tag tag-landed">Arrived</span>`) || !strings.Contains(arrivals, `<span class="tag tag-air">ETA 10 min late</span>`) || strings.Contains(arrivals, "En Route") ||
-		!strings.Contains(arrivals, `title="SAN DIEGO INTL">SAN</`) && !strings.Contains(arrivals, ">SAN<") {
+	if !strings.Contains(arrivals, `<span class="tag tag-landed">Arrived</span>`) || !strings.Contains(arrivals, `<span class="tag tag-air">10m late</span>`) || strings.Contains(arrivals, "En Route") ||
+		!strings.Contains(arrivals, `">San Diego</a>`) || strings.Contains(arrivals, "San Diego,") {
 		t.Errorf("arrivals board:\n%s", arrivals)
 	}
 	// gates and carousels have columns of their own: at the gate B4 and
@@ -969,10 +988,15 @@ func TestAirportBoards(t *testing.T) {
 		return `<td role="cell" class="fids-gate">` + gate + `</td>
 		<td role="cell" class="fids-claim">` + claim + `</td>`
 	}
-	for _, want := range []string{`<table class="fids fids-6"`, `>Gate</th>`, `>Bag<span class="fids-long">gage</span></th>`, spots("B4", "4"), spots("N12", "5")} {
+	for _, want := range []string{`<table class="fids fids-6"`, `>Gate</th>`, `>Bags</th>`, spots("B4", "4"), spots("N12", "5")} {
 		if !strings.Contains(arrivals, want) {
 			t.Errorf("arrivals board lacks %s", want)
 		}
+	}
+	// the inbound flight keeps filling at its ground speed over the route,
+	// about 1,060 miles at 450 knots: 0.0136% a second
+	if !strings.Contains(arrivals, `data-rate="0.0136"`) {
+		t.Errorf("arrivals board: the inbound flight's row carries no fill rate:\n%s", arrivals)
 	}
 	if strings.Contains(arrivals, "fids-note") {
 		t.Errorf("arrivals board: no note when the status and columns say it all:\n%s", arrivals)
@@ -996,7 +1020,8 @@ func TestAirportBoards(t *testing.T) {
 	// a passing flight found in time fills its row as far along as it is
 	// (San Diego to Bellingham, over Seattle: most of the way); SLOW1's
 	// lookup ran out of time and its row stays clear
-	m := regexp.MustCompile(`<tr role="row" class="is-filled" style="--p:(\d+)%">\s*<td role="cell" data-label="Flight" class="nowrap">(.*?)</td>`).FindAllStringSubmatch(body[over:], -1)
+	// (and keeps filling at its rate: 0.0123% a second)
+	m := regexp.MustCompile(`<tr role="row" class="is-filled" style="--p:(\d+)%" data-rate="0.0123">\s*<td role="cell" data-label="Flight" class="nowrap">(.*?)</td>`).FindAllStringSubmatch(body[over:], -1)
 	if len(m) != 1 || !strings.Contains(m[0][2], ">UA5</a>") {
 		t.Fatalf("flying over: want UA5's row alone filled, got %q", m)
 	}
@@ -1064,7 +1089,7 @@ func TestAirportLiveBoards(t *testing.T) {
 	if a.Done || !strings.HasPrefix(a.Next, "/tracker/live/airport/KSEA/") {
 		t.Errorf("done=%v next=%q", a.Done, a.Next)
 	}
-	if !strings.Contains(a.Parts["arrivals"], "ETA 10 min late") || !strings.Contains(a.Parts["departures"], `href="/flight/ASA15"`) {
+	if !strings.Contains(a.Parts["arrivals"], "10m late") || !strings.Contains(a.Parts["departures"], `href="/flight/ASA15"`) {
 		t.Errorf("parts: %v", a.Parts)
 	}
 	// the parts are what the page drew
@@ -1091,14 +1116,44 @@ func TestAirportLiveBoards(t *testing.T) {
 	}
 }
 
+// a trail is the last three minutes, a point every ten seconds at most,
+// without dead-reckoned points, ending at the aircraft; one cut off from it
+// by a gap in coverage is not drawn
+func TestTrail(t *testing.T) {
+	ms := int64(1_763_000_000_000)
+	p := func(ago time.Duration, lat, lon float64, class string) api.TrackPoint {
+		return api.TrackPoint{T: ms - ago.Milliseconds(), Lat: lat, Lon: lon, Class: class}
+	}
+	pts := []api.TrackPoint{
+		p(250*time.Second, 47.00, -122.00, "adsb"), // before the window
+		p(170*time.Second, 47.10, -122.00, "adsb"),
+		p(165*time.Second, 47.11, -122.00, "adsb"), // within ten seconds of the last kept
+		p(150*time.Second, 47.20, -122.00, "est"),  // dead-reckoned
+		p(100*time.Second, 47.30, -122.00, "mlat"),
+		p(0, 47.40, -122.00, "adsb"),
+	}
+	got := trail(pts, [2]float64{-122.0, 47.41})
+	want := [][2]float64{{-122, 47.1}, {-122, 47.3}, {-122, 47.4}, {-122, 47.41}}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("trail: %v, want %v", got, want)
+	}
+	if got := trail(pts, [2]float64{-121.0, 48.5}); got != nil {
+		t.Errorf("an aircraft far from its last report: %v, want none", got)
+	}
+	if got := trail(nil, [2]float64{-122.0, 47.4}); got != nil {
+		t.Errorf("no track: %v", got)
+	}
+}
+
 func TestEtaStatus(t *testing.T) {
 	at := time.Date(2026, 11, 17, 10, 0, 0, 0, time.UTC)
 	for _, c := range []struct {
 		min         float64
 		text, class string
 	}{
-		{0, "On time", "ok"}, {-4, "On time", "ok"}, {-5, "ETA 5 min early", "ok"}, {4, "ETA 4 min late", "air"},
-		{14.6, "ETA 15 min late", "late"}, {65, "ETA 1 hr 5 min late", "late"}, {120, "ETA 2 hr late", "late"},
+		{0, "On time", "ok"}, {-4, "On time", "ok"}, {-5, "5m early", "ok"}, {4, "4m late", "air"},
+		{14.6, "15m late", "late"}, {59, "59m late", "late"}, {60, "1h late", "late"}, {89, "1h late", "late"},
+		{90, "2h late", "late"}, {185, "3h late", "late"}, {-70, "1h early", "ok"},
 	} {
 		text, class := etaStatus(at.Add(time.Duration(c.min*float64(time.Minute))), at)
 		if text != c.text || class != c.class {
@@ -1108,8 +1163,8 @@ func TestEtaStatus(t *testing.T) {
 	if text, _ := etaStatus(time.Time{}, at); text != "" {
 		t.Errorf("no estimate: %q", text)
 	}
-	for at2, want := range map[time.Time]string{at.Add(12 * time.Minute): "ETD 12 min late", at.Add(-8 * time.Minute): "ETD 8 min early", at.Add(-2 * time.Minute): ""} {
-		if got := lateWords("ETD", at2, at); got != want {
+	for at2, want := range map[time.Time]string{at.Add(12 * time.Minute): "12m late", at.Add(-8 * time.Minute): "8m early", at.Add(-2 * time.Minute): "", at.Add(150 * time.Minute): "3h late"} {
+		if got := lateWords(at2, at); got != want {
 			t.Errorf("lateWords %v: %q, want %q", at2.Sub(at), got, want)
 		}
 	}
@@ -1167,25 +1222,29 @@ func TestBoardRowsDedupe(t *testing.T) {
 func TestBoardFill(t *testing.T) {
 	now := time.Date(2026, 11, 17, 10, 0, 0, 0, time.UTC)
 	fs := &api.FlightSummary{Phase: "en_route", Off: now.Add(-time.Hour), ETA: now.Add(3 * time.Hour)}
+	// the rate (% a second) is the measure's: by position the leg's own
+	// (its ground speed over the route), by the clock 100% over the four
+	// hours planned; none once it is as full as a flight in the air gets
 	for _, c := range []struct {
 		name string
 		l    LegV
 		fs   *api.FlightSummary
 		want int
+		rate float64
 	}{
-		{"by position", LegV{Phase: "en_route", Progress: 62}, fs, 62},
-		{"nearly there", LegV{Phase: "en_route", Progress: 99}, fs, 97},
-		{"by the clock", LegV{Phase: "en_route"}, fs, 25},
-		{"overdue", LegV{Phase: "en_route"}, &api.FlightSummary{Off: now.Add(-3 * time.Hour), ETA: now.Add(-time.Minute)}, 97},
-		{"on the ground", LegV{Phase: "en_route", Progress: 99}, &api.FlightSummary{OnGround: true}, 0},
-		{"landed", LegV{Phase: "landed", Progress: 100}, fs, 98},
-		{"at the gate", LegV{Phase: "arrived", Progress: 100}, nil, 100},
-		{"scheduled", LegV{Phase: "scheduled"}, fs, 0},
-		{"taxiing out", LegV{Phase: "taxiing"}, fs, 0},
-		{"no times", LegV{Phase: "en_route"}, &api.FlightSummary{}, 0},
+		{"by position", LegV{Phase: "en_route", Progress: 62, ProgressRate: 0.02}, fs, 62, 0.02},
+		{"nearly there", LegV{Phase: "en_route", Progress: 99, ProgressRate: 0.02}, fs, 97, 0},
+		{"by the clock", LegV{Phase: "en_route"}, fs, 25, 100.0 / (4 * 3600)},
+		{"overdue", LegV{Phase: "en_route"}, &api.FlightSummary{Off: now.Add(-3 * time.Hour), ETA: now.Add(-time.Minute)}, 97, 0},
+		{"on the ground", LegV{Phase: "en_route", Progress: 99}, &api.FlightSummary{OnGround: true}, 0, 0},
+		{"landed", LegV{Phase: "landed", Progress: 100}, fs, 98, 0},
+		{"at the gate", LegV{Phase: "arrived", Progress: 100}, nil, 100, 0},
+		{"scheduled", LegV{Phase: "scheduled"}, fs, 0, 0},
+		{"taxiing out", LegV{Phase: "taxiing"}, fs, 0, 0},
+		{"no times", LegV{Phase: "en_route"}, &api.FlightSummary{}, 0, 0},
 	} {
-		if got := boardFill(c.l, c.fs, now); got != c.want {
-			t.Errorf("%s: %d, want %d", c.name, got, c.want)
+		if got, rate := boardFill(c.l, c.fs, now); got != c.want || math.Abs(rate-c.rate) > 1e-9 {
+			t.Errorf("%s: %d at %g/s, want %d at %g/s", c.name, got, rate, c.want, c.rate)
 		}
 	}
 }
@@ -1228,6 +1287,36 @@ func TestSpots(t *testing.T) {
 	}
 	if d, a := spots(LegV{Phase: "arrived", DivertedTo: &AirportV{Code: "PDX"}}); d != "Terminal 3 · Gate 26" || a != "" {
 		t.Errorf("diverted: %q / %q", d, a)
+	}
+}
+
+// a board names a place by its city, with the code beside it only where
+// another airport of that city is on the board too
+func TestBoardPlaces(t *testing.T) {
+	s := newTestServer(t)
+	fids := s.funcs()["fids"].(func([]BoardRowV, string, string) any)
+	row := func(code, city string) BoardRowV {
+		return BoardRowV{Place: AirportV{Code: code, City: city, Name: code + " Airport", URL: "/airport/" + code}, Status: "Scheduled", Class: "sched"}
+	}
+	rows := []BoardRowV{row("JFK", "New York"), row("LAX", "Los Angeles"), row("LGA", "New York"), row("LAX", "Los Angeles"), row("XYZ", "")}
+	for i := range rows {
+		rows[i].City = rows[i].Place.City
+	}
+	markTwins(rows)
+	var b strings.Builder
+	if err := s.tpl["airport"].ExecuteTemplate(&b, "fids", fids(rows, "From", "None.")); err != nil {
+		t.Fatal(err)
+	}
+	h := b.String()
+	for _, want := range []string{
+		`<a href="/airport/JFK" title="JFK Airport · JFK">New York</a> <span class="dim">JFK</span>`,
+		`<a href="/airport/LGA" title="LGA Airport · LGA">New York</a> <span class="dim">LGA</span>`,
+		`<a href="/airport/LAX" title="LAX Airport · LAX">Los Angeles</a></td>`,
+		`<a href="/airport/XYZ" title="XYZ Airport · XYZ">XYZ</a></td>`,
+	} {
+		if !strings.Contains(h, want) {
+			t.Errorf("board lacks %s:\n%s", want, h)
+		}
 	}
 }
 

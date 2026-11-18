@@ -129,6 +129,7 @@ type LegV struct {
 	Alt, Speed, Heading, Squawk  string
 	PosAge                       string
 	Progress                     int
+	ProgressRate                 float64 // in the air, how fast Progress grows (% a second): its ground speed over the route
 	FlownMi, LeftMi              string
 	sort                         time.Time
 	departed, landed, plannedArr time.Time
@@ -252,6 +253,9 @@ func legFromLive(fs api.FlightSummary, r refs, now time.Time) LegV {
 		if flown+left > 0 {
 			l.Progress = int(math.Round(flown / (flown + left) * 100))
 			l.FlownMi, l.LeftMi = fmtMiles(flown), fmtMiles(left)
+			if fs.GS > 30 {
+				l.ProgressRate = fs.GS * 1.15078 / 3600 / (flown + left) * 100 // knots to miles a second, over the route
+			}
 		}
 	}
 	switch fs.Phase {

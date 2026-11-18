@@ -27,7 +27,7 @@
 {{/* the dock in one line: the status chip, the route's codes either side of
      its progress, the status detail */}}
 {{define "band-sum"}}{{with .Leg}}<span class="band-chip s-{{$.Band.Class}}">{{$.Band.Title}}</span>
-<span class="band-sum-route"><b>{{.Dep.Code}}</b><span class="band-sum-track" style="--p:{{.Progress}}%"></span><b>{{if .DivertedTo}}{{.DivertedTo.Code}}{{else}}{{.Arr.Code}}{{end}}</b></span>
+<span class="band-sum-route"><b>{{.Dep.Code}}</b><span class="band-sum-track" style="--p:{{.Progress}}%"{{template "fill-rate" .}}></span><b>{{if .DivertedTo}}{{.DivertedTo.Code}}{{else}}{{.Arr.Code}}{{end}}</b></span>
 {{with $.Band.Detail}}<span class="band-sum-detail">{{.}}</span>{{end}}{{end}}{{end}}
 
 {{define "band-status"}}<p class="status s-{{.Class}}"><strong>{{.Title}}</strong>{{with .Detail}} <span>{{.}}</span>{{end}}</p>{{end}}
@@ -40,10 +40,14 @@
 
 {{define "kv"}}{{if .}}<dl class="kv">{{range .}}<div><dt>{{.Label}}</dt><dd>{{if .URL}}<a href="{{.URL}}">{{.Value}}</a>{{else}}{{.Value}}{{end}}{{with .Note}}<small>{{.}}</small>{{end}}</dd></div>{{end}}</dl>{{end}}{{end}}
 
+{{/* a flight in the air's progress bar keeps filling between updates at
+     its rate (site.js), short of the end until it is down */}}
+{{define "fill-rate"}}{{if and .Airborne .ProgressRate}} data-rate="{{rate .ProgressRate}}" data-max="99"{{end}}{{end}}
+
 {{/* route: the codes, the track between them with the plane at its
      progress, and the two times that matter */}}
 {{define "route"}}{{$d := .DepMoment}}{{$a := .ArrMoment}}
-<div class="route" style="--p:{{.Progress}}%">
+<div class="route" style="--p:{{.Progress}}%"{{template "fill-rate" .}}>
 	<div class="route-end">
 		{{if .Dep.URL}}<a class="route-code" href="{{.Dep.URL}}">{{.Dep.Code}}</a>{{else}}<span class="route-code">{{or .Dep.Code "?"}}</span>{{end}}
 		<span class="route-city">{{.Dep.City}}</span>

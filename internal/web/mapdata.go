@@ -45,10 +45,12 @@ type mapPin struct {
 }
 
 type mapPlane struct {
-	P [2]float64 `json:"p"`
-	H float64    `json:"h"`
-	L string     `json:"l,omitempty"`
-	U string     `json:"u,omitempty"`
+	P [2]float64   `json:"p"`
+	H float64      `json:"h"`
+	L string       `json:"l,omitempty"`
+	U string       `json:"u,omitempty"`
+	K string       `json:"k,omitempty"` // airport maps: arr, dep or pass, which colours it
+	T [][2]float64 `json:"t,omitempty"` // airport maps: its last few minutes, oldest first, ending where it is
 }
 
 type mapRing struct {
@@ -340,7 +342,7 @@ func (s *Server) placeMapV(center geo.LL, code, url string, ringsMi []float64, n
 		m.SVG = svg()
 		return m
 	}
-	d := mapData{Focus: &[2]float64{math.Round(center.Lon*1e4) / 1e4, math.Round(center.Lat*1e4) / 1e4}, Zoom: 7.4}
+	d := mapData{Focus: &[2]float64{math.Round(center.Lon*1e4) / 1e4, math.Round(center.Lat*1e4) / 1e4}, Zoom: 6.8}
 	d.Pins = append(d.Pins, mapPin{P: pt(center), L: code, K: "subject", U: url}) // drawn above live traffic
 	for _, n := range nearby {
 		d.Pins = append(d.Pins, mapPin{P: pt(n.LL), L: n.Code, K: "minor", U: n.URL})

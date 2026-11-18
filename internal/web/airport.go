@@ -44,13 +44,16 @@ type BoardRowV struct {
 	Place  AirportV // where it comes from (arrivals) or goes to (departures)
 	At     TimeCell // what happened, else what is expected, else the schedule
 	Status string
-	Class  string // the status tag's
-	Note   string // how late or early it is, when the status does not say
-	Gate   string // the gate it arrives at or leaves from, when known
-	Claim  string // arrivals: the carousel its bags come out on, when known
-	Past   bool   // it has landed or left; the first row that has not starts the "now" line
-	Fill   int    // how much of its row fills (%): its progress in the air (1-97), 98 landed, 100 at the gate; 0 none
-	Air    bool   // the fill is a flight in the air's progress
+	Class  string  // the status tag's
+	Note   string  // how late or early it is, when the status does not say
+	City   string  // its place's city as a board names it ("Honolulu", not "Honolulu, Oahu")
+	Twin   bool    // another airport of that city is on the board too, so it shows the code
+	Gate   string  // the gate it arrives at or leaves from, when known
+	Claim  string  // arrivals: the carousel its bags come out on, when known
+	Past   bool    // it has landed or left; the first row that has not starts the "now" line
+	Fill   int     // how much of its row fills (%): its progress in the air (1-97), 98 landed, 100 at the gate; 0 none
+	Rate   float64 // in the air, how fast the fill grows (% a second), for the page to keep it filling
+	Air    bool    // the fill is a flight in the air's progress
 	t      time.Time
 }
 
@@ -74,20 +77,18 @@ func (v *AirportPageV) setBoards(b *api.AirportBoards, now time.Time) {
 	v.Departures = boardRows(b.Boards.Departures, b.Boards.Scheduled, false, v.Airport.TZ, now)
 }
 
-// boardMins writes a number of minutes as a board does: 4 min, 1 hr 5 min, 2 hr.
+// boardMins writes a number of minutes as a board does, in its largest unit
+// alone: 4m, 59m, then to the nearest hour, 1h (to 89m), 2h, 3h.
 func boardMins(m int) string {
-	switch {
-	case m < 60:
-		return strconv.Itoa(m) + " min"
-	case m%60 == 0:
-		return strconv.Itoa(m/60) + " hr"
+	if m < 60 {
+		return strconv.Itoa(m) + "m"
 	}
-	return fmt.Sprintf("%d hr %d min", m/60, m%60)
+	return strconv.Itoa((m+30)/60) + "h"
 }
 
-// etaStatus is an inbound flight's status in one phrase, its estimate against
-// its schedule: "On time", "ETA 4 min late", "ETA 12 min early". As fmtDelay
-// has it, up to five minutes early is on time. class is the tag's: ok, late
+// etaStatus is an inbound flight's status in one short phrase, its estimate
+// against its schedule: "On time", "4m late", "12m early". As fmtDelay has
+// it, up to five minutes early is on time. class is the tag's: ok, late
 // (15 minutes or more), or air for a few minutes behind.
 func etaStatus(est, sched time.Time) (text, class string) {
 	if est.IsZero() || sched.IsZero() {
@@ -96,25 +97,26 @@ func etaStatus(est, sched time.Time) (text, class string) {
 	m := int(math.Round(est.Sub(sched).Minutes()))
 	switch {
 	case m >= 15:
-		return "ETA " + boardMins(m) + " late", "late"
+		return boardMins(m) + " late", "late"
 	case m > 0:
-		return "ETA " + boardMins(m) + " late", "air"
+		return boardMins(m) + " late", "air"
 	case m <= -5:
-		return "ETA " + boardMins(-m) + " early", "ok"
+		return boardMins(-m) + " early", "ok"
 	}
 	return "On time", "ok"
 }
 
-// lateWords is a board note, "ETD 12 min late", or nothing when on time.
-func lateWords(lead string, at, sched time.Time) string {
+// lateWords is a board note under a status, how far off its schedule a
+// time is ("12m late", "8m early"), or nothing when on time.
+func lateWords(at, sched time.Time) string {
 	if at.IsZero() || sched.IsZero() {
 		return ""
 	}
 	switch m := int(math.Round(at.Sub(sched).Minutes())); {
 	case m > 0:
-		return lead + " " + boardMins(m) + " late"
+		return boardMins(m) + " late"
 	case m <= -5:
-		return lead + " " + boardMins(-m) + " early"
+		return boardMins(-m) + " early"
 	}
 	return ""
 }
@@ -124,24 +126,31 @@ func lateWords(lead string, at, sched time.Time) string {
 // the air how far along its route it is, by its position where the leg has
 // one, else by the clock, take-off to the estimate. In the air it stays
 // between 1 and 97, so it never reads as not yet left or already down.
-func boardFill(l LegV, fs *api.FlightSummary, now time.Time) int {
+// rate is how fast it fills in the air (% a second, by the same measure:
+// its ground speed over the route, or the clock over the planned flight),
+// so a page can keep it filling between updates; 0 when it is not moving.
+func boardFill(l LegV, fs *api.FlightSummary, now time.Time) (fill int, rate float64) {
 	switch {
 	case l.Phase == "arrived":
-		return 100
+		return 100, 0
 	case l.Phase == "landed":
-		return 98
+		return 98, 0
 	case l.Phase != "en_route" || (fs != nil && fs.OnGround):
-		return 0
+		return 0, 0
 	}
-	p := float64(l.Progress)
+	p, rate := float64(l.Progress), l.ProgressRate
 	if p <= 0 && fs != nil {
 		off, est := firstSet(fs.Off, fs.Out), firstSet(fs.ETA, fs.STA, fs.SchedArr)
 		if off.IsZero() || !est.After(off) {
-			return 0
+			return 0, 0
 		}
 		p = float64(now.Sub(off)) / float64(est.Sub(off)) * 100
+		rate = 100 / est.Sub(off).Seconds()
 	}
-	return int(math.Max(1, math.Min(97, math.Round(p))))
+	if p >= 97 {
+		rate = 0 // as far as a flight in the air fills
+	}
+	return int(math.Max(1, math.Min(97, math.Round(p)))), rate
 }
 
 // ClockV is the band's split-flap clock: the airport's local time as four
@@ -175,11 +184,13 @@ type TrafficRow struct {
 	StateClass            string
 	Type                  string // parked: aircraft type from the index
 	Airline               string
-	Op                    string // operator ICAO code, for its logo
-	Fill                  int    // passing: how far along its route it is (%), as the boards fill; 0 unknown
+	Op                    string  // operator ICAO code, for its logo
+	Fill                  int     // passing: how far along its route it is (%), as the boards fill; 0 unknown
+	Rate                  float64 // passing: how fast Fill grows (% a second), as the boards
 	distMi                float64
 	pos                   geo.LL // live position, when resolved
 	hdg                   float64
+	flightID              string // the live flight found for it, for its trail on the map
 }
 
 type AirlineCountV struct {
@@ -232,13 +243,30 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 		s.index.NoteSweep(a.ICAO, t, now)
 	}
 
+	// the map's traffic, coloured by what it is doing here: arriving,
+	// departing, or passing over; each flight once, with the flight it is
+	// for its trail
 	var planes []mapPlane
+	var planeIDs []string
+	onMap := map[string]bool{}
+	addPlane := func(p mapPlane, id string) {
+		if p.U != "" && onMap[p.U] {
+			return
+		}
+		onMap[p.U] = true
+		planes, planeIDs = append(planes, p), append(planeIDs, id)
+	}
 	if b := <-boards; b != nil {
 		v.setBoards(b, now)
 		// the boards' flights in the air near the field go on the map
-		for _, r := range append(append([]BoardRowV(nil), v.Arrivals...), v.Departures...) {
-			if r.Airborne && r.HasPos && geo.DistanceMi(a.Lat, a.Lon, r.Pos.Lat, r.Pos.Lon) < 250 {
-				planes = append(planes, mapPlane{P: pt(r.Pos), H: math.Round(r.Hdg), L: r.Number, U: r.URL})
+		for _, side := range []struct {
+			rows []BoardRowV
+			kind string
+		}{{v.Arrivals, "arr"}, {v.Departures, "dep"}} {
+			for _, r := range side.rows {
+				if r.Airborne && r.HasPos && geo.DistanceMi(a.Lat, a.Lon, r.Pos.Lat, r.Pos.Lon) < 250 {
+					addPlane(mapPlane{P: pt(r.Pos), H: math.Round(r.Hdg), L: r.Number, U: r.URL, K: side.kind}, r.FlightID)
+				}
 			}
 		}
 	}
@@ -256,11 +284,14 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 	}
 	for _, r := range v.Overhead {
 		if r.pos.Valid() {
-			planes = append(planes, mapPlane{P: pt(r.pos), H: math.Round(r.hdg), L: r.Number, U: r.URL})
+			addPlane(mapPlane{P: pt(r.pos), H: math.Round(r.hdg), L: r.Number, U: r.URL, K: "pass"}, r.flightID)
 		}
 	}
+	if s.cfg.MapTiles != "" {
+		s.addTrails(ctx, planes, planeIDs)
+	}
 	v.Map = s.placeMapV(center, a.Code(), "/airport/"+a.ICAO, nil, closeV, planes,
-		"Map of "+a.Name+" and the airports and traffic around it",
+		"Map of "+a.Name+" and the airports and traffic around it: arrivals in blue, departures in green, flights passing over in gray",
 		func() *geo.Map {
 			spec := geo.MapSpec{W: 960, H: 360, Center: &center, RadiusMi: 40,
 				Pins: []geo.MapPin{{At: center, Label: a.Code(), Primary: true}}}
@@ -334,7 +365,7 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 			return
 		}
 		r := BoardRowV{LegV: l, Past: past, Status: firstNonEmpty(l.PhaseWord, "Unknown"), Class: l.StatusClass, t: b.BoardTime}
-		r.Fill = boardFill(l, b.Live, now)
+		r.Fill, r.Rate = boardFill(l, b.Live, now)
 		r.Air = l.Phase == "en_route" && r.Fill > 0
 		switch {
 		case arriving && past:
@@ -376,12 +407,13 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 					if l.Phase == "scheduled" {
 						r.Status, r.Class = "Left gate", "taxi" // off the gate before its phase moves on
 					}
-					r.Note = lateWords("Left", fs.Out, fs.SchedDep)
+					r.Note = lateWords(fs.Out, fs.SchedDep)
 				case fs != nil && !fs.EDCT.IsZero():
-					r.Note = lateWords("ETD", fs.EDCT, fs.SchedDep)
+					r.Note = lateWords(fs.EDCT, fs.SchedDep)
 				}
 			}
 		}
+		r.City, _, _ = strings.Cut(r.Place.City, ", ")
 		if !b.BoardTime.IsZero() {
 			r.At = timeCell(b.BoardTime, tz, "")
 		}
@@ -400,7 +432,25 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 	for _, b := range coming {
 		add(b, false)
 	}
+	markTwins(out)
 	return out
+}
+
+// markTwins marks the rows whose city another airport on the board shares
+// (New York's JFK and LaGuardia), which show their code by the city.
+func markTwins(rows []BoardRowV) {
+	codes := map[string]map[string]bool{}
+	for _, r := range rows {
+		if r.City != "" {
+			if codes[r.City] == nil {
+				codes[r.City] = map[string]bool{}
+			}
+			codes[r.City][r.Place.Code] = true
+		}
+	}
+	for i := range rows {
+		rows[i].Twin = len(codes[rows[i].City]) > 1
+	}
 }
 
 // classifyTraffic sorts the aircraft around the field into what is parked at
@@ -520,11 +570,13 @@ const liveLookupBudget = 3500 * time.Millisecond
 func (s *Server) resolveLive(ctx context.Context, rows []*TrafficRow, field geo.LL) {
 	type found struct {
 		ok       bool
+		id       string
 		number   string
 		dep, arr string
 		pos      geo.LL
 		hdg      float64
 		fill     int
+		rate     float64
 	}
 	now := time.Now()
 	results := make([]found, len(rows))
@@ -551,12 +603,12 @@ func (s *Server) resolveLive(ctx context.Context, rows []*TrafficRow, field geo.
 					continue
 				}
 				s.index.NoteLive(*x.Live)
-				f := found{ok: true, number: x.Live.IATAFlight, dep: x.Live.Dep, arr: x.Live.Arr, hdg: x.Live.Hdg}
+				f := found{ok: true, id: x.Live.FlightID, number: x.Live.IATAFlight, dep: x.Live.Dep, arr: x.Live.Arr, hdg: x.Live.Hdg}
 				// how far along it is, for a flight in the air between two
 				// fields: one back to where it left has no way along to show,
 				// and a record that has it down already is a finished leg's
 				if x.Live.Phase == "en_route" && f.dep != f.arr {
-					f.fill = boardFill(legFromLive(*x.Live, refs{}, now), x.Live, now)
+					f.fill, f.rate = boardFill(legFromLive(*x.Live, refs{}, now), x.Live, now)
 				}
 				if p := (geo.LL{Lat: x.Live.Lat, Lon: x.Live.Lon}); p.Valid() && !x.Live.OnGround {
 					f.pos = p
@@ -597,8 +649,102 @@ func (s *Server) resolveLive(ctx context.Context, rows []*TrafficRow, field geo.
 		if f.arr != "" {
 			row.To = airportV(f.arr, nil)
 		}
-		row.Fill = f.fill
+		row.Fill, row.Rate = f.fill, f.rate
+		row.flightID = f.id
 	}
+}
+
+// trailWindow is how much of its track an aircraft on an airport's map
+// draws behind it, a point every trailStep: a short tail that shows the way
+// it has come and how it is turning.
+const (
+	trailWindow = 3 * time.Minute
+	trailStep   = 10 * time.Second
+	trailBudget = 1500 * time.Millisecond // trails are a finish, not worth a slower page
+)
+
+// addTrails gives each plane on an airport's map the end of its track (the
+// API's last five minutes, cached a minute), ending where it is now. A track
+// not back within trailBudget leaves its plane without a trail this time;
+// the lookups carry on and fill the cache for the next view.
+func (s *Server) addTrails(ctx context.Context, planes []mapPlane, ids []string) {
+	trails := make([][][2]float64, len(planes))
+	var mu sync.Mutex
+	closed := false
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8)
+	for i, id := range ids {
+		if id == "" {
+			continue
+		}
+		at := planes[i].P
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			t, err := s.api.FlightTrack(ctx, id)
+			if err != nil || t == nil || !t.Live {
+				return
+			}
+			tr := trail(t.Tail5m, at)
+			mu.Lock()
+			if !closed {
+				trails[i] = tr
+			}
+			mu.Unlock()
+		}()
+	}
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(trailBudget):
+	case <-ctx.Done():
+	}
+	mu.Lock()
+	closed = true
+	for i, tr := range trails {
+		planes[i].T = tr
+	}
+	mu.Unlock()
+}
+
+// trail is the last trailWindow of a track, a point every trailStep, ending
+// at the aircraft (at). Dead-reckoned points are left out, as on the flight
+// page's map, and a track whose last report is far from where the aircraft
+// is now (a gap in coverage) draws none rather than a false line.
+func trail(pts []api.TrackPoint, at [2]float64) [][2]float64 {
+	var real []api.TrackPoint
+	for _, p := range pts {
+		if p.Class != "est" {
+			real = append(real, p)
+		}
+	}
+	if len(real) == 0 {
+		return nil
+	}
+	last := real[len(real)-1]
+	if geo.DistanceMi(last.Lat, last.Lon, at[1], at[0]) > 5 {
+		return nil
+	}
+	from := last.T - trailWindow.Milliseconds()
+	var out [][2]float64
+	kept := from - trailStep.Milliseconds()
+	for _, p := range real {
+		ll := geo.LL{Lat: p.Lat, Lon: p.Lon}
+		if p.T < from || p.T-kept < trailStep.Milliseconds() || !ll.Valid() {
+			continue
+		}
+		out, kept = append(out, pt(ll)), p.T
+	}
+	if len(out) == 0 || out[len(out)-1] != at {
+		out = append(out, at)
+	}
+	if len(out) < 2 {
+		return nil
+	}
+	return out
 }
 
 // airportSummary is the one sentence that opens the about panel. The live

@@ -129,6 +129,8 @@ func (s *Server) funcs() template.FuncMap {
 		"logo":    s.logoURL,
 		"plural":  plural,
 		"add":     func(a, b int) int { return a + b },
+		// a progress bar's fill rate (% a second) for site.js, to three figures
+		"rate":    func(v float64) string { return strconv.FormatFloat(v, 'g', 3, 64) },
 		"country": geo.CountryName,
 		"query":   url.QueryEscape,
 		// a board, with a Gate column when any row has a gate and a

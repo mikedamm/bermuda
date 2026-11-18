@@ -149,6 +149,30 @@ document.querySelectorAll("[data-clock]").forEach((el) => {
 	setInterval(tick, 1000);
 })();
 
+// Progress bars in the air (board rows, the dock's route, the band's track):
+// the server sends how far along each is (--p) and how fast it fills
+// (data-rate, % a second), and between updates it keeps filling at that
+// rate from when this page first saw it, never past data-max (97 unless
+// given: a flight in the air never reads as down). A live refresh redraws
+// the bars, which starts each afresh from the new figure.
+(() => {
+	"use strict";
+	const seen = new WeakMap();
+	const fill = () => {
+		const now = performance.now();
+		for (const el of document.querySelectorAll("[data-rate]")) {
+			let s = seen.get(el);
+			if (!s) seen.set(el, (s = { t: now, p: parseFloat(el.style.getPropertyValue("--p")) }));
+			const rate = parseFloat(el.dataset.rate);
+			if (!Number.isFinite(s.p) || !(rate > 0)) continue;
+			const max = Math.max(s.p, parseFloat(el.dataset.max) || 97);
+			el.style.setProperty("--p", Math.min(max, s.p + rate * (now - s.t) / 1000).toFixed(2) + "%");
+		}
+	};
+	fill();
+	setInterval(fill, 2000);
+})();
+
 (() => {
 	"use strict";
 	const cfg = document.body.dataset;
@@ -158,10 +182,14 @@ document.querySelectorAll("[data-clock]").forEach((el) => {
 	if (/bot|crawl|spider|slurp|facebookexternalhit|embedly|whatsapp|preview/i.test(navigator.userAgent)) return;
 
 	const C = { flown: "#0065ad", ahead: "#229cf8", net: "#0065ad", ring: "#0065ad", navy: "#002f64", past: "#4a5363", pastOld: "#b2b9c3" };
+	// an airport map's traffic by what it is doing there (the boards' keys match)
+	const KIND = { arr: "#0065ad", dep: "#13794a", pass: "#8792a2" };
+	const rgba = (hex, a) => `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, ${a})`;
 	const FONT = ["Inter SemiBold"]; // Inter, as on the page: glyphs built with its cv11 and ss01 forms
 	const PLANE = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1.6c.9 0 1.5 1 1.5 2.3v5.3l8 4.6v2.1l-8-2.4v4.6l2.4 1.8v1.7L12 20.6l-3.9 1v-1.7l2.4-1.8v-4.6l-8 2.4v-2.1l8-4.6V3.9c0-1.3.6-2.3 1.5-2.3Z"/></svg>';
-	// the same airliner as an icon for the map's own symbol layer: navy with a white edge
-	const PLANE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><path fill="#002f64" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round" paint-order="stroke" d="M12 1.6c.9 0 1.5 1 1.5 2.3v5.3l8 4.6v2.1l-8-2.4v4.6l2.4 1.8v1.7L12 20.6l-3.9 1v-1.7l2.4-1.8v-4.6l-8 2.4v-2.1l8-4.6V3.9c0-1.3.6-2.3 1.5-2.3Z"/></svg>';
+	// the same airliner as an icon for the map's own symbol layer: a colour (navy,
+	// or its kind's on an airport map) with a white edge
+	const planeIcon = (fill) => `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><path fill="${fill}" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round" paint-order="stroke" d="M12 1.6c.9 0 1.5 1 1.5 2.3v5.3l8 4.6v2.1l-8-2.4v4.6l2.4 1.8v1.7L12 20.6l-3.9 1v-1.7l2.4-1.8v-4.6l-8 2.4v-2.1l8-4.6V3.9c0-1.3.6-2.3 1.5-2.3Z"/></svg>`;
 
 	const css = document.createElement("link");
 	css.rel = "stylesheet";
@@ -338,7 +366,9 @@ document.querySelectorAll("[data-clock]").forEach((el) => {
 				"circle-color": ["case", main, C.ahead, "#ffffff"],
 				"circle-stroke-width": ["case", main, 2, 0], "circle-stroke-color": "#ffffff",
 			} });
-			map.addLayer({ id: "wv-pin-label", type: "symbol", source: "wv-pins", filter: others, layout: {
+			// a main airport's label outranks the cities' names; a minor one's gives
+			// way to them (its layer sits under theirs), so the big cities show
+			const pinLabel = (id, filter, before) => map.addLayer({ id, type: "symbol", source: "wv-pins", filter, layout: {
 				"text-field": ["get", "l"],
 				"text-font": FONT,
 				"text-size": ["case", main, 13, 11.5],
@@ -347,7 +377,9 @@ document.querySelectorAll("[data-clock]").forEach((el) => {
 				"text-padding": 4,
 				"text-justify": "auto",
 				"symbol-sort-key": ["case", main, ["-", -100000, ["get", "n"]], ["*", -1, ["get", "n"]]],
-			}, paint: { "text-color": C.navy, "text-halo-color": "#ffffff", "text-halo-width": 1.6 } });
+			}, paint: { "text-color": C.navy, "text-halo-color": "#ffffff", "text-halo-width": 1.6 } }, before);
+			pinLabel("wv-pin-label", main);
+			pinLabel("wv-pin-label-minor", ["==", ["get", "k"], "minor"], map.getLayer("places_locality") ? "places_locality" : undefined);
 			map.addLayer({ id: "wv-subject-ring", type: "circle", source: "wv-pins", filter: subject, paint: { "circle-radius": 10, "circle-color": C.navy } });
 			map.addLayer({ id: "wv-subject", type: "circle", source: "wv-pins", filter: subject, paint: {
 				"circle-radius": 6, "circle-color": C.ahead, "circle-stroke-width": 2.5, "circle-stroke-color": "#ffffff",
@@ -362,29 +394,56 @@ document.querySelectorAll("[data-clock]").forEach((el) => {
 				map.on("mouseenter", id, () => { map.getCanvas().style.cursor = "pointer"; });
 				map.on("mouseleave", id, () => { map.getCanvas().style.cursor = ""; });
 			};
-			for (const id of ["wv-pin", "wv-pin-label", "wv-subject", "wv-subject-label"]) link(id);
+			for (const id of ["wv-pin", "wv-pin-label", "wv-pin-label-minor", "wv-subject", "wv-subject-label"]) link(id);
 
 			// other live aircraft (airport traffic, flights in the air now): a
-			// symbol layer above the labels, so labels give way to them; each
-			// one turns to its heading and links to its flight
+			// symbol layer above the labels, which it never pushes off the map;
+			// each one turns to its heading and links to its flight. On an
+			// airport's map each is coloured by its kind, with a short trail of
+			// its last few minutes fading out behind it.
 			if ((data.planes || []).length) {
-				const icon = new Image(48, 48);
-				icon.onload = () => {
-					if (!map.hasImage("wv-plane")) map.addImage("wv-plane", icon, { pixelRatio: 2 });
+				const icons = { "wv-plane": C.navy, "wv-plane-arr": KIND.arr, "wv-plane-dep": KIND.dep, "wv-plane-pass": KIND.pass };
+				Promise.all(Object.entries(icons).map(([id, fill]) => new Promise((done) => {
+					const icon = new Image(48, 48);
+					icon.onload = () => {
+						if (!map.hasImage(id)) map.addImage(id, icon, { pixelRatio: 2 });
+						done();
+					};
+					icon.onerror = done;
+					icon.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(planeIcon(fill));
+				}))).then(() => {
+					const trails = data.planes.filter((p) => p.k && p.t?.length > 1);
+					if (trails.length) {
+						map.addSource("wv-trails", {
+							type: "geojson",
+							lineMetrics: true, // for the fade along each
+							data: {
+								type: "FeatureCollection",
+								features: trails.map((p) => ({ type: "Feature", properties: { k: p.k }, geometry: { type: "LineString", coordinates: p.t } })),
+							},
+						});
+						for (const [k, color] of Object.entries(KIND)) {
+							map.addLayer({
+								id: "wv-trail-" + k, type: "line", source: "wv-trails", filter: ["==", ["get", "k"], k],
+								layout: { "line-cap": "round", "line-join": "round" },
+								paint: { "line-width": 2, "line-gradient": ["interpolate", ["linear"], ["line-progress"], 0, rgba(color, 0), 1, rgba(color, 0.8)] },
+							}, before);
+						}
+					}
 					map.addSource("wv-planes", {
 						type: "geojson",
 						data: {
 							type: "FeatureCollection",
-							features: data.planes.map((p) => ({ type: "Feature", properties: { h: p.h, l: p.l || "", u: p.u || "" }, geometry: { type: "Point", coordinates: p.p } })),
+							features: data.planes.map((p) => ({ type: "Feature", properties: { h: p.h, k: p.k || "", l: p.l || "", u: p.u || "" }, geometry: { type: "Point", coordinates: p.p } })),
 						},
 					});
 					map.addLayer({ id: "wv-planes", type: "symbol", source: "wv-planes", layout: {
-						"icon-image": "wv-plane", "icon-rotate": ["get", "h"], "icon-rotation-alignment": "map",
-						"icon-allow-overlap": true, "icon-ignore-placement": false,
+						"icon-image": ["match", ["get", "k"], "arr", "wv-plane-arr", "dep", "wv-plane-dep", "pass", "wv-plane-pass", "wv-plane"],
+						"icon-rotate": ["get", "h"], "icon-rotation-alignment": "map",
+						"icon-allow-overlap": true, "icon-ignore-placement": true,
 					} }, "wv-subject-ring"); // under the subject airport, above everything else
 					link("wv-planes");
-				};
-				icon.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(PLANE_ICON);
+				});
 			}
 		};
 		if (map.isStyleLoaded()) overlays();

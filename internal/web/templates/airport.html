@@ -11,19 +11,25 @@
 		<th scope="col" role="columnheader">Flight</th>
 		<th scope="col" role="columnheader">{{.Col}}</th>
 		{{if .Gate}}<th scope="col" role="columnheader" class="fids-gate">Gate</th>{{end}}
-		{{if .Claim}}<th scope="col" role="columnheader" class="fids-claim">Bag<span class="fids-long">gage</span></th>{{end}}
+		{{if .Claim}}<th scope="col" role="columnheader" class="fids-claim">Bags</th>{{end}}
 		<th scope="col" role="columnheader">Status</th>
 	</tr></thead>
-	<tbody role="rowgroup">{{range .Rows}}<tr role="row"{{with .RowClass}} class="{{.}}"{{end}}{{if .Fill}} style="--p:{{.Fill}}%"{{end}}>
+	<tbody role="rowgroup">{{range .Rows}}<tr role="row"{{with .RowClass}} class="{{.}}"{{end}}{{if .Fill}} style="--p:{{.Fill}}%"{{end}}{{if .Rate}} data-rate="{{rate .Rate}}"{{end}}>
 		<td role="cell" class="fids-time">{{if .At.Set}}<time datetime="{{.At.ISO}}">{{.At.Clock}}</time>{{else}}<span class="dim">&ndash;</span>{{end}}</td>
 		<td role="cell" class="fids-flight">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}</td>
-		<td role="cell" class="fids-place">{{template "airport-inline" .Place}}{{with .Place.City}} <span class="dim">{{.}}</span>{{end}}</td>
+		<td role="cell" class="fids-place">{{template "board-place" .}}</td>
 		{{if $.Gate}}<td role="cell" class="fids-gate">{{.Gate}}</td>{{end}}
 		{{if $.Claim}}<td role="cell" class="fids-claim">{{.Claim}}</td>{{end}}
 		<td role="cell" class="fids-status"><span class="tag tag-{{.Class}}">{{.Status}}</span>{{with .Note}}<small class="fids-note">{{.}}</small>{{end}}{{if .Air}}<span class="vh">, {{.Fill}}% of the way</span>{{end}}</td>
 	</tr>{{end}}</tbody>
 </table>
 {{else}}<p class="panel-empty">{{.Empty}}</p>{{end}}{{end}}
+
+{{/* where a board's flight comes from or goes to, by its city as an
+     airport's screens have it (the airport's name and code in the title),
+     with the code beside it where another airport of the city is on the
+     board too; a place with no city shows its code */}}
+{{define "board-place"}}{{$p := .Place}}{{$text := or .City $p.Code}}{{if not $text}}<span class="dim">Unknown</span>{{else if $p.URL}}<a href="{{$p.URL}}" title="{{with $p.Name}}{{.}} · {{end}}{{$p.Code}}">{{$text}}</a>{{else}}<span title="{{with $p.Name}}{{.}} · {{end}}{{$p.Code}}">{{$text}}</span>{{end}}{{if and .Twin .City}} <span class="dim">{{$p.Code}}</span>{{end}}{{end}}
 
 {{/* the two boards' bodies: the page draws them, and the live refresh
      (live.go) sends them anew every 30 seconds */}}
@@ -73,11 +79,11 @@
 <div class="sheet">
 <div class="wrap cols cols-boards">
 	<section class="panel" id="arrivals" aria-labelledby="arr-h">
-		<h2 id="arr-h">Arrivals</h2>
+		<h2 id="arr-h" class="keyed"><span class="key key-arr" aria-hidden="true"></span>Arrivals</h2>
 		<div class="board" data-part="arrivals">{{template "airport-arrivals" $v}}</div>
 	</section>
 	<section class="panel" id="departures" aria-labelledby="dep-h">
-		<h2 id="dep-h">Departures</h2>
+		<h2 id="dep-h" class="keyed"><span class="key key-dep" aria-hidden="true"></span>Departures</h2>
 		<div class="board" data-part="departures">{{template "airport-departures" $v}}</div>
 	</section>
 
@@ -99,7 +105,7 @@
 		{{else}}<p class="panel-empty">No aircraft on the ground at {{$v.Code}} right now.</p>{{end}}
 	</section>
 	<section class="panel" id="overhead" aria-labelledby="over-h">
-		<h2 id="over-h">Flying over</h2>
+		<h2 id="over-h" class="keyed"><span class="key key-pass" aria-hidden="true"></span>Flying over</h2>
 		{{if not $v.Live}}<p class="panel-empty">Traffic passing over {{$v.Code}} is not available right now.</p>
 		{{else if $v.Overhead}}
 		<div class="table-scroll">
@@ -107,7 +113,7 @@
 		     boards' rows do; laid out on a grid like theirs (site.css) */}}
 		<table class="grid grid-5 grid-fill" role="table">
 			<thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Flight</th><th scope="col" role="columnheader">Route</th><th scope="col" role="columnheader">Aircraft</th><th scope="col" role="columnheader" class="num">Altitude</th><th scope="col" role="columnheader" class="num">Distance</th></tr></thead>
-			<tbody role="rowgroup">{{range $v.Overhead}}<tr role="row"{{if .Fill}} class="is-filled" style="--p:{{.Fill}}%"{{end}}>
+			<tbody role="rowgroup">{{range $v.Overhead}}<tr role="row"{{if .Fill}} class="is-filled" style="--p:{{.Fill}}%"{{end}}{{if .Rate}} data-rate="{{rate .Rate}}"{{end}}>
 				<td role="cell" data-label="Flight" class="nowrap">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{or .Number "–"}}{{end}}</td>
 				<td role="cell" data-label="Route" class="nowrap">{{if or .From.Code .To.Code}}{{template "airport-inline" .From}} <span class="dim">&rarr;</span> {{template "airport-inline" .To}}{{if .Fill}}<span class="vh">, {{.Fill}}% of the way</span>{{end}}{{else}}<span class="dim">&ndash;</span>{{end}}</td>
 				<td role="cell" data-label="Aircraft">{{if .RegURL}}<a href="{{.RegURL}}">{{.Reg}}</a>{{else}}<span class="dim">{{or .Reg "–"}}</span>{{end}}</td>

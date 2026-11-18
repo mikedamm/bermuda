@@ -215,7 +215,10 @@ time, .num { font-variant-numeric: tabular-nums; }
 .fids a { font-weight: 600; }
 .fids-time time { font-weight: 700; color: var(--ink); white-space: nowrap; }
 .fids-flight { white-space: nowrap; }
-.fids-place { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* the city, cut short with an ellipsis before the code a twin shows */
+.fids-place { display: flex; align-items: baseline; gap: 0 0.35em; white-space: nowrap; }
+.fids-place > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fids-place .dim { flex: none; }
 td.fids-gate, td.fids-claim { font-weight: 700; color: var(--ink); white-space: nowrap; }
 .fids-status .tag { display: block; }
 .fids-note { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 500; color: var(--muted); white-space: nowrap; }
@@ -226,26 +229,23 @@ td.fids-gate, td.fids-claim { font-weight: 700; color: var(--ink); white-space: 
 .fids tr.is-past + tr:not(.is-past) { border-top: 2px solid var(--sky); }
 
 /* a narrow board (two abreast on a small laptop, or a phone's) tightens up
-   by its own width, not the window's: the place keeps room for its code and
-   a long status ("ETA 20 min early") wraps before anything is cut; a little
-   narrower, the city is left off rather than cut to a letter */
+   by its own width, not the window's: the place keeps room for the start of
+   its city and a status wraps before anything is cut */
 .board { container-type: inline-size; }
+.fids { --place-min: 5.5em; }
 @container (max-width: 520px) {
 	.fids th, .fids td { padding-inline: 6px; }
 	.fids th:first-child, .fids td:first-child { padding-left: 14px; }
 	.fids th:last-child, .fids td:last-child { padding-right: 14px; }
-	.fids { grid-template-columns: max-content max-content minmax(3.4em, 1fr) minmax(min-content, max-content); }
-	.fids-5 { grid-template-columns: max-content max-content minmax(3.4em, 1fr) max-content minmax(min-content, max-content); }
-	.fids-6 { grid-template-columns: max-content max-content minmax(3.4em, 1fr) repeat(2, max-content) minmax(min-content, max-content); }
+	.fids { grid-template-columns: max-content max-content minmax(var(--place-min), 1fr) minmax(min-content, max-content); }
+	.fids-5 { grid-template-columns: max-content max-content minmax(var(--place-min), 1fr) max-content minmax(min-content, max-content); }
+	.fids-6 { grid-template-columns: max-content max-content minmax(var(--place-min), 1fr) repeat(2, max-content) minmax(min-content, max-content); }
 	.fids-status .tag, .fids-note { white-space: normal; }
 }
-@container (max-width: 480px) {
-	.fids-place .dim { display: none; }
-}
 /* narrower still, a carousel goes under its gate, in one column headed
-   "Gate" over "Bag" */
-@container (max-width: 460px) {
-	.fids-6 { grid-template-columns: max-content max-content minmax(3.4em, 1fr) max-content minmax(min-content, max-content); }
+   "Gate" over "Bags" */
+@container (max-width: 420px) {
+	.fids-6 { grid-template-columns: max-content max-content minmax(var(--place-min), 1fr) max-content minmax(min-content, max-content); }
 	.fids-6 tr { grid-template-rows: auto auto; }
 	.fids-6 th, .fids-6 td { grid-row: 1 / span 2; }
 	.fids-6 .fids-gate { grid-column: 4; grid-row: 1; align-self: end; padding-bottom: 0; }
@@ -253,11 +253,19 @@ td.fids-gate, td.fids-claim { font-weight: 700; color: var(--ink); white-space: 
 	.fids-6 td.fids-gate, .fids-6 td.fids-claim { line-height: 1.2; }
 	.fids-6 td.fids-claim { font-size: 12px; font-weight: 500; color: var(--muted); }
 	.fids-6 th.fids-claim { font-weight: 500; color: #9fb5d1; }
-	.fids-long { display: none; }
+	/* and a twin's code under its city */
+	.fids-place { flex-direction: column; align-items: stretch; }
+	.fids-place .dim { font-size: 12px; line-height: 1.2; }
 }
-/* the smallest phones leave the airline's logo off; the number says it */
-@container (max-width: 340px) {
+/* a small phone's leaves the airline's logo off (the number says it), and
+   the smallest the city less room and the edges less padding */
+@container (max-width: 380px) {
 	.fids .op { display: none; }
+}
+@container (max-width: 340px) {
+	.fids { --place-min: 3.4em; }
+	.fids th:first-child, .fids td:first-child { padding-left: 10px; }
+	.fids th:last-child, .fids td:last-child { padding-right: 10px; }
 }
 
 /* condensed, the airport band keeps its clock, smaller, in the middle; the
@@ -478,6 +486,13 @@ a.route-code:hover { color: var(--link); text-decoration: none; }
 	font-size: 15px; font-weight: 700; color: var(--navy);
 }
 .panel-count { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+/* the airport map's key: the colour a board's aircraft wear on the map
+   (site.js, KIND) */
+.panel > h2.keyed { justify-content: flex-start; column-gap: 8px; }
+.key { flex: none; align-self: center; width: 10px; height: 10px; border-radius: 2px; }
+.key-arr { background: var(--link); }
+.key-dep { background: var(--ok); }
+.key-pass { background: #8792a2; }
 .panel-body { padding: 12px 14px; }
 .panel-note { padding: 9px 14px; border-top: 1px solid var(--line-soft); font-size: 12.5px; color: var(--muted); }
 .panel-empty { padding: 14px; font-size: 14px; color: var(--muted); }
