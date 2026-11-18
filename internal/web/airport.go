@@ -44,17 +44,17 @@ type BoardRowV struct {
 	Place  AirportV // where it comes from (arrivals) or goes to (departures)
 	At     TimeCell // what happened, else what is expected, else the schedule
 	Status string
-	Class  string  // the status tag's
-	Note   string  // how late or early it is, when the status does not say
-	City   string  // its place's city as a board names it ("Honolulu", not "Honolulu, Oahu")
-	Twin   bool    // another airport of that city is on the board too, so it shows the code
-	Gate   string  // the gate it arrives at or leaves from, when known
-	Claim  string  // arrivals: the carousel its bags come out on, when known
-	Past   bool    // it has landed or left; the first row that has not starts the "now" line
-	Fill   int     // how much of its row fills (%): its progress in the air (1-97), 98 landed, 100 at the gate; 0 none
-	Rate   float64 // in the air, how fast the fill grows (% a second), for the page to keep it filling
-	Air    bool    // the fill is a flight in the air's progress
-	t      time.Time
+	Class  string    // the status tag's
+	Note   string    // how late or early it is, when the status does not say
+	City   string    // its place's city as a board names it ("Honolulu", not "Honolulu, Oahu")
+	Twin   bool      // another airport of that city is on the board too, so it shows the code
+	Gate   string    // the gate it arrives at or leaves from, when known
+	Claim  string    // arrivals: the carousel its bags come out on, when known
+	Past   bool      // it has landed or left; the first row that has not starts the "now" line
+	Fill   int       // how much of its row fills (%): its progress in the air (1-97), 98 landed, 100 at the gate; 0 none
+	Rate   float64   // in the air, how fast the fill grows (% a second), for the page to keep it filling
+	Air    bool      // the fill is a flight in the air's progress
+	t      time.Time // the time it shows, which the board sorts by
 }
 
 // RowClass is the board row's classes: is-past for what has landed or left,
@@ -354,7 +354,7 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 		seen[id] = append(seen[id], t)
 		return true
 	}
-	add := func(b api.BoardRow, past bool) {
+	row := func(b api.BoardRow, past bool) (BoardRowV, bool) {
 		var l LegV
 		switch {
 		case b.Live != nil && !b.Live.LADDRedacted:
@@ -362,9 +362,9 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 		case b.Archived != nil && !b.Archived.LADDRedacted:
 			l = legFromHistory(*b.Archived, now)
 		default:
-			return
+			return BoardRowV{}, false
 		}
-		r := BoardRowV{LegV: l, Past: past, Status: firstNonEmpty(l.PhaseWord, "Unknown"), Class: l.StatusClass, t: b.BoardTime}
+		r := BoardRowV{LegV: l, Past: past, Status: firstNonEmpty(l.PhaseWord, "Unknown"), Class: l.StatusClass}
 		r.Fill, r.Rate = boardFill(l, b.Live, now)
 		r.Air = l.Phase == "en_route" && r.Fill > 0
 		switch {
@@ -417,28 +417,35 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 		if !b.BoardTime.IsZero() {
 			r.At = timeCell(b.BoardTime, tz, "")
 		}
-		window := 30 * time.Minute
-		if !past {
-			window = 3 * time.Hour
+		r.t, _ = time.Parse(time.RFC3339, r.At.ISO)
+		return r, true
+	}
+	keep := func(r BoardRowV, within time.Duration) {
+		if fresh(firstNonEmpty(r.Ident, r.FlightID), firstSet(r.t, now), within) {
+			out = append(out, r)
 		}
-		if !fresh(firstNonEmpty(l.Ident, l.FlightID), firstSet(b.BoardTime, now), window) {
-			return
-		}
-		out = append(out, r)
 	}
 	for i := len(recent) - 1; i >= 0; i-- {
-		add(recent[i], true)
+		if r, ok := row(recent[i], true); ok {
+			keep(r, 30*time.Minute)
+		}
 	}
-	// the API lists the flights with an estimate before those with only a
-	// metered or scheduled time, so the coming rows are put in the order of
-	// the time each one shows (a row without one last)
-	coming = append([]api.BoardRow(nil), coming...)
-	sort.SliceStable(coming, func(i, j int) bool {
-		a, b := coming[i].BoardTime, coming[j].BoardTime
+	// The API lists the inbound flights with an estimate or a metered time
+	// ahead of those with only a schedule, which it gives no board time, so
+	// the coming rows go in the order of the time each one shows (one with
+	// none last) before a flight held twice is dropped.
+	var next []BoardRowV
+	for _, b := range coming {
+		if r, ok := row(b, false); ok {
+			next = append(next, r)
+		}
+	}
+	sort.SliceStable(next, func(i, j int) bool {
+		a, b := next[i].t, next[j].t
 		return !a.IsZero() && (b.IsZero() || a.Before(b))
 	})
-	for _, b := range coming {
-		add(b, false)
+	for _, r := range next {
+		keep(r, 3*time.Hour)
 	}
 	markTwins(out)
 	return out
