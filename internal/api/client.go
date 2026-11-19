@@ -252,15 +252,10 @@ func fromStore[T any](ctx context.Context, c *Client, key string) (out *T, left 
 	return nil, 0, false, nil
 }
 
-// maxShared is the largest answer the shared tier takes. A hub's whole-day
-// board (2 MB at ATL, read for paging and search) stays in this instance's
-// memory rather than crossing to the database every minute.
-const maxShared = 1 << 20
-
 // store writes an answer to the shared tier in the background; when writes
 // back up, new ones are dropped rather than queued.
 func (c *Client) store(key string, status int, body []byte) {
-	if c.l2 == nil || len(body) > maxShared {
+	if c.l2 == nil {
 		return
 	}
 	select {

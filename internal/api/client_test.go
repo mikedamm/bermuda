@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -111,34 +110,6 @@ func TestSharedStore(t *testing.T) {
 	c.UseStore(store)
 	if _, err := c.Search(ctx, "UAL1275", 5); err != nil {
 		t.Fatalf("store failure must fall back to the API: %v", err)
-	}
-}
-
-// An answer over maxShared (a hub's whole-day board) stays in memory: it is
-// not written to the shared store, and a second call is still a hit.
-func TestSharedStoreSkipsLarge(t *testing.T) {
-	var calls atomic.Int32
-	rows := strings.Repeat(`{"flight_id":"f","callsign":"DAL1","phase":"arrived","dep":"KLGA","arr":"KATL","board_time":"2026-11-18T20:00:00Z","pad":"`+strings.Repeat("x", 900)+`"},`, 1200)
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		io.WriteString(w, `{"kind":"arrivals","total":1200,"rows":[`+strings.TrimSuffix(rows, ",")+`]}`)
-	}))
-	defer up.Close()
-	store := &memStore{rows: map[string]struct {
-		status  int
-		body    []byte
-		expires time.Time
-	}{}}
-	a := New(up.URL, "t", 2, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	a.UseStore(store)
-	for range 2 {
-		if b, err := a.AirportBoard(context.Background(), "KATL", "arrivals", 24, 2000, time.Time{}); err != nil || len(b.Rows) != 1200 {
-			t.Fatalf("board: %v", err)
-		}
-	}
-	time.Sleep(100 * time.Millisecond) // writes are in the background
-	if n := len(store.rows); n != 0 || calls.Load() != 1 {
-		t.Errorf("%d answers in the shared store, %d API calls; want 0, 1", n, calls.Load())
 	}
 }
 

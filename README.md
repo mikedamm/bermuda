@@ -77,8 +77,8 @@ One Go binary, standard library only.
   poll carries each board's view (`ae`/`al`/`aq` for arrivals: pages earlier
   and later, search; `de`/`dl`/`dq` for departures): a paged or searched
   board is drawn from the whole day's board (`hours=24`, up to three pages
-  of 2,000 rows), read once a minute per airport. Those answers (2 MB at
-  ATL) stay in memory; the shared store takes answers up to 1 MB.
+  of 2,000 rows), read once a minute per airport and shared through the
+  store like every answer (2 MB of JSON at ATL, gzipped well under that).
 - **Upstream protection.** At most 24 concurrent API calls, a 10 s timeout,
   one retry on 5xx, and every API answer cached for 60 s (in memory, then the
   shared store), except the real-time `/live` lookup, which is never cached.
