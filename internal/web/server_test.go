@@ -266,7 +266,10 @@ func fakeAPI(t *testing.T) *httptest.Server {
 	mux.HandleFunc("GET /airports/{code}/board", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		kind := q.Get("kind")
-		if back := kind == "arrivals" || kind == "departures"; back != (q.Get("before") != "") || q.Get("limit") == "" {
+		// arrivals and departures from now back, or the whole day's for
+		// paging and search; enroute and scheduled from now on
+		back, day := kind == "arrivals" || kind == "departures", q.Get("hours") == "24" && q.Get("limit") == "2000"
+		if back != (q.Get("before") != "" || day) || q.Get("limit") == "" {
 			t.Errorf("%s board asked from the wrong start or without a depth: %s", kind, r.URL.RawQuery)
 		}
 		later := map[string]any{"board_time": ts(70 * time.Minute)}
@@ -1088,7 +1091,7 @@ func TestAirportBoards(t *testing.T) {
 		}
 	}
 	rows := arrivals[strings.Index(arrivals, "<tbody"):]
-	past, next := strings.Index(rows, `<tr role="row" class="is-past is-filled" style="--p:100%">`), strings.Index(rows, `<tr role="row" class="is-filled" style="--p:`)
+	past, next := strings.Index(rows, `<tr role="row" class="is-past is-filled" style="--p:100%"`), strings.Index(rows, `<tr role="row" class="is-filled" style="--p:`)
 	if past < 0 || next < past {
 		t.Errorf("arrivals: want the landed flight first, then the inbound one filling its row:\n%s", rows)
 	}
@@ -1189,7 +1192,11 @@ func TestAirportLiveBoards(t *testing.T) {
 	if m == nil {
 		t.Fatal("airport page carries no refresh URL")
 	}
-	for _, want := range []string{"/live.js", `<div class="board" data-part="arrivals">`, `<div class="board" data-part="departures">`} {
+	for _, want := range []string{"/live.js", `<div class="board" data-part="arrivals">`, `<div class="board" data-part="departures">`,
+		`<input type="search" class="board-search" data-search="arrivals"`, `aria-label="Search departures"`,
+		`data-more="earlier"`, `data-more="later"`, `<noscript><style>.board-search, .board-more { display: none; }</style></noscript>`,
+		// each row carries what the search looks through
+		`data-q="as14 asa14 alaska airlines asa san diego san diego international airport san ksan n12 5 `} {
 		if !strings.Contains(page, want) {
 			t.Errorf("airport page lacks %s", want)
 		}
@@ -1216,6 +1223,42 @@ func TestAirportLiveBoards(t *testing.T) {
 	for _, part := range []string{"arrivals", "departures"} {
 		if !strings.Contains(page, `<div class="board" data-part="`+part+`">`+a.Parts[part]+`</div>`) {
 			t.Errorf("%s part differs from the page's", part)
+		}
+	}
+
+	// the boards page and search from the whole day's: United's plans from
+	// both Chicago fields, never on the board around now, are what a search
+	// for Chicago finds; paged as far as the day goes, nothing is left either
+	// way, so neither button shows
+	for _, c := range []struct {
+		query, part string
+		want, not   []string
+	}{
+		{"?aq=++CHICAGO+", "arrivals", []string{"2 flights match &ldquo;CHICAGO&rdquo;", `href="/flight/UAL1"`, `href="/flight/UAL2"`}, []string{"AS14", `data-more=`}},
+		{"?aq=zzz", "arrivals", []string{"No flights match &ldquo;zzz&rdquo;"}, []string{"<table", `data-more=`, "panel-empty"}},
+		{"?ae=1&al=1", "arrivals", []string{`href="/flight/UAL1"`, `href="/flight/ASA14"`}, []string{`data-more=`, "board-found"}},
+		{"?de=3", "departures", []string{`href="/flight/ASA13"`}, []string{`data-more=`}},
+	} {
+		rec := get(t, h, m[1]+c.query)
+		var a struct{ Parts map[string]string }
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil || rec.Code != 200 {
+			t.Fatalf("%s: %d %v", c.query, rec.Code, err)
+		}
+		got := a.Parts[c.part]
+		for _, w := range c.want {
+			if !strings.Contains(got, w) {
+				t.Errorf("%s: %s board lacks %s:\n%s", c.query, c.part, w, got)
+			}
+		}
+		for _, w := range c.not {
+			if strings.Contains(got, w) {
+				t.Errorf("%s: %s board has %s:\n%s", c.query, c.part, w, got)
+			}
+		}
+		// the other board stays around now, with its buttons
+		other := map[string]string{"arrivals": "departures", "departures": "arrivals"}[c.part]
+		if !strings.Contains(a.Parts[other], `data-more="earlier"`) || !strings.Contains(a.Parts[other], `data-more="later"`) {
+			t.Errorf("%s: the %s board around now lost its paging", c.query, other)
 		}
 	}
 
@@ -1382,7 +1425,7 @@ func TestBoardRowsDepth(t *testing.T) {
 	for i := range 40 {
 		next = append(next, row("en_route", 100+i, i+1))
 	}
-	recent := flown(full, landedPhases)
+	recent := flown(full, true, flownRows, now)
 	if len(recent) != flownRows || recent[3].Live.Callsign != "DAL4" {
 		t.Fatalf("flown: %d rows, the fourth %s; want %d, DAL4", len(recent), recent[3].Live.Callsign, flownRows)
 	}
@@ -1419,6 +1462,163 @@ func TestBoardRowsDue(t *testing.T) {
 	}
 	if len(rows) != comingRows || due != dueRows || rows[0].Ident != "UAL24" {
 		t.Errorf("got %d rows, %d due, the first %s; want %d, %d, UAL24", len(rows), due, rows[0].Ident, comingRows, dueRows)
+	}
+}
+
+// Which half of a board a row is in: what has landed or left, a diversion,
+// and a cancellation whose time has gone above the line at now; the rest,
+// a cancellation still ahead among them, below it; a flight lost to
+// coverage on neither.
+func TestSideOf(t *testing.T) {
+	now := time.Date(2026, 11, 18, 20, 0, 0, 0, time.UTC)
+	row := func(phase string, on time.Time, at time.Duration) api.BoardRow {
+		return api.BoardRow{BoardTime: now.Add(at), Live: &api.FlightSummary{Phase: phase, On: on}}
+	}
+	for _, c := range []struct {
+		name     string
+		r        api.BoardRow
+		arriving bool
+		want     rowSide
+	}{
+		{"arrived", row("arrived", time.Time{}, -time.Hour), true, sidePast},
+		{"landed", row("landed", time.Time{}, -time.Minute), true, sidePast},
+		{"diverted away", row("diverted", time.Time{}, -time.Hour), true, sidePast},
+		{"inbound", row("en_route", time.Time{}, time.Hour), true, sideComing},
+		{"departed", row("en_route", time.Time{}, -time.Minute), false, sidePast},
+		{"taxiing in", row("taxiing", now.Add(-3*time.Minute), -time.Minute), true, sidePast},
+		{"taxiing out where it comes from", row("taxiing", time.Time{}, time.Hour), true, sideComing},
+		{"taxiing out from here", row("taxiing", time.Time{}, -time.Minute), false, sidePast},
+		{"planned", row("scheduled", time.Time{}, time.Hour), false, sideComing},
+		{"cancelled, gone by", row("cancelled", time.Time{}, -time.Hour), true, sidePast},
+		{"cancelled, still ahead", row("cancelled", time.Time{}, time.Hour), false, sideComing},
+		{"lost", row("unknown", time.Time{}, -time.Hour), true, sideNone},
+	} {
+		if got := sideOf(c.r, c.arriving, now); got != c.want {
+			t.Errorf("%s: side %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+// Paging shows forty more each way per page, and says whether there is
+// more; a search narrows both halves to the rows holding every word of it
+// (in any case, with any spacing) and counts the day's matches.
+func TestBoardPaging(t *testing.T) {
+	now := time.Date(2026, 11, 18, 20, 0, 0, 0, time.UTC)
+	row := func(n int, dep, phase string, m int) api.BoardRow {
+		cs := fmt.Sprintf("DAL%d", n)
+		return api.BoardRow{BoardTime: now.Add(time.Duration(m) * time.Minute),
+			Live: &api.FlightSummary{FlightID: cs, Callsign: cs, IATAFlight: fmt.Sprintf("DL%d", n), Dep: dep, Arr: "KATL", Phase: phase, PhaseWord: phase,
+				Operator: api.Operator{ICAO: "DAL", IATA: "DL", Name: "Delta Air Lines"}}}
+	}
+	var recent, coming []api.BoardRow
+	for i := range 100 {
+		dep := "KLGA"
+		if i%10 == 0 {
+			dep = "KDEN"
+		}
+		recent = append(recent, row(i, dep, "arrived", -i-1))
+		coming = append(coming, row(1000+i, dep, "en_route", i+1))
+	}
+	count := func(b BoardV) (past, next int) {
+		for _, r := range b.Rows {
+			if r.Past {
+				past++
+			} else {
+				next++
+			}
+		}
+		return
+	}
+	for _, c := range []struct {
+		view           boardView
+		past, next     int
+		earlier, later bool
+		matches        int
+		first, last    string
+	}{
+		{boardView{}, 15, 30, true, true, 0, "DL14", "DL1029"},
+		{boardView{Earlier: 1, Later: 1}, 55, 70, true, true, 0, "DL54", "DL1069"},
+		{boardView{Earlier: 2, Later: 2}, 95, 100, true, false, 0, "DL94", "DL1099"},
+		{boardView{Earlier: 3}, 100, 30, false, true, 0, "DL99", "DL1029"},
+		// Denver: every tenth flight each way, all of them on one page
+		{boardView{Q: "denver"}, 10, 10, false, false, 20, "DL90", "DL1090"},
+		{boardView{Q: "  DL  1093 "}, 0, 1, false, false, 1, "DL1093", "DL1093"},
+		{boardView{Q: "delta lga"}, 15, 30, true, true, 180, "DL16", "DL1033"},
+	} {
+		b := pickRows(recent, coming, true, "America/New_York", now, c.view)
+		past, next := count(b)
+		if past != c.past || next != c.next || b.Earlier != c.earlier || b.Later != c.later || (c.view.Q != "" && b.Matches != c.matches) ||
+			len(b.Rows) == 0 || b.Rows[0].Number != c.first || b.Rows[len(b.Rows)-1].Number != c.last {
+			var first, last string
+			if len(b.Rows) > 0 {
+				first, last = b.Rows[0].Number, b.Rows[len(b.Rows)-1].Number
+			}
+			t.Errorf("%+v: %d past, %d coming, earlier %v, later %v, %d matches, %s to %s; want %d, %d, %v, %v, %d, %s to %s",
+				c.view, past, next, b.Earlier, b.Later, b.Matches, first, last, c.past, c.next, c.earlier, c.later, c.matches, c.first, c.last)
+		}
+	}
+}
+
+// A planned arrival the API gives its last report as a board time shows at
+// its schedule, among the flights due then, not at now.
+func TestBoardPlanTime(t *testing.T) {
+	now := time.Date(2026, 11, 18, 20, 0, 0, 0, time.UTC)
+	seen := now.Add(-time.Minute)
+	plan := api.BoardRow{BoardTime: seen, Live: &api.FlightSummary{FlightID: "p", Callsign: "DAL722", Dep: "KLAS", Arr: "KATL",
+		Phase: "scheduled", PhaseWord: "Scheduled", LastSeen: seen, SchedArr: now.Add(3 * time.Hour)}}
+	inbound := api.BoardRow{BoardTime: now.Add(30 * time.Minute), Live: &api.FlightSummary{FlightID: "i", Callsign: "DAL1", Dep: "KLGA", Arr: "KATL",
+		Phase: "en_route", PhaseWord: "En Route", LastSeen: seen, ETA: now.Add(30 * time.Minute)}}
+	rows := boardRows(nil, []api.BoardRow{plan, inbound}, true, "UTC", now)
+	if len(rows) != 2 || rows[0].Ident != "DAL1" || rows[1].At.ISO != "2026-11-18T23:00:00Z" {
+		t.Errorf("got %+v", rows)
+	}
+}
+
+// A row whose time is not today at the airport says its weekday, since a
+// paged or searched board runs a day each way.
+func TestBoardRowDay(t *testing.T) {
+	now := time.Date(2026, 11, 19, 1, 30, 0, 0, time.UTC) // 8:30 PM Wednesday in Atlanta
+	at := func(h int) api.BoardRow {
+		return api.BoardRow{BoardTime: now.Add(time.Duration(h) * time.Hour), Live: &api.FlightSummary{FlightID: "f", Callsign: "UAL1305", Dep: "KDEN", Arr: "KATL", Phase: "en_route"}}
+	}
+	for h, want := range map[int]string{-22: "Tue", -1: "", 3: "", 4: "Thu"} {
+		if r, _ := boardRow(at(h), false, true, "America/New_York", now); r.Day != want {
+			t.Errorf("%+dh: day %q, want %q", h, r.Day, want)
+		}
+	}
+}
+
+// A read from now back that fills its depth before the board has its
+// landed rows is buried, and the refresh draws that board from the whole
+// day's; one that ended early (the field has no more) is not.
+func TestUnbury(t *testing.T) {
+	full := func(n int) *api.Board { return &api.Board{Rows: make([]api.BoardRow, n)} }
+	past := func(n int) BoardV {
+		var b BoardV
+		for i := range 40 {
+			b.Rows = append(b.Rows, BoardRowV{Past: i < n})
+		}
+		return b
+	}
+	s := newTestServer(t)
+	for _, c := range []struct {
+		name  string
+		arr   *api.Board
+		shown BoardV
+		view  boardView
+		whole bool
+	}{
+		{"six landings in 500 rows", full(arrivalsDepth), past(6), boardView{}, true},
+		{"fifteen landings", full(arrivalsDepth), past(15), boardView{}, false},
+		{"a short read: no more to find", full(120), past(6), boardView{}, false},
+		{"paged already", full(arrivalsDepth), past(6), boardView{Later: 1}, false},
+	} {
+		v := AirportPageV{Arrivals: c.shown, Departures: past(15)}
+		arr, dep := c.view, boardView{}
+		s.unbury(&v, boardsAnswer{arr: c.arr, dep: full(departuresDepth)}, &arr, &dep)
+		if arr.Whole != c.whole || dep.Whole {
+			t.Errorf("%s: arrivals whole %v, departures %v; want %v, false", c.name, arr.Whole, dep.Whole, c.whole)
+		}
 	}
 }
 
@@ -1500,7 +1700,7 @@ func TestSpots(t *testing.T) {
 // another airport of that city is on the board too
 func TestBoardPlaces(t *testing.T) {
 	s := newTestServer(t)
-	fids := s.funcs()["fids"].(func([]BoardRowV, string, string) any)
+	fids := s.funcs()["fids"].(func(BoardV, string, string) any)
 	row := func(code, city string) BoardRowV {
 		return BoardRowV{Place: AirportV{Code: code, City: city, Name: code + " Airport", URL: "/airport/" + code}, Status: "Scheduled", Class: "sched"}
 	}
@@ -1510,7 +1710,7 @@ func TestBoardPlaces(t *testing.T) {
 	}
 	markTwins(rows)
 	var b strings.Builder
-	if err := s.tpl["airport"].ExecuteTemplate(&b, "fids", fids(rows, "From", "None.")); err != nil {
+	if err := s.tpl["airport"].ExecuteTemplate(&b, "fids", fids(BoardV{Rows: rows}, "From", "None.")); err != nil {
 		t.Fatal(err)
 	}
 	h := b.String()
@@ -1531,7 +1731,7 @@ func TestBoardPlaces(t *testing.T) {
 // keeps its four columns
 func TestBoardColumns(t *testing.T) {
 	s := newTestServer(t)
-	fids := s.funcs()["fids"].(func([]BoardRowV, string, string) any)
+	fids := s.funcs()["fids"].(func(BoardV, string, string) any)
 	row := func(gate, claim string) BoardRowV {
 		return BoardRowV{Status: "Scheduled", Class: "sched", Gate: gate, Claim: claim}
 	}
@@ -1546,7 +1746,7 @@ func TestBoardColumns(t *testing.T) {
 		{[]BoardRowV{row("B4", "4"), row("", "")}, `<table class="fids fids-6" `, true, true},
 	} {
 		var b strings.Builder
-		if err := s.tpl["airport"].ExecuteTemplate(&b, "fids", fids(c.rows, "From", "None.")); err != nil {
+		if err := s.tpl["airport"].ExecuteTemplate(&b, "fids", fids(BoardV{Rows: c.rows}, "From", "None.")); err != nil {
 			t.Fatal(err)
 		}
 		h := b.String()

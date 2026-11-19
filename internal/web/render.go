@@ -143,13 +143,13 @@ func (s *Server) funcs() template.FuncMap {
 		"query":   url.QueryEscape,
 		// a board, with a Gate column when any row has a gate and a
 		// Baggage one when any has a carousel
-		"fids": func(rows []BoardRowV, col, empty string) any {
+		"fids": func(b BoardV, col, empty string) any {
 			v := struct {
-				Rows        []BoardRowV
+				BoardV
 				Col, Empty  string
 				Gate, Claim bool
-			}{Rows: rows, Col: col, Empty: empty}
-			for _, r := range rows {
+			}{BoardV: b, Col: col, Empty: empty}
+			for _, r := range b.Rows {
 				v.Gate = v.Gate || r.Gate != ""
 				v.Claim = v.Claim || r.Claim != ""
 			}

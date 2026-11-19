@@ -13,7 +13,9 @@ package web
 //   - the token is a path segment, so a CDN that leaves query strings out of
 //     its cache key still cannot hand a signed answer to an unsigned URL.
 //   - an answer is the page's own HTML for the parts that change, plus the
-//     map's moving pieces: nothing the page does not already show.
+//     map's moving pieces: nothing the page does not already show. An
+//     airport's boards come as the reader has them, paged earlier or later
+//     or searched (the page's own controls, see boardViews).
 //   - answers are rendered per poll and never stored by a browser or the
 //     CDN. A flight's comes from one real-time lookup (never cached); an
 //     airport's from its boards, which the API client keeps for 60 seconds.
@@ -28,6 +30,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -130,11 +133,30 @@ func (s *Server) liveAirport(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
-	ans, err := s.liveAirportAnswer(ctx, a, now)
+	arr, dep := boardViews(r.URL.Query())
+	ans, err := s.liveAirportAnswer(ctx, a, now, arr, dep)
 	s.writeLive(w, r, ans, err, "airport", code)
 }
 
-func (s *Server) liveAirportAnswer(ctx context.Context, a geo.Airport, now time.Time) (liveAnswer, error) {
+// boardViews reads how the reader has the two boards (live.js): ae, al and
+// aq are the arrivals board's pages earlier and later and its search, de,
+// dl and dq the departures board's.
+func boardViews(q url.Values) (arr, dep boardView) {
+	view := func(p string) boardView {
+		pages := func(k string) int {
+			n, _ := strconv.Atoi(q.Get(p + k))
+			return min(max(n, 0), maxPages)
+		}
+		search := strings.Join(strings.Fields(q.Get(p+"q")), " ")
+		if r := []rune(search); len(r) > 60 {
+			search = string(r[:60])
+		}
+		return boardView{Earlier: pages("e"), Later: pages("l"), Q: search}
+	}
+	return view("a"), view("d")
+}
+
+func (s *Server) liveAirportAnswer(ctx context.Context, a geo.Airport, now time.Time, arr, dep boardView) (liveAnswer, error) {
 	v := AirportPageV{Airport: a, Code: a.Code()}
 	b, err := s.loadBoards(ctx, a.ICAO, now)
 	if err != nil && !errors.Is(err, api.ErrNotFound) {
@@ -142,6 +164,10 @@ func (s *Server) liveAirportAnswer(ctx context.Context, a geo.Airport, now time.
 	}
 	if err == nil {
 		v.setBoards(b, now)
+		s.unbury(&v, b, &arr, &dep)
+		if err := s.pageBoards(ctx, &v, arr, dep, now); err != nil {
+			return liveAnswer{}, err
+		}
 	}
 	out := liveAnswer{Parts: map[string]string{}, Next: s.liveAirportURL(a.ICAO, now)}
 	for _, part := range airportParts {

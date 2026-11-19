@@ -1,10 +1,14 @@
 {{/* an arrivals or departures board as an airport's screens show it,
+     with Earlier and Later to page it and, when the reader searched it,
+     how many flights match (live.js drives both through the live refresh),
      earliest first: what has landed (or left), a line at now, then what
      is on its way, with its gate and carousel where the board knows any. A flight fills its row as far as it has come: in the air by its progress,
      98% landed, all of it at the gate.
      The rows are laid out on a grid (site.css), so the roles keep the
      table's meaning for screen readers that drop it from a restyled table. */}}
-{{define "fids"}}{{if .Rows}}
+{{define "fids"}}{{if .Q}}<p class="board-found">{{if .Matches}}{{plural .Matches "flight matches" "flights match"}}{{else}}No flights match{{end}} &ldquo;{{.Q}}&rdquo;</p>{{end}}
+{{if .Earlier}}<button type="button" class="board-more" data-more="earlier"><svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 7.5 6 4.5l3 3"/></svg>Earlier flights</button>{{end}}
+{{if .Rows}}
 <table class="fids{{if and .Gate .Claim}} fids-6{{else if or .Gate .Claim}} fids-5{{end}}" role="table">
 	<thead role="rowgroup"><tr role="row">
 		<th scope="col" role="columnheader">Time{{with (index .Rows 0).At.Zone}} <small>{{.}}</small>{{end}}</th>
@@ -14,8 +18,8 @@
 		{{if .Claim}}<th scope="col" role="columnheader" class="fids-claim">Bags</th>{{end}}
 		<th scope="col" role="columnheader">Status</th>
 	</tr></thead>
-	<tbody role="rowgroup">{{range .Rows}}<tr role="row"{{with .RowClass}} class="{{.}}"{{end}}{{if .Fill}} style="--p:{{.Fill}}%"{{end}}{{if .Rate}} data-rate="{{rate .Rate}}"{{end}}>
-		<td role="cell" class="fids-time">{{if .At.Set}}<time datetime="{{.At.ISO}}">{{.At.Clock}}</time>{{else}}<span class="dim">&ndash;</span>{{end}}</td>
+	<tbody role="rowgroup">{{range .Rows}}<tr role="row"{{with .RowClass}} class="{{.}}"{{end}}{{if .Fill}} style="--p:{{.Fill}}%"{{end}}{{if .Rate}} data-rate="{{rate .Rate}}"{{end}} data-q="{{.Search}}">
+		<td role="cell" class="fids-time">{{if .At.Set}}<time datetime="{{.At.ISO}}">{{.At.Clock}}</time>{{with .Day}}<small class="fids-day">{{.}}</small>{{end}}{{else}}<span class="dim">&ndash;</span>{{end}}</td>
 		<td role="cell" class="fids-flight">{{template "op" .Op}}{{if .URL}}<a href="{{.URL}}">{{.Number}}</a>{{else}}{{.Number}}{{end}}</td>
 		<td role="cell" class="fids-place">{{template "board-place" .}}</td>
 		{{if $.Gate}}<td role="cell" class="fids-gate">{{.Gate}}</td>{{end}}
@@ -23,7 +27,8 @@
 		<td role="cell" class="fids-status"><span class="tag tag-{{.Class}}">{{.Status}}</span>{{with .Note}}<small class="fids-note">{{.}}</small>{{end}}{{if .Air}}<span class="vh">, {{.Fill}}% of the way</span>{{end}}</td>
 	</tr>{{end}}</tbody>
 </table>
-{{else}}<p class="panel-empty">{{.Empty}}</p>{{end}}{{end}}
+{{else if not .Q}}<p class="panel-empty">{{.Empty}}</p>{{end}}
+{{if .Later}}<button type="button" class="board-more" data-more="later"><svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 4.5 6 7.5l3-3"/></svg>Later flights</button>{{end}}{{end}}
 
 {{/* where a board's flight comes from or goes to, by its city as an
      airport's screens have it (the airport's name and code in the title),
@@ -78,12 +83,21 @@
 
 <div class="sheet">
 <div class="wrap cols cols-boards">
+	{{/* paging and search need live.js */}}<noscript><style>.board-search, .board-more { display: none; }</style></noscript>
 	<section class="panel" id="arrivals" aria-labelledby="arr-h">
-		<h2 id="arr-h" class="keyed"><span class="key key-arr" aria-hidden="true"></span>Arrivals</h2>
+		<div class="panel-head">
+			<h2 id="arr-h" class="keyed"><span class="key key-arr" aria-hidden="true"></span>Arrivals</h2>
+			<input type="search" class="board-search" data-search="arrivals" placeholder="Flight, city or gate" aria-label="Search arrivals" autocomplete="off" spellcheck="false" enterkeyhint="search">
+			<span class="vh" aria-live="polite" data-said="arrivals"></span>
+		</div>
 		<div class="board" data-part="arrivals">{{template "airport-arrivals" $v}}</div>
 	</section>
 	<section class="panel" id="departures" aria-labelledby="dep-h">
-		<h2 id="dep-h" class="keyed"><span class="key key-dep" aria-hidden="true"></span>Departures</h2>
+		<div class="panel-head">
+			<h2 id="dep-h" class="keyed"><span class="key key-dep" aria-hidden="true"></span>Departures</h2>
+			<input type="search" class="board-search" data-search="departures" placeholder="Flight, city or gate" aria-label="Search departures" autocomplete="off" spellcheck="false" enterkeyhint="search">
+			<span class="vh" aria-live="polite" data-said="departures"></span>
+		</div>
 		<div class="board" data-part="departures">{{template "airport-departures" $v}}</div>
 	</section>
 

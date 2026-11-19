@@ -73,7 +73,12 @@ One Go binary, standard library only.
   for their arrivals and departures boards (signed under its own label, so a
   flight's token never passes for an airport's). Each poll is a fresh render;
   the boards behind it are an ordinary API answer, cached for 60 s like the
-  rest, so a board is at most about a minute and a half behind.
+  rest, so a board is at most about a minute and a half behind. The same
+  poll carries each board's view (`ae`/`al`/`aq` for arrivals: pages earlier
+  and later, search; `de`/`dl`/`dq` for departures): a paged or searched
+  board is drawn from the whole day's board (`hours=24`, up to three pages
+  of 2,000 rows), read once a minute per airport. Those answers (2 MB at
+  ATL) stay in memory; the shared store takes answers up to 1 MB.
 - **Upstream protection.** At most 24 concurrent API calls, a 10 s timeout,
   one retry on 5xx, and every API answer cached for 60 s (in memory, then the
   shared store), except the real-time `/live` lookup, which is never cached.

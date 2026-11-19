@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,8 +25,8 @@ type AirportPageV struct {
 	Clock      ClockV
 	Map        *MapV
 	Boards     bool         // the arrivals and departures boards answered
-	Arrivals   []BoardRowV  // landed here lately, then inbound: earliest first
-	Departures []BoardRowV  // left here lately, then scheduled: earliest first
+	Arrivals   BoardV       // landed here lately, then inbound: earliest first
+	Departures BoardV       // left here lately, then scheduled: earliest first
 	Live       bool         // the sweep of aircraft around the field answered
 	Parked     []TrafficRow // on the ground at the field
 	ParkedN    int
@@ -54,7 +53,69 @@ type BoardRowV struct {
 	Fill   int       // how much of its row fills (%): its progress in the air (1-97), 98 landed, 100 at the gate; 0 none
 	Rate   float64   // in the air, how fast the fill grows (% a second), for the page to keep it filling
 	Air    bool      // the fill is a flight in the air's progress
+	Day    string    // the weekday of its time when that is not today at the airport ("Wed"): a paged or searched board runs a day each way
+	Search string    // what the board's search looks through, lower case
 	t      time.Time // the time it shows, which the board sorts by
+}
+
+// BoardV is an arrivals or departures board as the page shows it.
+type BoardV struct {
+	Rows           []BoardRowV
+	Earlier, Later bool   // there is more to show that way
+	Q              string // the search it is narrowed to, if any
+	Matches        int    // with a search, the flights of the day that match it
+}
+
+// boardView is how a reader has a board: how many pages of morePage rows
+// they have asked for before and after the ones around now, and what they
+// searched it for. The page draws it around now; the live refresh draws it
+// as the reader has it, from the whole day's board when it is not around now.
+type boardView struct {
+	Earlier, Later int
+	Q              string
+	Whole          bool // draw it from the whole day's board even around now (see buried)
+}
+
+func (v boardView) aroundNow() bool { return v.Earlier == 0 && v.Later == 0 && v.Q == "" && !v.Whole }
+
+// buried says a board's read from now back ran out before it found the rows
+// that have happened that the board shows. The API dates hundreds of a
+// hub's planned arrivals at their last report (ATL, 2026-11-18), which sorts
+// them all ahead of what has landed: at night 500 rows held six landings.
+// The whole day's board has the rest.
+func buried(b *api.Board, depth int, shown BoardV) bool {
+	if b == nil || len(b.Rows) < depth {
+		return false
+	}
+	n := 0
+	for _, r := range shown.Rows {
+		if r.Past {
+			n++
+		}
+	}
+	return n < flownRows
+}
+
+// unbury sets a board around now to be drawn from the whole day's when its
+// read was buried; on the page, which draws now, it starts that loading
+// for the page's first refresh instead.
+func (s *Server) unbury(v *AirportPageV, b boardsAnswer, arr, dep *boardView) {
+	for _, side := range []struct {
+		full  *api.Board
+		depth int
+		shown BoardV
+		kind  string
+		view  *boardView
+	}{{b.arr, arrivalsDepth, v.Arrivals, "arrivals", arr}, {b.dep, departuresDepth, v.Departures, "departures", dep}} {
+		if !buried(side.full, side.depth, side.shown) {
+			continue
+		}
+		if side.view == nil {
+			go s.dayBoard(context.Background(), v.Airport.ICAO, side.kind)
+		} else if side.view.aroundNow() {
+			side.view.Whole = true
+		}
+	}
 }
 
 // RowClass is the board row's classes: is-past for what has landed or left,
@@ -80,13 +141,45 @@ type boardsAnswer struct {
 	enroute, sched *api.Board
 }
 
-// Flown phases: what a board's top half lists. The full boards hold every
-// flight of any phase, planned ones ahead of flown ones, and so does the
-// page's ten-row preview of them, which is why it is not used.
-var (
-	landedPhases = []string{"landed", "arrived"}
-	leftPhases   = []string{"taxiing", "en_route", "landed", "arrived", "diverted"}
+// rowSide is the half of a board a row belongs in.
+type rowSide int
+
+const (
+	sideNone   rowSide = iota // lost to coverage: on neither
+	sidePast                  // it has landed or left (or was cancelled for a time gone by): above the line at now
+	sideComing                // still to come: below it
 )
+
+// sideOf places a row by its phase. The full boards hold every flight of
+// any phase, planned ones ahead of flown ones, and so does the page's
+// ten-row preview of them, which is why it is not used for what happened.
+// On an arrivals board a flight taxiing has landed once it has a
+// touchdown, else it is taxiing out where it comes from; on a departures
+// board, taxiing or in the air, it has left.
+func sideOf(r api.BoardRow, arriving bool, now time.Time) rowSide {
+	switch r.Phase() {
+	case "landed", "arrived", "diverted":
+		return sidePast
+	case "en_route":
+		if arriving {
+			return sideComing
+		}
+		return sidePast
+	case "taxiing":
+		if arriving && (r.Live == nil || r.Live.On.IsZero()) {
+			return sideComing
+		}
+		return sidePast
+	case "scheduled":
+		return sideComing
+	case "cancelled":
+		if r.BoardTime.After(now) {
+			return sideComing
+		}
+		return sidePast
+	}
+	return sideNone
+}
 
 const (
 	// how deep the full boards are read for ten flown rows: flights in the
@@ -101,6 +194,11 @@ const (
 	comingRows  = 30
 	dueRows     = 10
 	comingDepth = 80
+	// paging: each press of Earlier or Later shows this many more, up to
+	// maxPages presses; the whole day's board is read in pages of dayDepth
+	morePage = 40
+	maxPages = 50
+	dayDepth = 2000
 )
 
 // loadBoards fetches the page's boards and the four full boards together:
@@ -153,18 +251,30 @@ func (s *Server) noteRoutes(icao string, b boardsAnswer, now time.Time) {
 	}
 }
 
-// flown is a full board's first rows in one of the phases, newest first.
-func flown(b *api.Board, phases []string) []api.BoardRow {
+// flown is a board's first n rows that have happened, newest first (all
+// of them for n < 0).
+func flown(b *api.Board, arriving bool, n int, now time.Time) []api.BoardRow {
 	if b == nil {
 		return nil
 	}
 	var out []api.BoardRow
 	for _, r := range b.Rows {
-		if slices.Contains(phases, r.Phase()) {
+		if sideOf(r, arriving, now) == sidePast {
 			out = append(out, r)
-			if len(out) == flownRows {
+			if len(out) == n {
 				break
 			}
+		}
+	}
+	return out
+}
+
+// toCome is a board's rows still to come, in its order.
+func toCome(b *api.Board, arriving bool, now time.Time) []api.BoardRow {
+	var out []api.BoardRow
+	for _, r := range b.Rows {
+		if sideOf(r, arriving, now) == sideComing {
+			out = append(out, r)
 		}
 	}
 	return out
@@ -178,11 +288,73 @@ func coming(full *api.Board, preview []api.BoardRow) []api.BoardRow {
 	return preview
 }
 
-// setBoards fills the arrivals and departures boards.
+// setBoards fills the arrivals and departures boards around now. Their
+// reads stop short of the whole day, so both can always page further.
 func (v *AirportPageV) setBoards(b boardsAnswer, now time.Time) {
 	v.Boards = true
-	v.Arrivals = boardRows(flown(b.arr, landedPhases), coming(b.enroute, b.page.Boards.Enroute), true, v.Airport.TZ, now)
-	v.Departures = boardRows(flown(b.dep, leftPhases), coming(b.sched, b.page.Boards.Scheduled), false, v.Airport.TZ, now)
+	v.Arrivals = pickRows(flown(b.arr, true, flownRows, now), coming(b.enroute, b.page.Boards.Enroute), true, v.Airport.TZ, now, boardView{})
+	v.Departures = pickRows(flown(b.dep, false, flownRows, now), coming(b.sched, b.page.Boards.Scheduled), false, v.Airport.TZ, now, boardView{})
+	v.Arrivals.Earlier, v.Arrivals.Later = true, true
+	v.Departures.Earlier, v.Departures.Later = true, true
+}
+
+// dayBoard is one of an airport's boards as far as the API holds it, a day
+// back to its last plan: read whole (up to three pages of dayDepth, newest
+// first) for paging and search, and kept a minute like every answer.
+func (s *Server) dayBoard(ctx context.Context, icao, kind string) (*api.Board, error) {
+	out := &api.Board{Kind: kind}
+	var before time.Time
+	for range 3 {
+		b, err := s.api.AirportBoard(ctx, icao, kind, 24, dayDepth, before)
+		if err != nil {
+			if len(out.Rows) == 0 {
+				return nil, err
+			}
+			break // what came is the newest part, the part readers page through first
+		}
+		out.Rows = append(out.Rows, b.Rows...)
+		if b.NextBefore == nil || b.NextBefore.IsZero() {
+			break
+		}
+		before = *b.NextBefore
+	}
+	return out, nil
+}
+
+// pageBoards redraws the boards a reader has paged or searched from the
+// whole day's, which also teach the index this field's routes.
+func (s *Server) pageBoards(ctx context.Context, v *AirportPageV, arr, dep boardView, now time.Time) error {
+	type side struct {
+		view     boardView
+		kind     string
+		arriving bool
+		dst      *BoardV
+		day      *api.Board
+		err      error
+	}
+	sides := []*side{{view: arr, kind: "arrivals", arriving: true, dst: &v.Arrivals}, {view: dep, kind: "departures", dst: &v.Departures}}
+	var wg sync.WaitGroup
+	for _, sd := range sides {
+		if !sd.view.aroundNow() {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				sd.day, sd.err = s.dayBoard(ctx, v.Airport.ICAO, sd.kind)
+			}()
+		}
+	}
+	wg.Wait()
+	for _, sd := range sides {
+		if sd.view.aroundNow() {
+			continue
+		}
+		if sd.err != nil {
+			return sd.err
+		}
+		s.index.NoteBoard(v.Airport.ICAO, sd.day.Rows, sd.arriving, now)
+		*sd.dst = pickRows(flown(sd.day, sd.arriving, -1, now), toCome(sd.day, sd.arriving, now), sd.arriving, v.Airport.TZ, now, sd.view)
+	}
+	return nil
 }
 
 // boardMins writes a number of minutes as a board does, in its largest unit
@@ -412,11 +584,12 @@ func (s *Server) airportPage(ctx context.Context, r *http.Request) (resp, error)
 	}
 	if b := <-boards; b != nil {
 		v.setBoards(*b, now)
+		s.unbury(&v, *b, nil, nil)
 		// the boards' flights in the air near the field go on the map
 		for _, side := range []struct {
 			rows []BoardRowV
 			kind string
-		}{{v.Arrivals, "arr"}, {v.Departures, "dep"}} {
+		}{{v.Arrivals.Rows, "arr"}, {v.Departures.Rows, "dep"}} {
 			for _, r := range side.rows {
 				if r.Airborne && r.HasPos && geo.DistanceMi(a.Lat, a.Lon, r.Pos.Lat, r.Pos.Lon) < 250 {
 					addPlane(mapPlane{P: pt(r.Pos), H: math.Round(r.Hdg), L: r.Number, U: r.URL, K: side.kind}, r.FlightID)
@@ -486,16 +659,26 @@ func codeSlash(a geo.Airport) string {
 }
 
 // boardRows turns a board's recent rows (newest first) and its coming ones
-// (soonest first) into one list, earliest first, as an airport's screens
-// show it: what has landed (or left), then what is on its way. arriving says
-// which end of each flight is here. Each row shows the time the board sorts
-// it by (wheels-on or gate-in, wheels-off or gate-out, the estimate, the
-// schedule), so the column reads in order and is never blank. A flight the
+// into the board around now (pickRows with nothing paged or searched).
+func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time.Time) []BoardRowV {
+	return pickRows(recent, coming, arriving, tz, now, boardView{}).Rows
+}
+
+// pickRows draws a board from its rows that have happened (newest first)
+// and those to come (any order), in the order an airport's screens show
+// them: what has landed (or left), then what is on its way. Each row shows
+// the time the board sorts it by (wheels-on or gate-in, wheels-off or
+// gate-out, the estimate, the schedule), so the column reads in order and
+// is never blank. It shows the newest flownRows of the first and the
+// soonest comingRows of the second, morePage more for each page the reader
+// has asked for, of the rows matching what they searched for. A flight the
 // data holds twice shows once: the same flight number within half an hour
 // on the board, or still listed as coming within three hours of landing or
 // leaving.
-func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time.Time) []BoardRowV {
-	var out []BoardRowV
+func pickRows(recent, coming []api.BoardRow, arriving bool, tz string, now time.Time, view boardView) BoardV {
+	out := BoardV{Q: view.Q}
+	terms := searchTerms(view.Q)
+	wantPast, wantNext := flownRows+morePage*view.Earlier, comingRows+morePage*view.Later
 	seen := map[string][]time.Time{}
 	fresh := func(id string, t time.Time, within time.Duration) bool {
 		for _, k := range seen[id] {
@@ -506,81 +689,30 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 		seen[id] = append(seen[id], t)
 		return true
 	}
-	row := func(b api.BoardRow, past bool) (BoardRowV, bool) {
-		var l LegV
-		switch {
-		case b.Live != nil && !b.Live.LADDRedacted:
-			l = legFromLive(*b.Live, refs{}, now)
-		case b.Archived != nil && !b.Archived.LADDRedacted:
-			l = legFromHistory(*b.Archived, now)
-		default:
-			return BoardRowV{}, false
-		}
-		r := BoardRowV{LegV: l, Past: past, Status: firstNonEmpty(l.PhaseWord, "Unknown"), Class: l.StatusClass}
-		r.Fill, r.Rate = boardFill(l, b.Live, now)
-		r.Air = l.Phase == "en_route" && r.Fill > 0
-		switch {
-		case arriving && past:
-			r.Place, r.At = l.Dep, firstCell(l.ArrIn, l.ArrOn, l.ArrEst)
-			r.Gate, r.Claim = l.ArrGate, l.Baggage
-		case arriving:
-			r.Place, r.At = l.Dep, firstCell(l.ArrEst, l.ArrPlanned)
-			r.Gate, r.Claim = l.ArrGate, l.Baggage
-			// inbound: "En Route" says less than when it gets here, so an
-			// airborne flight's status is its estimate against the schedule;
-			// one still to leave keeps its phase and notes the estimate
-			var eta, class string
-			if fs := b.Live; fs != nil {
-				eta, class = etaStatus(firstSet(fs.ETA, fs.STA), fs.SchedArr)
-			}
-			switch {
-			case l.Phase == "en_route" && eta != "":
-				r.Status, r.Class = eta, class
-			case eta != "On time":
-				r.Note = eta
-			}
-		default:
-			r.Place, r.Gate = l.Arr, l.DepGate
-			if l.DivertedTo != nil {
-				r.Place = *l.DivertedTo
-			}
-			if past {
-				r.At = firstCell(l.DepOff, l.DepOut, l.DepPlanned)
-				if l.Phase == "en_route" {
-					r.Status = "Departed" // on a departures board, not "en route"
-				}
-			} else {
-				r.At = l.DepPlanned
-				// in the board's words: off the gate, else the slot it is
-				// held to
-				fs := b.Live
-				switch {
-				case fs != nil && !fs.Out.IsZero():
-					if l.Phase == "scheduled" {
-						r.Status, r.Class = "Left gate", "taxi" // off the gate before its phase moves on
-					}
-					r.Note = lateWords(fs.Out, fs.SchedDep)
-				case fs != nil && !fs.EDCT.IsZero():
-					r.Note = lateWords(fs.EDCT, fs.SchedDep)
-				}
-			}
-		}
-		r.City = boardCity(r.Place.City)
-		if !b.BoardTime.IsZero() {
-			r.At = timeCell(b.BoardTime, tz, "")
-		}
-		r.t, _ = time.Parse(time.RFC3339, r.At.ISO)
-		return r, true
-	}
-	keep := func(r BoardRowV, within time.Duration) {
+	keep := func(r BoardRowV, within time.Duration) bool {
 		if fresh(firstNonEmpty(r.Ident, r.FlightID), firstSet(r.t, now), within) {
-			out = append(out, r)
+			out.Rows = append(out.Rows, r)
+			return true
+		}
+		return false
+	}
+	// a search counts every match, so it reads every row; paging stops a
+	// row past what it shows
+	var past []BoardRowV
+	for _, b := range recent {
+		if terms == nil && len(past) > wantPast {
+			break
+		}
+		if r, ok := boardRow(b, true, arriving, tz, now); ok && r.matches(terms) {
+			past = append(past, r)
 		}
 	}
-	for i := len(recent) - 1; i >= 0; i-- {
-		if r, ok := row(recent[i], true); ok {
-			keep(r, 30*time.Minute)
-		}
+	if len(past) > wantPast {
+		out.Earlier = true
+	}
+	out.Matches = len(past)
+	for i := min(len(past), wantPast) - 1; i >= 0; i-- {
+		keep(past[i], 30*time.Minute)
 	}
 	// The API lists the inbound flights with an estimate or a metered time
 	// ahead of those with only a schedule, which it gives no board time, so
@@ -588,7 +720,7 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 	// none last) before a flight held twice is dropped.
 	var next []BoardRowV
 	for _, b := range coming {
-		if r, ok := row(b, false); ok {
+		if r, ok := boardRow(b, false, arriving, tz, now); ok && r.matches(terms) {
 			next = append(next, r)
 		}
 	}
@@ -606,11 +738,137 @@ func boardRows(recent, coming []api.BoardRow, arriving bool, tz string, now time
 	if due > dueRows {
 		next = next[due-dueRows:]
 	}
-	for i, n := 0, len(out); i < len(next) && len(out)-n < comingRows; i++ {
-		keep(next[i], 3*time.Hour)
+	out.Matches += len(next)
+	shown := 0
+	for _, r := range next {
+		if shown == wantNext {
+			out.Later = true
+			break
+		}
+		if keep(r, 3*time.Hour) {
+			shown++
+		}
 	}
-	markTwins(out)
+	markTwins(out.Rows)
 	return out
+}
+
+// boardRow is one board row as the page shows it; past says it has landed
+// or left. A row the data withholds (LADD) has none.
+func boardRow(b api.BoardRow, past, arriving bool, tz string, now time.Time) (BoardRowV, bool) {
+	var l LegV
+	var op api.Operator
+	switch {
+	case b.Live != nil && !b.Live.LADDRedacted:
+		l, op = legFromLive(*b.Live, refs{}, now), b.Live.Operator
+	case b.Archived != nil && !b.Archived.LADDRedacted:
+		l, op = legFromHistory(*b.Archived, now), b.Archived.Operator
+	default:
+		return BoardRowV{}, false
+	}
+	r := BoardRowV{LegV: l, Past: past, Status: firstNonEmpty(l.PhaseWord, "Unknown"), Class: l.StatusClass}
+	r.Fill, r.Rate = boardFill(l, b.Live, now)
+	r.Air = l.Phase == "en_route" && r.Fill > 0
+	switch {
+	case arriving && past:
+		r.Place, r.At = l.Dep, firstCell(l.ArrIn, l.ArrOn, l.ArrEst)
+		r.Gate, r.Claim = l.ArrGate, l.Baggage
+	case arriving:
+		r.Place, r.At = l.Dep, firstCell(l.ArrEst, l.ArrPlanned)
+		r.Gate, r.Claim = l.ArrGate, l.Baggage
+		// inbound: "En Route" says less than when it gets here, so an
+		// airborne flight's status is its estimate against the schedule;
+		// one still to leave keeps its phase and notes the estimate
+		var eta, class string
+		if fs := b.Live; fs != nil {
+			eta, class = etaStatus(firstSet(fs.ETA, fs.STA), fs.SchedArr)
+		}
+		switch {
+		case l.Phase == "en_route" && eta != "":
+			r.Status, r.Class = eta, class
+		case eta != "On time":
+			r.Note = eta
+		}
+	default:
+		r.Place, r.Gate = l.Arr, l.DepGate
+		if l.DivertedTo != nil {
+			r.Place = *l.DivertedTo
+		}
+		if past {
+			r.At = firstCell(l.DepOff, l.DepOut, l.DepPlanned)
+			if l.Phase == "en_route" {
+				r.Status = "Departed" // on a departures board, not "en route"
+			}
+		} else {
+			r.At = l.DepPlanned
+			// in the board's words: off the gate, else the slot it is
+			// held to
+			fs := b.Live
+			switch {
+			case fs != nil && !fs.Out.IsZero():
+				if l.Phase == "scheduled" {
+					r.Status, r.Class = "Left gate", "taxi" // off the gate before its phase moves on
+				}
+				r.Note = lateWords(fs.Out, fs.SchedDep)
+			case fs != nil && !fs.EDCT.IsZero():
+				r.Note = lateWords(fs.EDCT, fs.SchedDep)
+			}
+		}
+	}
+	r.City = boardCity(r.Place.City)
+	// The board's own time, unless a flight still to come has only its last
+	// report there: the API falls back to that for a plan it has no time
+	// for, and gives it to hundreds of planned arrivals that have a schedule
+	// (ATL, 2026-11-18), which would put them all at now. What has happened
+	// keeps the board's time, which places it among the others.
+	if !b.BoardTime.IsZero() && (past || !r.At.Set || b.Live == nil || !b.BoardTime.Equal(b.Live.LastSeen)) {
+		r.At = timeCell(b.BoardTime, tz, "")
+	}
+	r.t, _ = time.Parse(time.RFC3339, r.At.ISO)
+	if loc := loadZone(tz); !r.t.IsZero() {
+		if y, m, d := r.t.In(loc).Date(); time.Date(y, m, d, 0, 0, 0, 0, loc) != dayStart(now, loc) {
+			r.Day = r.t.In(loc).Format("Mon")
+		}
+	}
+	r.Search = searchText(r, op)
+	return r, true
+}
+
+func dayStart(t time.Time, loc *time.Location) time.Time {
+	y, m, d := t.In(loc).Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, loc)
+}
+
+// searchText is what a board's search looks through for a row: everything
+// it shows (the flight, the airline, where from or to by city, name and
+// code, the gate and carousel, the status, the time) in lower case.
+func searchText(r BoardRowV, op api.Operator) string {
+	var b strings.Builder
+	for _, s := range []string{r.Number, r.Ident, op.Name, op.ICAO, r.City, r.Place.Name, r.Place.Code, r.Place.ICAO,
+		r.Gate, r.Claim, r.Status, r.Note, r.At.Clock} {
+		if s != "" {
+			if b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(s)
+		}
+	}
+	return strings.ToLower(b.String())
+}
+
+// searchTerms is a search split into its words, lower case: a row matches
+// when its text holds every one ("dl 1234" finds DL1234). None for none.
+func searchTerms(q string) []string {
+	return strings.Fields(strings.ToLower(q))
+}
+
+func (r BoardRowV) matches(terms []string) bool {
+	for _, t := range terms {
+		if !strings.Contains(r.Search, t) {
+			return false
+		}
+	}
+	return true
 }
 
 // boardCity is a place's city as a board names it, up to its first comma

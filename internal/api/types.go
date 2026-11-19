@@ -289,9 +289,10 @@ func (r BoardRow) Phase() string {
 
 // Board is GET /airports/{code}/board: one board in full.
 type Board struct {
-	Kind  string     `json:"kind"`
-	Total int        `json:"total"`
-	Rows  []BoardRow `json:"rows"`
+	Kind       string     `json:"kind"`
+	Total      int        `json:"total"`
+	Rows       []BoardRow `json:"rows"`
+	NextBefore *time.Time `json:"next_before"` // where the next page starts (before=); nil at the end
 }
 
 func (r *BoardRow) UnmarshalJSON(b []byte) error {
